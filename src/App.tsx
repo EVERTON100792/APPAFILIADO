@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './index.css';
 import { 
-  Zap, Video, ArrowRight, ArrowLeft, Download, Share2, CheckCircle2, 
-  Activity, Home, Search, LayoutGrid, Copy, Terminal, RefreshCcw, Unlock, Trash2
+  Zap, Video, ArrowRight, Download,
+  Activity, Home, Search, LayoutGrid, Copy, Terminal, RefreshCcw, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
