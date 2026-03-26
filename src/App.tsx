@@ -303,7 +303,12 @@ const App: React.FC = () => {
                           {isPublished ? (
                             <span className="badge badge-error">POSTADO</span>
                           ) : (
-                            <span className="badge badge-success !text-[10px] font-black">{p.commission_pct}% LUCRO 🔥</span>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-green-400 font-black italic tracking-tighter leading-none mb-1">{p.commission_pct}% DE LUCRO 🔥</span>
+                              <div className="h-[2px] w-full bg-green-500/30 rounded-full overflow-hidden">
+                                <motion.div initial={{width:0}} animate={{width:`${p.commission_pct}%`}} className="h-full bg-green-500" />
+                              </div>
+                            </div>
                           )}
                           <span className="text-[9px] text-blue-400 font-bold uppercase">{p.sales} VENDIDOS</span>
                         </div>
@@ -352,6 +357,14 @@ const App: React.FC = () => {
                     🤣🔥
                   </div>
                 )}
+                
+                {/* Overlay de Comissão no Vídeo */}
+                <div className="absolute top-4 right-4 z-20">
+                  <motion.div initial={{x:50}} animate={{x:0}} className="bg-green-600 px-3 py-1 rounded-l-full border-l-4 border-white shadow-xl flex items-center gap-2">
+                    <Zap size={12} className="text-white animate-pulse" />
+                    <span className="text-xs font-black text-white italic">{selectedProduct.commission_pct}% LUCRO</span>
+                  </motion.div>
+                </div>
               </div>
 
               <div className="tech-card py-2 flex justify-between items-center border-blue-500/30 bg-blue-500/5">
