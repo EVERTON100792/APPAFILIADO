@@ -30,7 +30,6 @@ const App: React.FC = () => {
   const [boostMode, setBoostMode] = useState('none');
   const [activeNiche, setActiveNiche] = useState('Cozinha');
   const [consoleLogs, setConsoleLogs] = useState<{msg: string, type?: string}[]>([]);
-  const [platform, setPlatform] = useState<'tiktok' | 'shopee'>('shopee');
   const [isScanning, setIsScanning] = useState(false);
   const [videoResults, setVideoResults] = useState<any[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -463,7 +462,6 @@ const App: React.FC = () => {
   };
 
   const runAutomation = (selectedPlatform: 'tiktok' | 'shopee') => {
-    setPlatform(selectedPlatform);
     navigator.clipboard.writeText(customCopy);
     window.open(platformUrls[selectedPlatform], '_blank');
     
@@ -486,7 +484,7 @@ const App: React.FC = () => {
 
     logs.forEach((log, i) => {
       setTimeout(() => {
-        setConsoleLogs(prev => [...prev, log]);
+        setConsoleLogs((prev: any[]) => [...prev, log]);
         if (i === logs.length - 1) {
           setTimeout(() => {
             setAutomationFinished(true);
