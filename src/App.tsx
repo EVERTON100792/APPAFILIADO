@@ -388,6 +388,16 @@ const App: React.FC = () => {
                 )}
               </div>
 
+              <div className="tech-card py-2 flex justify-between items-center border-blue-500/30 bg-blue-500/5">
+                <div className="flex flex-col text-left overflow-hidden">
+                  <span className="text-[9px] text-blue-400 font-bold uppercase tracking-wider">Identificador p/ Busca:</span>
+                  <h3 className="text-xs font-black uppercase text-white truncate pr-2">{selectedProduct.title}</h3>
+                </div>
+                <button className="copy-trigger !mt-0 h-8 px-3 flex-shrink-0" onClick={()=>{ navigator.clipboard.writeText(selectedProduct.title); showToast("NOME COPIADO!"); }}>
+                  <Copy size={12} /> COPIAR
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <button className={`btn-secondary h-12 flex flex-col items-center justify-center gap-1 ${boostMode==='performance'?'!border-blue-500 !bg-blue-500/20':''}`} onClick={()=>updateMode('performance')}>
                   <Zap size={14} className={boostMode==='performance'?'text-blue-400':''} />
