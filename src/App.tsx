@@ -8,6 +8,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const App: React.FC = () => {
   const [step, setStep] = useState('idle');
+  const platformUrls = {
+    tiktok: 'https://www.tiktok.com/upload?lang=pt-BR',
+    shopee: 'https://seller.shopee.com.br/portal/marketing/video'
+  };
   const [productList, setProductList] = useState<any[]>([]); 
   const [activeItems, setActiveItems] = useState<any[]>([]); 
   const [publicationHistory, setPublicationHistory] = useState<{ id: number; timestamp: number }[]>([]); 
@@ -243,11 +247,7 @@ const App: React.FC = () => {
     // Semi-Auto features: Copy to clipboard and open Target
     navigator.clipboard.writeText(customCopy);
     
-    if (platform === 'tiktok') {
-      window.open('https://www.tiktok.com/upload', '_blank');
-    } else {
-      window.open('https://shopee.com.br/shopee-videos', '_blank');
-    }
+    window.open(platformUrls[platform], '_blank');
     
     setStep('automation');
     setConsoleLogs([]);
