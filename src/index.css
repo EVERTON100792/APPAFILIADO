@@ -9,7 +9,7 @@
   --text-main: #F8FAFC;
   --text-dim: #94A3B8;
   --border-glass: rgba(255, 255, 255, 0.08);
-  --safe-top: env(safe-area-inset-top, 20px);
+  --safe-top: env(safe-area-inset-top, 25px);
   --safe-bottom: env(safe-area-inset-bottom, 20px);
 }
 
@@ -47,15 +47,17 @@ html, body {
 }
 
 header {
-  height: 70px;
+  min-height: 90px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: var(--safe-top) 200px 10px 20px; /* Logo center-left */
+  padding-left: 20px;
+  padding-right: 20px;
   border-bottom: 1px solid var(--border-glass);
   flex-shrink: 0;
-  background: rgba(8, 11, 20, 0.8);
-  backdrop-filter: blur(20px);
+  background: rgba(8, 11, 20, 0.9);
+  backdrop-filter: blur(25px);
   z-index: 50;
 }
 
@@ -64,6 +66,7 @@ header h1 {
   font-weight: 800;
   letter-spacing: -0.5px;
   text-transform: uppercase;
+  margin-top: 10px;
 }
 
 header .accent-text {
@@ -259,6 +262,12 @@ header .accent-text {
   border: 1px solid rgba(0, 209, 255, 0.2);
 }
 
+.badge-error {
+  background: rgba(255, 65, 0, 0.1);
+  color: #FF4100;
+  border: 1px solid rgba(255, 65, 0, 0.2);
+}
+
 /* Special Scroll Card */
 .scroll-list-card {
   max-height: 400px;
@@ -331,3 +340,24 @@ header .accent-text {
   transform: scale(0.95);
   background: rgba(0, 209, 255, 0.2);
 }
+
+/* Automation Console */
+.automation-console {
+  background: #000;
+  border-radius: 12px;
+  padding: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-glass);
+}
+
+.console-line {
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.console-line.info { color: #94A3B8; }
+.console-line.success { color: #00FF41; text-shadow: 0 0 10px rgba(0, 255, 65, 0.3); }
+.console-line.warn { color: #FFD100; }

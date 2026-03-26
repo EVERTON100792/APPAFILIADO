@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './index.css';
 import { 
   Zap, Video, ArrowRight, Download,
-  Activity, Home, Search, LayoutGrid, Copy, Terminal, RefreshCcw, Unlock
+  Activity, Home, Search, LayoutGrid, Copy, Terminal, RefreshCcw, Unlock, CheckCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [videoData, setVideoData] = useState<any>(null);
   const [customCopy, setCustomCopy] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [automationFinished, setAutomationFinished] = useState(false);
   const [boostMode, setBoostMode] = useState('none');
   const [activeNiche, setActiveNiche] = useState('Cozinha');
   const [consoleLogs, setConsoleLogs] = useState<{msg: string, type?: string}[]>([]);
@@ -233,6 +234,8 @@ const App: React.FC = () => {
     } catch {
       setVideoData({ cover: '', url: '' });
     }
+    setStep('ready');
+    setAutomationFinished(false);
     setTimeout(() => setStep('ready'), 1000);
   };
 
@@ -267,8 +270,7 @@ const App: React.FC = () => {
         setConsoleLogs(prev => [...prev, log]);
         if (i === logs.length - 1) {
           setTimeout(() => {
-            markAsPublished(selectedProduct.id);
-            setStep('list');
+            setAutomationFinished(true);
             showToast("CONCLUÍDO! VERIFIQUE A ABA ABERTA 🚀");
           }, 2000);
         }
@@ -441,8 +443,19 @@ const App: React.FC = () => {
                 <div className="animate-pulse inline-block w-2 h-4 bg-emerald-500 ml-1"></div>
               </div>
 
-              <div className="text-center">
-                <p className="text-[10px] text-dim animate-pulse">O App está simulando a postagem no seu navegador...</p>
+              <div className="text-center space-y-4">
+                {automationFinished ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <button className="btn-secondary !h-14" onClick={() => { setStep('ready'); setAutomationFinished(false); }}>
+                      <RefreshCcw size={16} /> POSTAR OUTRO
+                    </button>
+                    <button className="btn-primary !h-14 !bg-emerald-600" onClick={() => { markAsPublished(selectedProduct.id); setStep('list'); setAutomationFinished(false); }}>
+                      <CheckCircle size={16} /> FINALIZAR ITEM
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-dim animate-pulse">O App está simulando a postagem no seu navegador...</p>
+                )}
               </div>
             </motion.div>
           )}
