@@ -10,7 +10,7 @@ const App: React.FC = () => {
   const [step, setStep] = useState('idle');
   const platformUrls = {
     tiktok: 'https://www.tiktok.com/upload?lang=pt-BR',
-    shopee: 'https://seller.shopee.com.br/portal/marketing/video'
+    shopee: 'https://seller.shopee.com.br/creator-center/video-upload/upload'
   };
   const [productList, setProductList] = useState<any[]>([]); 
   const [activeItems, setActiveItems] = useState<any[]>([]); 
