@@ -34,13 +34,14 @@ html, body {
 }
 
 .app-container {
-  min-height: 100dvh;
+  height: 100dvh;
   width: 100%;
   max-width: 500px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
   background: radial-gradient(circle at top right, rgba(0, 209, 255, 0.05), transparent 40%),
               radial-gradient(circle at bottom left, rgba(188, 0, 255, 0.05), transparent 40%);
   padding-bottom: calc(85px + var(--safe-bottom));
@@ -295,7 +296,12 @@ header .accent-text {
 }
 
 .niche-selector::-webkit-scrollbar {
-  display: none;
+  height: 2px;
+}
+
+.niche-selector::-webkit-scrollbar-thumb {
+  background: var(--accent-blue);
+  border-radius: 10px;
 }
 
 .niche-chip {
