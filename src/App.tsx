@@ -160,23 +160,30 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
+  const shuffle = (array: any[]) => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
   const startScouting = () => {
     setStep('scouting');
     setTimeout(() => {
       const allProducts = Object.values(productDB).flat();
       setProductList(allProducts);
-      const pubIds = publicationHistory.map(h => h.id);
-      const filtered = productDB[activeNiche].filter(p => !pubIds.includes(p.id));
-      setActiveItems(filtered.slice(0, 20)); 
+      const shuffledNiche = shuffle(productDB[activeNiche]);
+      setActiveItems(shuffledNiche.slice(0, 20)); 
       setStep('list');
     }, 1500);
   };
 
   const handleNicheChange = (niche: string) => {
     setActiveNiche(niche);
-    const pubIds = publicationHistory.map(h => h.id);
-    const filtered = productDB[niche].filter(p => !pubIds.includes(p.id));
-    setActiveItems(filtered.slice(0, 20));
+    const shuffledNiche = shuffle(productDB[niche]);
+    setActiveItems(shuffledNiche.slice(0, 20));
   };
 
   const markAsPublished = (id: number) => {
@@ -309,21 +316,28 @@ const App: React.FC = () => {
               </div>
 
               <div className="space-y-4">
-                {activeItems.map(p => (
-                  <div key={p.id} className="tech-card flex justify-between items-center group hover:border-blue-500/50">
-                    <div>
-                      <div className="flex gap-2 items-center mb-1">
-                        <span className="badge badge-success">{p.commission} Lucro</span>
-                        <span className="text-[9px] text-dim">{p.sales} Vendidos</span>
+                {activeItems.map(p => {
+                  const isPublished = publicationHistory.some(h => h.id === p.id);
+                  return (
+                    <div key={p.id} className={`tech-card flex justify-between items-center group hover:border-blue-500/50 ${isPublished ? 'opacity-70 grayscale-[0.5]' : ''}`}>
+                      <div>
+                        <div className="flex gap-2 items-center mb-1">
+                          {isPublished ? (
+                            <span className="badge badge-error">POSTADO</span>
+                          ) : (
+                            <span className="badge badge-success">{p.commission} Lucro</span>
+                          )}
+                          <span className="text-[9px] text-dim">{p.sales} Vendidos</span>
+                        </div>
+                        <h3 className="font-bold text-sm uppercase">{p.title}</h3>
+                        <p className="text-[10px] text-dim font-mono">{p.price}</p>
                       </div>
-                      <h3 className="font-bold text-sm uppercase">{p.title}</h3>
-                      <p className="text-[10px] text-dim font-mono">{p.price}</p>
+                      <button className="btn-secondary !p-3 hover:bg-blue-500/20" onClick={() => { setSelectedProduct(p); researchTikTok(p); }}>
+                        <ArrowRight size={18} className="accent-text" />
+                      </button>
                     </div>
-                    <button className="btn-secondary !p-3 hover:bg-blue-500/20" onClick={() => { setSelectedProduct(p); researchTikTok(p); }}>
-                      <ArrowRight size={18} className="accent-text" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
           )}
