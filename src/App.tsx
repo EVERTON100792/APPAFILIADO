@@ -25,117 +25,66 @@ const App: React.FC = () => {
   const [consoleLogs, setConsoleLogs] = useState<{msg: string, type?: string}[]>([]);
 
   const niches = ['Cozinha', 'Tecnologia', 'Decoração', 'Pet', 'Beleza'];
-
   const productDB: Record<string, any[]> = {
     'Cozinha': [
-      { id: 101, title: "Espremedor de Alho Pro", price: "R$ 47,90", commission: "18%", sales: "5k+", query: "alho viral" },
-      { id: 102, title: "Cortador de Legumes 5 em 1", price: "R$ 89,90", commission: "15%", sales: "2k+", query: "legume viral" },
-      { id: 103, title: "Organizador de Geladeira", price: "R$ 34,50", commission: "20%", sales: "8k+", query: "geladeira viral" },
-      { id: 104, title: "Mini Processador Elétrico", price: "R$ 59,00", commission: "12%", sales: "10k+", query: "mini processador" },
-      { id: 105, title: "Kit Potes Herméticos", price: "R$ 120,00", commission: "10%", sales: "1k+", query: "potes cozinha" },
-      { id: 106, title: "Afiador de Facas X-Sharp", price: "R$ 29,90", commission: "25%", sales: "3k+", query: "afiador cozinha" },
-      { id: 107, title: "Dispenser de Detergente", price: "R$ 25,00", commission: "15%", sales: "15k+", query: "dispenser pia" },
-      { id: 108, title: "Mop Triangular de Limpeza", price: "R$ 78,00", commission: "12%", sales: "4k+", query: "mop viral" },
-      { id: 109, title: "Tapete de Pia Absorvente", price: "R$ 22,90", commission: "18%", sales: "6k+", query: "tapete pia" },
-      { id: 110, title: "Seladora a Vácuo Portátil", price: "R$ 115,00", commission: "12%", sales: "1k+", query: "vacuo viral" },
-      { id: 111, title: "Lixeira com Sensor Smart", price: "R$ 156,00", commission: "10%", sales: "3k+", query: "lixeira sensor" },
-      { id: 112, title: "Porta Temperos Giratório", price: "R$ 67,00", commission: "20%", sales: "2k+", query: "porta tempero" },
-      { id: 113, title: "Escorredor de Louça Inox", price: "R$ 89,00", commission: "15%", sales: "5k+", query: "escorredor inox" },
-      { id: 114, title: "Conjunto de Facas Cerâmica", price: "R$ 134,00", commission: "12%", sales: "1k+", query: "facas ceramica" },
-      { id: 115, title: "Tapete Culinário Silicone", price: "R$ 29,00", commission: "25%", sales: "8k+", query: "tapete silicone" },
-      { id: 116, title: "Balança Digital de Cozinha", price: "R$ 39,00", commission: "22%", sales: "10k+", query: "balança cozinha" },
-      { id: 117, title: "Mixer de Mão Potente", price: "R$ 88,00", commission: "15%", sales: "4k+", query: "mixer viral" },
-      { id: 118, title: "Moedor de Pimenta Elétrico", price: "R$ 54,00", commission: "18%", sales: "6k+", query: "moedor pimenta" },
-      { id: 119, title: "Forma de Gelo Silicone", price: "R$ 19,00", commission: "30%", sales: "15k+", query: "gelo silicone" },
-      { id: 120, title: "Suporte de Papel Toalha", price: "R$ 25,00", commission: "20%", sales: "7k+", query: "suporte papel" }
+      { id: 101, title: "Espremedor de Alho Pro Stainless", price: "R$ 47,90", commission_pct: 25, sales: "45.2k", query: "garlic press viral tiktok" },
+      { id: 102, title: "Cortador de Legumes 12 em 1 Multifucional", price: "R$ 89,90", commission_pct: 18, sales: "22.8k", query: "vegetable slicer viral" },
+      { id: 103, title: "Organizador de Geladeira Empilhável", price: "R$ 34,50", commission_pct: 12, sales: "88.1k", query: "fridge organization viral" },
+      { id: 104, title: "Mini Processador Elétrico Turbo 300ml", price: "R$ 59,00", commission_pct: 35, sales: "124k", query: "mini food chopper viral" },
+      { id: 105, title: "Seladora a Vácuo Profissional KeepFresh", price: "R$ 115,00", commission_pct: 22, sales: "15.4k", query: "vacuum sealer viral" },
+      { id: 106, title: "Afiador de Facas Tungstênio 3 Estágios", price: "R$ 31,90", commission_pct: 40, sales: "56.7k", query: "knife sharpener viral" },
+      { id: 107, title: "Dispenser de Detergente Premium 2 em 1", price: "R$ 28,00", commission_pct: 28, sales: "210k", query: "soap dispenser dash" },
+      { id: 108, title: "Mop Triangular 360 Graus Auto-Torção", price: "R$ 78,00", commission_pct: 15, sales: "34k", query: "triangle mop viral" },
+      { id: 109, title: "Tapete de Pia Ultra Absorvente Diatomita", price: "R$ 22,90", commission_pct: 45, sales: "67.8k", query: "absorbent mat viral" },
+      { id: 110, title: "Lixeira Inteligente Sensor Aproximação", price: "R$ 156,00", commission_pct: 10, sales: "12.2k", query: "smart trash can viral" }
     ],
     'Tecnologia': [
-      { id: 201, title: "Smartwatch Ultra Series", price: "R$ 199,00", commission: "10%", sales: "12k+", query: "smartwatch viral" },
-      { id: 202, title: "Fone Bluetooth Noise Canceling", price: "R$ 145,00", commission: "12%", sales: "8k+", query: "fone bluetooth viral" },
-      { id: 203, title: "Teclado Mecânico RGB", price: "R$ 250,00", commission: "8%", sales: "3k+", query: "teclado mecanico" },
-      { id: 204, title: "Mouse Gamer 12000 DPI", price: "R$ 89,90", commission: "15%", sales: "6k+", query: "mouse gamer viral" },
-      { id: 205, title: "Projetor Portátil 4K", price: "R$ 450,00", commission: "5%", sales: "1k+", query: "projetor viral" },
-      { id: 206, title: "Power Bank MagSafe 10k", price: "R$ 120,00", commission: "12%", sales: "5k+", query: "magsafe powerbank" },
-      { id: 207, title: "Hub USB-C 7 em 1", price: "R$ 98,00", commission: "15%", sales: "4k+", query: "hub usbc viral" },
-      { id: 208, title: "Caixa de Som à Prova d'Água", price: "R$ 75,00", commission: "18%", sales: "10k+", query: "caixa som viral" },
-      { id: 209, title: "Lâmpada Inteligente RGB", price: "R$ 35,00", commission: "25%", sales: "20k+", query: "smart bulb viral" },
-      { id: 210, title: "Suporte Articulado Monitor", price: "R$ 160,00", commission: "10%", sales: "2k+", query: "monitor arm viral" },
-      { id: 211, title: "Headset Gamer 7.1", price: "R$ 189,00", commission: "12%", sales: "6k+", query: "headset gamer" },
-      { id: 212, title: "Ring Light Profissional", price: "R$ 55,00", commission: "20%", sales: "15k+", query: "ring light viral" },
-      { id: 213, title: "Drone E88 Pro HD", price: "R$ 245,00", commission: "8%", sales: "8k+", query: "drone viral" },
-      { id: 214, title: "Stream Deck Mini", price: "R$ 380,00", commission: "5%", sales: "1k+", query: "stream deck viral" },
-      { id: 215, title: "SSD Externo 1TB", price: "R$ 290,00", commission: "7%", sales: "3k+", query: "ssd portable" },
-      { id: 216, title: "Carregador 65W GaN", price: "R$ 110,00", commission: "15%", sales: "5k+", query: "gan charger" },
-      { id: 217, title: "Mousepad RGB Extra Grande", price: "R$ 65,00", commission: "18%", sales: "7k+", query: "rgb mousepad" },
-      { id: 218, title: "Webcam 1080p AutoFocus", price: "R$ 135,00", commission: "12%", sales: "4k+", query: "webcam viral" },
-      { id: 219, title: "Adaptador Bluetooth 5.3", price: "R$ 25,00", commission: "30%", sales: "12k+", query: "bluetooth adapter" },
-      { id: 220, title: "Microfone Condensador USB", price: "R$ 175,00", commission: "10%", sales: "3k+", query: "usb microphone" }
+      { id: 201, title: "Smartwatch Ultra 9 Series Retina", price: "R$ 199,00", commission_pct: 15, sales: "145k", query: "smartwatch ultra viral" },
+      { id: 202, title: "Fone Bluetooth ANC High definition", price: "R$ 145,00", commission_pct: 20, sales: "88k", query: "anc earbuds viral" },
+      { id: 203, title: "Teclado Mecânico Gamer RGB Silent", price: "R$ 250,00", commission_pct: 12, sales: "15k", query: "mechanical keyboard aesthetic" },
+      { id: 204, title: "Projetor Portátil Cinema 4K Android", price: "R$ 450,00", commission_pct: 10, sales: "28k", query: "portable projector viral" },
+      { id: 205, title: "Power Bank MagSafe 20000mAh", price: "R$ 135,00", commission_pct: 25, sales: "56k", query: "magsafe powerbank viral" },
+      { id: 206, title: "Lâmpada Inteligente RGB Wi-Fi Plus", price: "R$ 39,00", commission_pct: 45, sales: "310k", query: "smart bulb hack viral" },
+      { id: 207, title: "Hub USB-C 8 em 1 Portátil", price: "R$ 118,00", commission_pct: 18, sales: "42k", query: "usb c hub setup viral" },
+      { id: 208, title: "Drone 4K Dual Camera E88 Max", price: "R$ 265,00", commission_pct: 15, sales: "67k", query: "drone budget viral" },
+      { id: 209, title: "Ring Light Profissional 12 Polegadas", price: "R$ 55,00", commission_pct: 35, sales: "190k", query: "ring light tiktok viral" },
+      { id: 210, title: "Mousepad Gamer RGB Speed Edition", price: "R$ 72,00", commission_pct: 28, sales: "33k", query: "rgb mousepad aesthetic" }
     ],
     'Decoração': [
-      { id: 301, title: "Luminária Sunset Rainbow", price: "R$ 55,00", commission: "20%", sales: "15k+", query: "sunset lamp" },
-      { id: 302, title: "Fita LED Smart RGB", price: "R$ 45,00", commission: "22%", sales: "20k+", query: "fita led viral" },
-      { id: 303, title: "Umidificador de Ar Flame", price: "R$ 89,00", commission: "15%", sales: "7k+", query: "humidificador flame" },
-      { id: 304, title: "Quadro de Areia Movediça", price: "R$ 78,00", commission: "18%", sales: "5k+", query: "moving sand art" },
-      { id: 305, title: "Espelho Irregular Decorativo", price: "R$ 120,00", commission: "12%", sales: "3k+", query: "irregular mirror" },
-      { id: 306, title: "Vaso de Planta Levitação", price: "R$ 245,00", commission: "10%", sales: "1k+", query: "levitating plant" },
-      { id: 307, title: "Difusor Ultrassônico Aromas", price: "R$ 65,00", commission: "20%", sales: "10k+", query: "aroma diffuser" },
-      { id: 308, title: "Relógio Digital 3D LED", price: "R$ 49,00", commission: "25%", sales: "12k+", query: "3d led clock" },
-      { id: 309, title: "Cortina de Luz Estrela", price: "R$ 38,00", commission: "28%", sales: "18k+", query: "star lights viral" },
-      { id: 310, title: "Projetor de Galáxia Astronauta", price: "R$ 115,00", commission: "15%", sales: "25k+", query: "astronaut projector" },
-      { id: 311, title: "Luminária de Livro Dobrável", price: "R$ 59,00", commission: "22%", sales: "6k+", query: "book lamp viral" },
-      { id: 312, title: "Estatueta Pensador Moderna", price: "R$ 45,00", commission: "25%", sales: "4k+", query: "thinker statue" },
-      { id: 313, title: "Luminária Árvore Bonsai", price: "R$ 85,00", commission: "18%", sales: "8k+", query: "bonsai lamp viral" },
-      { id: 314, title: "Relógio de Areia Decorativo", price: "R$ 32,00", commission: "30%", sales: "5k+", query: "sand timer viral" },
-      { id: 315, title: "Adesivo de Parede 3D Tijolo", price: "R$ 15,00", commission: "35%", sales: "50k+", query: "3d wall sticker" },
-      { id: 316, title: "Organizadores de Mesa Acrílico", price: "R$ 28,00", commission: "25%", sales: "15k+", query: "acrylic organizer" },
-      { id: 317, title: "Luminária de Lua 3D", price: "R$ 42,00", commission: "28%", sales: "30k+", query: "3d moon lamp" },
-      { id: 318, title: "Porta Chaves Magnético Nuvem", price: "R$ 18,00", commission: "40%", sales: "12k+", query: "cloud key holder" },
-      { id: 319, title: "Prateleira Flutuante Invisível", price: "R$ 36,00", commission: "20%", sales: "9k+", query: "floating shelf" },
-      { id: 320, title: "Terrário de Vidro Boho", price: "R$ 55,00", commission: "15%", sales: "2k+", query: "glass terrarium" }
+      { id: 301, title: "Luminária Sunset Rainbow Premium", price: "R$ 55,00", commission_pct: 35, sales: "250k", query: "sunset lamp aesthetic" },
+      { id: 302, title: "Umidificador de Ar Flame Vulcan", price: "R$ 95,00", commission_pct: 25, sales: "89k", query: "flame diffuser viral" },
+      { id: 303, title: "Projetor Astronauta Galáxia 2.0", price: "R$ 115,00", commission_pct: 20, sales: "310k", query: "astronaut projector viral" },
+      { id: 304, title: "Arandela LED Sem Fio Recarregável", price: "R$ 78,00", commission_pct: 30, sales: "45k", query: "cordless wall light viral" },
+      { id: 305, title: "Relógio Digital 3D LED Mirror", price: "R$ 52,00", commission_pct: 40, sales: "120k", query: "3d led clock viral" },
+      { id: 306, title: "Escultura Pensador Minimalista", price: "R$ 48,00", commission_pct: 45, sales: "23k", query: "thinker statue aesthetic" },
+      { id: 307, title: "Fita LED RGBIC Efeito Dinâmico", price: "R$ 68,00", commission_pct: 28, sales: "150k", query: "rgbic led strips viral" },
+      { id: 308, title: "Vaso Auto-Irrigável Transparente", price: "R$ 42,00", commission_pct: 32, sales: "34k", query: "self watering pot viral" },
+      { id: 309, title: "Quadro de Areia Movediça 3D", price: "R$ 85,00", commission_pct: 22, sales: "15k", query: "moving sand art viral" },
+      { id: 310, title: "Prateleira de Vidro Invisível", price: "R$ 38,00", commission_pct: 35, sales: "11k", query: "floating shelf aesthetic" }
     ],
     'Pet': [
-      { id: 401, title: "Escova Vapor para Gatos", price: "R$ 39,90", commission: "25%", sales: "30k+", query: "steamy cat brush" },
-      { id: 402, title: "Bebedouro Fonte de Água", price: "R$ 95,00", commission: "12%", sales: "5k+", query: "fonte pet viral" },
-      { id: 403, title: "Lançador de Petiscos Automático", price: "R$ 145,00", commission: "15%", sales: "2k+", query: "treat launcher" },
-      { id: 404, title: "Tapete Gelado Refrescante", price: "R$ 58,00", commission: "20%", sales: "8k+", query: "cooling mat pet" },
-      { id: 405, title: "Mochila Astronauta para Pets", price: "R$ 165,00", commission: "10%", sales: "10k+", query: "astronaut pet bag" },
-      { id: 406, title: "Brinquedo Peixe Robô", price: "R$ 25,00", commission: "35%", sales: "40k+", query: "flopping fish pet" },
-      { id: 407, title: "Pá Coletora de Fezes Higiênica", price: "R$ 32,00", commission: "30%", sales: "15k+", query: "poo scooper viral" },
-      { id: 408, title: "Rastreador GPS para Coleira", price: "R$ 88,00", commission: "18%", sales: "6k+", query: "pet gps tracker" },
-      { id: 409, title: "Rede de Janela para Gatos", price: "R$ 75,00", commission: "20%", sales: "5k+", query: "cat window bed" },
-      { id: 410, title: "Cortador de Unha com LED", price: "R$ 42,00", commission: "25%", sales: "12k+", query: "pet nail clipper led" },
-      { id: 411, title: "Comedouro Inteligente Wi-Fi", price: "R$ 350,00", commission: "8%", sales: "1k+", query: "smart pet feeder" },
-      { id: 412, title: "Luva Tira Pelos Master", price: "R$ 19,00", commission: "40%", sales: "100k+", query: "deshedding glove" },
-      { id: 413, title: "Cama Nuvem Calmante", price: "R$ 110,00", commission: "15%", sales: "25k+", query: "calming pet bed" },
-      { id: 414, title: "Escova de Dentes para Cães", price: "R$ 22,00", commission: "30%", sales: "15k+", query: "dog tooth brush toy" },
-      { id: 415, title: "Coleira Peitoral Anti-Puxão", price: "R$ 54,00", commission: "22%", sales: "9k+", query: "no pull harness" },
-      { id: 416, title: "Snack Ball Interativa", price: "R$ 28,00", commission: "35%", sales: "18k+", query: "pet treat ball" },
-      { id: 417, title: "Secador de Pelos Silencioso", price: "R$ 185,00", commission: "12%", sales: "3k+", query: "pet dryer viral" },
-      { id: 418, title: "Protetor de Sofá para Pets", price: "R$ 68,00", commission: "20%", sales: "7k+", query: "pet sofa cover" },
-      { id: 419, title: "Kit de Limpeza de Patas", price: "R$ 35,00", commission: "28%", sales: "20k+", query: "paw plunger viral" },
-      { id: 420, title: "Roupinha de Inverno Térmica", price: "R$ 48,00", commission: "25%", sales: "12k+", query: "dog winter coat" }
+      { id: 401, title: "Escova Vapor X-Steam para Gatos", price: "R$ 42,00", commission_pct: 45, sales: "215k", query: "steamy cat brush viral" },
+      { id: 402, title: "Bebedouro Fonte de Água Ultra Silent", price: "R$ 98,00", commission_pct: 20, sales: "56k", query: "pet fountain viral" },
+      { id: 403, title: "Brinquedo Peixe Robô Realista Pro", price: "R$ 29,00", commission_pct: 50, sales: "340k", query: "flopping fish pet viral" },
+      { id: 404, title: "Rede de Janela Cat-Sky Garden", price: "R$ 82,00", commission_pct: 25, sales: "42k", query: "cat window bed viral" },
+      { id: 405, title: "Pá Coletora Higiênica Click-Clean", price: "R$ 35,00", commission_pct: 40, sales: "88k", query: "poo scooper viral tiktok" },
+      { id: 406, title: "Mochila Astronauta Panorâmica", price: "R$ 178,00", commission_pct: 15, sales: "29k", query: "pet backpack astronaut viral" },
+      { id: 407, title: "Tapete Gelado Refresh-Pet XL", price: "R$ 65,00", commission_pct: 30, sales: "67k", query: "cooling mat pet viral" },
+      { id: 408, title: "Cortador de Unha LED Safelight", price: "R$ 45,00", commission_pct: 35, sales: "91k", query: "pet nail clipper led viral" },
+      { id: 409, title: "Comedouro Elevado Ergonômico", price: "R$ 55,00", commission_pct: 32, sales: "12k", query: "elevated pet bowl viral" },
+      { id: 410, title: "Kit Banho Dry-Pet Super Toalha", price: "R$ 28,00", commission_pct: 42, sales: "53k", query: "pet bath robe viral" }
     ],
     'Beleza': [
-      { id: 501, title: "Secador 5 em 1 Airflow", price: "R$ 210,00", commission: "10%", sales: "10k+", query: "hair dryer viral" },
-      { id: 502, title: "Massageador Facial Ice Roller", price: "R$ 25,00", commission: "30%", sales: "45k+", query: "ice roller face" },
-      { id: 503, title: "Caneta de Microblading Efeito Full", price: "R$ 18,00", commission: "45%", sales: "120k+", query: "eyebrow pen viral" },
-      { id: 504, title: "Esfoliante Labial de Morango", price: "R$ 22,00", commission: "35%", sales: "50k+", query: "lip scrub viral" },
-      { id: 505, title: "Modelador de Cachos Sem Calor", price: "R$ 38,00", commission: "28%", sales: "35k+", query: "heatless curls viral" },
-      { id: 506, title: "Máscara Facial de LED 7 Cores", price: "R$ 145,00", commission: "15%", sales: "8k+", query: "led face mask viral" },
-      { id: 507, title: "Sérum Facial Ácido Hialurônico", price: "R$ 45,00", commission: "25%", sales: "60k+", query: "hyaluronic acid viral" },
-      { id: 508, title: "Kit de Pincéis de Maquiagem 12pçs", price: "R$ 55,00", commission: "22%", sales: "40k+", query: "makeup brush set" },
-      { id: 509, title: "Removedor de Cravos por Sucção", price: "R$ 68,00", commission: "20%", sales: "25k+", query: "blackhead remover viral" },
-      { id: 510, title: "Espelho de Maquiagem com LED", price: "R$ 89,00", commission: "18%", sales: "15k+", query: "led makeup mirror" },
-      { id: 511, title: "Caneta Clareadora Dental", price: "R$ 29,00", commission: "35%", sales: "80k+", query: "teeth whitening pen" },
-      { id: 512, title: "Depilador de Sobrancelha Elétrico", price: "R$ 34,00", commission: "30%", sales: "70k+", query: "eyebrow trimmer" },
-      { id: 513, title: "Escova Alisadora de Cabelo", price: "R$ 98,00", commission: "15%", sales: "12k+", query: "hair straightener brush" },
-      { id: 514, title: "Parche de Hidrogel para Olhos", price: "R$ 15,00", commission: "40%", sales: "150k+", query: "eye patches viral" },
-      { id: 515, title: "Aparelho de Radiofrequência Facial", price: "R$ 185,00", commission: "12%", sales: "5k+", query: "rf face device" },
-      { id: 516, title: "Kit de Unhas de Gel Polygel", price: "R$ 125,00", commission: "15%", sales: "10k+", query: "polygel nail kit" },
-      { id: 517, title: "Massageador de Couro Cabeludo", price: "R$ 22,00", commission: "35%", sales: "45k+", query: "scalp massager viral" },
-      { id: 518, title: "Organizador de Maquiagem Giro 360", price: "R$ 75,00", commission: "20%", sales: "18k+", query: "makeup organizer 360" },
-      { id: 519, title: "Pó Translúcido Antibrilho", price: "R$ 36,00", commission: "28%", sales: "55k+", query: "translucent powder" },
-      { id: 520, title: "Massageador de Olhos Vibrante", price: "R$ 54,00", commission: "25%", sales: "14k+", query: "eye massager wand" }
+      { id: 501, title: "Escova Alisadora 5 em 1 Airflow Pro", price: "R$ 235,00", commission_pct: 18, sales: "95k", query: "hair styler viral tiktok" },
+      { id: 502, title: "Caneta Microblading Efeito Natural 4D", price: "R$ 22,00", commission_pct: 60, sales: "520k", query: "eyebrow pen viral tiktok" },
+      { id: 503, title: "Removedor de Cravos Vácuo Pro-Clean", price: "R$ 72,00", commission_pct: 35, sales: "140k", query: "blackhead suction viral" },
+      { id: 504, title: "Sérum Facial Retinol Booster 30ml", price: "R$ 49,00", commission_pct: 50, sales: "250k", query: "retinol serum viral" },
+      { id: 505, title: "Modelador de Cachos Silk Curls", price: "R$ 35,00", commission_pct: 55, sales: "180k", query: "heatless curls aesthetic" },
+      { id: 506, title: "Kit de Pincéis Crystal Profissional", price: "R$ 65,00", commission_pct: 40, sales: "89k", query: "makeup brush set viral" },
+      { id: 507, title: "Massageador Facial Ice Roller Pro", price: "R$ 28,00", commission_pct: 55, sales: "110k", query: "ice roller face viral" },
+      { id: 508, title: "Máscara LED Terapia 7 Cores", price: "R$ 158,00", commission_pct: 25, sales: "34k", query: "led therapy mask viral" },
+      { id: 509, title: "Espelho Maquiagem LED Touch High", price: "R$ 95,00", commission_pct: 30, sales: "67k", query: "led vanity mirror viral" },
+      { id: 510, title: "Aparelho Limpeza Foreo-Style Luminous", price: "R$ 32,00", commission_pct: 65, sales: "450k", query: "face cleanser viral" }
     ]
   };
 
@@ -165,13 +114,8 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const shuffle = (array: any[]) => {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
+  const sortByCommission = (array: any[]) => {
+    return [...array].sort((a, b) => b.commission_pct - a.commission_pct);
   };
 
   const startScouting = () => {
@@ -179,16 +123,16 @@ const App: React.FC = () => {
     setTimeout(() => {
       const allProducts = Object.values(productDB).flat();
       setProductList(allProducts);
-      const shuffledNiche = shuffle(productDB[activeNiche]);
-      setActiveItems(shuffledNiche.slice(0, 20)); 
+      const sortedNiche = sortByCommission(productDB[activeNiche]);
+      setActiveItems(sortedNiche.slice(0, 20)); 
       setStep('list');
     }, 1500);
   };
 
   const handleNicheChange = (niche: string) => {
     setActiveNiche(niche);
-    const shuffledNiche = shuffle(productDB[niche]);
-    setActiveItems(shuffledNiche.slice(0, 20));
+    const sortedNiche = sortByCommission(productDB[niche]);
+    setActiveItems(sortedNiche.slice(0, 20));
   };
 
   const markAsPublished = (id: number) => {
@@ -198,7 +142,7 @@ const App: React.FC = () => {
     const nextAvailable = productList.find(p => !pubIds.includes(p.id) && !activeItems.some(a => a.id === p.id));
     const newActive = activeItems.filter(p => p.id !== id);
     if (nextAvailable) newActive.push(nextAvailable);
-    setActiveItems(newActive);
+    setActiveItems(sortByCommission(newActive));
   };
 
   const unblock = (id: number) => {
@@ -291,13 +235,35 @@ const App: React.FC = () => {
       <main className="content-area">
         <AnimatePresence mode="wait">
           {step === 'idle' && (
-            <motion.div key="idle" initial={{opacity:0}} animate={{opacity:1}} className="text-center py-20 space-y-8">
-              <Zap size={64} className="accent-text mx-auto animate-pulse" />
-              <div className="space-y-2">
-                <h2 className="text-4xl font-extrabold tracking-tighter uppercase">Squad V2</h2>
-                <p className="text-xs text-dim uppercase tracking-[3px]">Marketing Automation</p>
+            <motion.div key="idle" initial={{opacity:0}} animate={{opacity:1}} className="text-center py-20 space-y-10">
+              <div className="relative inline-block">
+                <Terminal size={64} className="accent-text mx-auto" />
+                <motion.div 
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                  className="absolute -inset-4 border-2 border-dashed border-blue-500/30 rounded-full"
+                />
               </div>
-              <button className="btn-primary" onClick={startScouting}>Entrar no Garimpo</button>
+              <div className="space-y-3">
+                <h2 className="text-4xl font-black tracking-tighter uppercase italic">Viral Core AI</h2>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="h-[1px] w-8 bg-blue-500/50"></div>
+                  <p className="text-[10px] text-blue-400 uppercase font-black tracking-[4px]">Marketing Intelligence</p>
+                  <div className="h-[1px] w-8 bg-blue-500/50"></div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-4 items-center">
+                <button className="btn-primary !px-12 !h-14 font-black italic tracking-widest text-lg group relative overflow-hidden" onClick={startScouting}>
+                  <span className="relative z-10">INICIAR VARREDURA</span>
+                  <motion.div 
+                    className="absolute inset-0 bg-white/20"
+                    initial={{ x: '-100%' }}
+                    whileHover={{ x: '100%' }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </button>
+                <p className="text-[9px] text-dim uppercase">Protocolo V9.2 • Sincronização em Tempo Real</p>
+              </div>
             </motion.div>
           )}
 
@@ -337,9 +303,9 @@ const App: React.FC = () => {
                           {isPublished ? (
                             <span className="badge badge-error">POSTADO</span>
                           ) : (
-                            <span className="badge badge-success">{p.commission} Lucro</span>
+                            <span className="badge badge-success">{p.commission_pct}% LUCRO</span>
                           )}
-                          <span className="text-[9px] text-dim">{p.sales} Vendidos</span>
+                          <span className="text-[9px] text-blue-400 font-bold uppercase">{p.sales} VENDIDOS</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <h3 className="font-bold text-sm uppercase">{p.title}</h3>
