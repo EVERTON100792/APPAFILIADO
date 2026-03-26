@@ -209,16 +209,22 @@ const App: React.FC = () => {
   const updateMode = (mode: string) => {
     setBoostMode(mode);
     if (mode === 'performance') {
-      setCustomCopy(`🔥 ÚLTIMAS UNIDADES: ${selectedProduct.title}!\n💸 PROMOÇÃO: ${selectedProduct.price}!\n🛑 Link na Bio! 🛒👇\n#promo #achadinhos #shopee #brasil`);
+      setCustomCopy(`🔥 ÚLTIMAS UNIDADES: ${selectedProduct.title}!\n🛑 Link na minha Bio com desconto exclusivo! 🛒👇\n#promo #achadinhos #shopee #viral #brasil`);
     } else if (mode === 'funny') {
-      setCustomCopy(`🤣 POV: Você não sabia que precisava desse ${selectedProduct.title} até ver esse vídeo!\nO link está na Bio! 🛒👇\n#humor #utilidades #casa #viral`);
+      setCustomCopy(`🤣 POV: Você não sabia que precisava de um desse até ver esse vídeo! 🤡🔥\nO link está na Bio esperando por você! 🛒👇\n#humor #utilidades #casa #viral #achados`);
     }
   };
 
   const researchTikTok = async (product: any) => {
     setStep('tiktok');
     setBoostMode('none');
-    setCustomCopy(`😱 VOCÊ PRECISA DISSO: ${product.title}!\n🚀 Viral no mundo todo!\n🔗 Link na Bio! 🛒👇`);
+    // Better marketing legends without price
+    const legends = [
+      `😱 Gente, olha que achado incrível para sua casa! 🏠✨ \nO link oficial com desconto exclusivo está na minha Bio! 🛒👇 \n#shopee #achadinhos #produtoviral #utilidades`,
+      `Você não sabia que precisava disso até ver esse vídeo... 🤯🔥 \nCorre no link da Bio antes que acabe o estoque! 🛒 \n#shopeebrasil #viral #casa #decoracao`,
+      `Esse é o item que todo mundo está procurando nesta semana! 🏆📦 \nLink disponível na Bio por tempo limitado! ✅ \n#oferta #shopee #importados #achadosshopee`
+    ];
+    setCustomCopy(legends[Math.floor(Math.random() * legends.length)]);
     try {
       const res = await fetch(`https://www.tikwm.com/api/feed/search?keywords=${encodeURIComponent(product.query)}&count=5`);
       const data = await res.json();
@@ -275,7 +281,7 @@ const App: React.FC = () => {
         <div className="flex gap-4">
           <div className="text-right">
             <p className="data-label">VENDAS HOJE</p>
-            <p className="data-value">R$ 1.240,00</p>
+            <p className="data-value">R$ 0,00</p>
           </div>
         </div>
       </header>
