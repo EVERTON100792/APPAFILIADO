@@ -236,15 +236,20 @@ const App: React.FC = () => {
     setTimeout(() => setStep('ready'), 1000);
   };
 
-  const runAutomation = () => {
-    // Semi-Auto features: Copy to clipboard and open TikTok
+  const runAutomation = (platform: 'tiktok' | 'shopee') => {
+    // Semi-Auto features: Copy to clipboard and open Target
     navigator.clipboard.writeText(customCopy);
-    window.open('https://www.tiktok.com/upload', '_blank');
+    
+    if (platform === 'tiktok') {
+      window.open('https://www.tiktok.com/upload', '_blank');
+    } else {
+      window.open('https://shopee.com.br/shopee-videos', '_blank');
+    }
     
     setStep('automation');
     setConsoleLogs([]);
     const logs = [
-      { msg: "> INICIANDO MOTOR DE AUTOMAÇÃO SQUAD...", type: 'info' },
+      { msg: `> INICIANDO MOTOR DE AUTOMAÇÃO ${platform.toUpperCase()}...`, type: 'info' },
       { msg: "> Sincronizando banco de metadados...", type: 'info' },
       { msg: "> Validando credenciais de conta no navegador...", type: 'info' },
       { msg: "> Acessando painel de postagem via Bridge Protocol...", type: 'info' },
@@ -264,7 +269,7 @@ const App: React.FC = () => {
           setTimeout(() => {
             markAsPublished(selectedProduct.id);
             setStep('list');
-            showToast("POSTAGEM CONCLUÍDA! 🚀");
+            showToast("CONCLUÍDO! VERIFIQUE A ABA ABERTA 🚀");
           }, 2000);
         }
       }, i * 800);
@@ -278,12 +283,7 @@ const App: React.FC = () => {
           <Activity size={20} className="accent-text" />
           <h1>VIRAL<span className="accent-text">SQUAD</span></h1>
         </div>
-        <div className="flex gap-4">
-          <div className="text-right">
-            <p className="data-label">VENDAS HOJE</p>
-            <p className="data-value">R$ 0,00</p>
-          </div>
-        </div>
+        <div></div>
       </header>
 
       <main className="content-area">
@@ -339,7 +339,12 @@ const App: React.FC = () => {
                           )}
                           <span className="text-[9px] text-dim">{p.sales} Vendidos</span>
                         </div>
-                        <h3 className="font-bold text-sm uppercase">{p.title}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-sm uppercase">{p.title}</h3>
+                          <button className="copy-trigger" onClick={(e)=>{ e.stopPropagation(); navigator.clipboard.writeText(p.title); showToast("NOME COPIADO!"); }}>
+                            <Copy size={10} />
+                          </button>
+                        </div>
                         <p className="text-[10px] text-dim font-mono">{p.price}</p>
                       </div>
                       <button className="btn-secondary !p-3 hover:bg-blue-500/20" onClick={() => { setSelectedProduct(p); researchTikTok(p); }}>
@@ -406,14 +411,17 @@ const App: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <button className="btn-secondary !h-14 font-black" onClick={()=>window.open(videoData.url)}>
-                  <Download size={18} /> DOWNLOAD
+              <div className="grid grid-cols-2 gap-3">
+                <button className="btn-primary !h-14 !bg-[#000000] !border-white/10" onClick={()=>runAutomation('tiktok')}>
+                  TIKTOK 🎬
                 </button>
-                <button className="btn-primary !h-14 !bg-emerald-600 !shadow-emerald-900/40" onClick={runAutomation}>
-                  AUTO-POST 🚀
+                <button className="btn-primary !h-14 !bg-[#EE4D2D] !shadow-[#EE4D2D]/20" onClick={()=>runAutomation('shopee')}>
+                  SHOPEE 🟠
                 </button>
               </div>
+              <button className="btn-secondary w-full !h-12 mt-2" onClick={()=>window.open(videoData.url)}>
+                <Download size={16} /> BAIXAR VÍDEO SEM MARCA
+              </button>
             </motion.div>
           )}
 
