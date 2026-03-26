@@ -231,6 +231,10 @@ const App: React.FC = () => {
   };
 
   const runAutomation = () => {
+    // Semi-Auto features: Copy to clipboard and open TikTok
+    navigator.clipboard.writeText(customCopy);
+    window.open('https://www.tiktok.com/upload', '_blank');
+    
     setStep('automation');
     setConsoleLogs([]);
     const logs = [
