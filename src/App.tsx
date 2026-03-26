@@ -303,7 +303,7 @@ const App: React.FC = () => {
                           {isPublished ? (
                             <span className="badge badge-error">POSTADO</span>
                           ) : (
-                            <span className="badge badge-success">{p.commission_pct}% LUCRO</span>
+                            <span className="badge badge-success !text-[10px] font-black">{p.commission_pct}% LUCRO 🔥</span>
                           )}
                           <span className="text-[9px] text-blue-400 font-bold uppercase">{p.sales} VENDIDOS</span>
                         </div>
@@ -356,7 +356,10 @@ const App: React.FC = () => {
 
               <div className="tech-card py-2 flex justify-between items-center border-blue-500/30 bg-blue-500/5">
                 <div className="flex flex-col text-left overflow-hidden">
-                  <span className="text-[9px] text-blue-400 font-bold uppercase tracking-wider">Identificador p/ Busca:</span>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[9px] text-blue-400 font-bold uppercase tracking-wider">Identificador p/ Busca</span>
+                    <span className="badge badge-success !py-0 !px-2 !text-[9px] font-black">{selectedProduct.commission_pct}% COMISSÃO</span>
+                  </div>
                   <h3 className="text-xs font-black uppercase text-white truncate pr-2">{selectedProduct.title}</h3>
                 </div>
                 <button className="copy-trigger !mt-0 h-8 px-3 flex-shrink-0" onClick={()=>{ navigator.clipboard.writeText(selectedProduct.title); showToast("NOME COPIADO!"); }}>
