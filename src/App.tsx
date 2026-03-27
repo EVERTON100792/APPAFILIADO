@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './index.css';
 import { 
   Home, Database, Copy, RefreshCcw,
   Shield, Video, Zap, ArrowRight, Activity, Search, RotateCcw,
-  Download, Terminal, LayoutGrid, Unlock
+  Download, Terminal, LayoutGrid, Unlock, ArrowLeft, Volume2, VolumeX, Sparkles, Type,
+  Maximize2, MoveRight, X, Scissors
 } from 'lucide-react';
 
 
@@ -11,20 +12,59 @@ import { supabase } from './supabaseClient';
 
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { VideoProcessor } from './utils/VideoProcessor';
+import type { ProcessingOptions } from './utils/VideoProcessor';
 
 const App: React.FC = () => {
   const [step, setStep] = useState('home');
+
+  const [activeFilter, setActiveFilter] = useState('none');
+  const [activeTransition, setActiveTransition] = useState('none');
+  const [isMuted, setIsMuted] = useState(false);
+  const [videoLegend, setVideoLegend] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Advanced Editing State
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [transitionTimestamps, setTransitionTimestamps] = useState<number[]>([]);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [isTransitionActive, setIsTransitionActive] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+
+  // Sync isPlaying with video element
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isPlaying) videoRef.current.play();
+      else videoRef.current.pause();
+    }
+  }, [isPlaying]);
+
+
+
+  const filters = [
+    { id: 'none', name: 'Original' },
+    { id: 'elite', name: 'Elite Glow' },
+    { id: 'glitch', name: 'Glitch Viral' },
+    { id: 'vhs', name: 'VHS Elite' },
+    { id: 'bloom', name: 'Dreamy Bloom' },
+    { id: 'cinematic', name: 'Cinematic' },
+    { id: 'bw', name: 'Dramático' }
+  ];
 
   const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
     if (type === 'shopee') {
-      // Intent para abrir diretamente a postagem no Shopee Video
+      // Intent para abrir diretamente a postagem no Shopee Video (Android/iOS)
       return isMobile 
-        ? 'shopee://video/publish' 
+        ? 'shopeevideo://publish' 
         : 'https://shopee.com.br/m/shopee-video';
     } else {
-      // Intent para abrir o upload do TikTok sem cair no Studio
+      // Intent para abrir o upload do TikTok diretamente na câmera/galeria
       return isMobile 
         ? 'snssdk1233://publish' 
         : 'https://www.tiktok.com/upload';
@@ -109,7 +149,7 @@ const App: React.FC = () => {
 
 
 
-  const niches = ['Cozinha', 'Tecnologia', 'Decoração', 'Pet', 'Beleza'];
+  const niches = ['Cozinha', 'Tecnologia', 'Beleza', 'Decoração', 'Pet', 'Fitness', 'Gamer', 'Kids'];
   const productDB: Record<string, any[]> = {
     'Cozinha': [
       { id: 101, title: "Espremedor de Alho Pro Stainless", price: "R$ 47,90", commission_pct: 25, sales: "45.2k", query: "garlic press viral tiktok" },
@@ -118,58 +158,94 @@ const App: React.FC = () => {
       { id: 104, title: "Mini Processador Elétrico Turbo 300ml", price: "R$ 59,00", commission_pct: 35, sales: "124k", query: "mini food chopper viral" },
       { id: 105, title: "Seladora a Vácuo Profissional KeepFresh", price: "R$ 115,00", commission_pct: 22, sales: "15.4k", query: "vacuum sealer viral" },
       { id: 106, title: "Afiador de Facas Tungstênio 3 Estágios", price: "R$ 31,90", commission_pct: 40, sales: "56.7k", query: "knife sharpener viral" },
-      { id: 107, title: "Dispenser de Detergente Premium 2 em 1", price: "R$ 28,00", commission_pct: 28, sales: "210k", query: "soap dispenser dash" },
-      { id: 108, title: "Mop Triangular 360 Graus Auto-Torção", price: "R$ 78,00", commission_pct: 15, sales: "34k", query: "triangle mop viral" },
-      { id: 109, title: "Tapete de Pia Ultra Absorvente Diatomita", price: "R$ 22,90", commission_pct: 45, sales: "67.8k", query: "absorbent mat viral" },
-      { id: 110, title: "Lixeira Inteligente Sensor Aproximação", price: "R$ 156,00", commission_pct: 10, sales: "12.2k", query: "smart trash can viral" }
+      { id: 111, title: "Airfryer Silicone Liner Premium", price: "R$ 25,00", commission_pct: 30, sales: "89k", query: "airfryer silicone viral" },
+      { id: 112, title: "Escorredor Retrátil de Pia Silicon", price: "R$ 38,00", commission_pct: 25, sales: "45k", query: "sink strainer viral" },
+      { id: 113, title: "Dispenser de Sabão Automático Pro", price: "R$ 54,00", commission_pct: 35, sales: "12k", query: "soap dispenser viral" },
+      { id: 114, title: "Batedeira de Mão Portátil USB", price: "R$ 67,00", commission_pct: 20, sales: "34k", query: "hand mixer portable viral" }
+    ],
+    'Beleza': [
+      { id: 901, title: "Escova Alisadora 5 em 1 Turbo", price: "R$ 125,00", commission_pct: 20, sales: "56k", query: "hair straightener brush viral" },
+      { id: 902, title: "Mini Geladeira de SkinCare RGB", price: "R$ 245,00", commission_pct: 12, sales: "18k", query: "skincare fridge aesthetic" },
+      { id: 903, title: "Removedor de Cravos por Sucção Pro", price: "R$ 45,00", commission_pct: 40, sales: "89k", query: "blackhead remover viral" },
+      { id: 904, title: "Espelho Maquiagem LED Touch High", price: "R$ 89,00", commission_pct: 25, sales: "34k", query: "makeup mirror led viral" },
+      { id: 905, title: "Modelador de Cachos Automático Wireless", price: "R$ 167,00", commission_pct: 15, sales: "45k", query: "automatic hair curler viral" },
+      { id: 906, title: "Kit Pincéis Maquiagem Profissional 24pçs", price: "R$ 54,00", commission_pct: 30, sales: "12k", query: "makeup brushes set viral" },
+      { id: 907, title: "Massageador Facial Gua Sha Elétrico", price: "R$ 78,00", commission_pct: 35, sales: "23k", query: "electric gua sha viral" },
+      { id: 908, title: "Limpador de Pincéis de Maquiagem Auto", price: "R$ 42,00", commission_pct: 40, sales: "67k", query: "brush cleaner viral" },
+      { id: 909, title: "Caneta Depiladora Sobrancelha Precision", price: "R$ 29,00", commission_pct: 50, sales: "156k", query: "eyebrow trimmer viral" },
+      { id: 910, title: "Máscara LED Terapia Facial 7 Cores", price: "R$ 198,00", commission_pct: 12, sales: "9k", query: "led face mask beauty viral" }
     ],
     'Tecnologia': [
       { id: 201, title: "Smartwatch Ultra 9 Series Retina", price: "R$ 199,00", commission_pct: 15, sales: "145k", query: "smartwatch ultra viral" },
       { id: 202, title: "Fone Bluetooth ANC High definition", price: "R$ 145,00", commission_pct: 20, sales: "88k", query: "anc earbuds viral" },
       { id: 203, title: "Teclado Mecânico Gamer RGB Silent", price: "R$ 250,00", commission_pct: 12, sales: "15k", query: "mechanical keyboard aesthetic" },
       { id: 204, title: "Projetor Portátil Cinema 4K Android", price: "R$ 450,00", commission_pct: 10, sales: "28k", query: "portable projector viral" },
-      { id: 205, title: "Power Bank MagSafe 20000mAh", price: "R$ 135,00", commission_pct: 25, sales: "56k", query: "magsafe powerbank viral" },
-      { id: 206, title: "Lâmpada Inteligente RGB Wi-Fi Plus", price: "R$ 39,00", commission_pct: 45, sales: "310k", query: "smart bulb hack viral" },
-      { id: 207, title: "Hub USB-C 8 em 1 Portátil", price: "R$ 118,00", commission_pct: 18, sales: "42k", query: "usb c hub setup viral" },
-      { id: 208, title: "Drone 4K Dual Camera E88 Max", price: "R$ 265,00", commission_pct: 15, sales: "67k", query: "drone budget viral" },
-      { id: 209, title: "Ring Light Profissional 12 Polegadas", price: "R$ 55,00", commission_pct: 35, sales: "190k", query: "ring light tiktok viral" },
-      { id: 210, title: "Mousepad Gamer RGB Speed Edition", price: "R$ 72,00", commission_pct: 28, sales: "33k", query: "rgb mousepad aesthetic" }
+      { id: 211, title: "Umbiificador de Mesa RGB Crystal", price: "R$ 85,00", commission_pct: 35, sales: "67k", query: "crystal humidifier viral" },
+      { id: 212, title: "Suporte MagSafe 3 em 1 Desktop", price: "R$ 125,00", commission_pct: 20, sales: "34k", query: "magsafe stand viral" },
+      { id: 213, title: "Hub USB-C 7 em 1 Aluminum Pro", price: "R$ 134,00", commission_pct: 18, sales: "12k", query: "usb-c hub viral" },
+      { id: 214, title: "Power Bank MagSafe 10000mAh", price: "R$ 156,00", commission_pct: 15, sales: "45k", query: "magsafe power bank viral" },
+      { id: 215, title: "Mouse Vertical Ergonômico Wireless", price: "R$ 89,00", commission_pct: 25, sales: "21k", query: "vertical mouse viral" },
+      { id: 216, title: "SSD Portátil 1TB High Speed NVMe", price: "R$ 389,00", commission_pct: 8, sales: "14k", query: "portable ssd viral" }
     ],
     'Decoração': [
       { id: 301, title: "Luminária Sunset Rainbow Premium", price: "R$ 55,00", commission_pct: 35, sales: "250k", query: "sunset lamp aesthetic" },
       { id: 302, title: "Umidificador de Ar Flame Vulcan", price: "R$ 95,00", commission_pct: 25, sales: "89k", query: "flame diffuser viral" },
       { id: 303, title: "Projetor Astronauta Galáxia 2.0", price: "R$ 115,00", commission_pct: 20, sales: "310k", query: "astronaut projector viral" },
       { id: 304, title: "Arandela LED Sem Fio Recarregável", price: "R$ 78,00", commission_pct: 30, sales: "45k", query: "cordless wall light viral" },
-      { id: 305, title: "Relógio Digital 3D LED Mirror", price: "R$ 52,00", commission_pct: 40, sales: "120k", query: "3d led clock viral" },
-      { id: 306, title: "Escultura Pensador Minimalista", price: "R$ 48,00", commission_pct: 45, sales: "23k", query: "thinker statue aesthetic" },
-      { id: 307, title: "Fita LED RGBIC Efeito Dinâmico", price: "R$ 68,00", commission_pct: 28, sales: "150k", query: "rgbic led strips viral" },
-      { id: 308, title: "Vaso Auto-Irrigável Transparente", price: "R$ 42,00", commission_pct: 32, sales: "34k", query: "self watering pot viral" },
-      { id: 309, title: "Quadro de Areia Movediça 3D", price: "R$ 85,00", commission_pct: 22, sales: "15k", query: "moving sand art viral" },
-      { id: 310, title: "Prateleira de Vidro Invisível", price: "R$ 38,00", commission_pct: 35, sales: "11k", query: "floating shelf aesthetic" }
+      { id: 311, title: "Quadro de Areia Movediça 3D Relax", price: "R$ 89,00", commission_pct: 28, sales: "12k", query: "sand art viral" },
+      { id: 312, title: "Vaso Flutuante Levitação Magnética", price: "R$ 245,00", commission_pct: 15, sales: "8k", query: "floating pot viral" },
+      { id: 313, title: "Relógio Digital 3D LED Modern", price: "R$ 42,00", commission_pct: 40, sales: "156k", query: "3d led clock viral" },
+      { id: 314, title: "Fita LED RGBIC Smart App", price: "R$ 67,00", commission_pct: 35, sales: "89k", query: "smart led strip viral" },
+      { id: 315, title: "Espelho Irregular Orgânico Design", price: "R$ 134,00", commission_pct: 12, sales: "15k", query: "irregular mirror aesthetic" },
+      { id: 316, title: "Luminária de Livro Dobrável Madeira", price: "R$ 54,00", commission_pct: 30, sales: "34k", query: "book lamp viral" }
     ],
     'Pet': [
       { id: 401, title: "Escova Vapor X-Steam para Gatos", price: "R$ 42,00", commission_pct: 45, sales: "215k", query: "steamy cat brush viral" },
       { id: 402, title: "Bebedouro Fonte de Água Ultra Silent", price: "R$ 98,00", commission_pct: 20, sales: "56k", query: "pet fountain viral" },
       { id: 403, title: "Brinquedo Peixe Robô Realista Pro", price: "R$ 29,00", commission_pct: 50, sales: "340k", query: "flopping fish pet viral" },
       { id: 404, title: "Rede de Janela Cat-Sky Garden", price: "R$ 82,00", commission_pct: 25, sales: "42k", query: "cat window bed viral" },
-      { id: 405, title: "Pá Coletora Higiênica Click-Clean", price: "R$ 35,00", commission_pct: 40, sales: "88k", query: "poo scooper viral tiktok" },
-      { id: 406, title: "Mochila Astronauta Panorâmica", price: "R$ 178,00", commission_pct: 15, sales: "29k", query: "pet backpack astronaut viral" },
-      { id: 407, title: "Tapete Gelado Refresh-Pet XL", price: "R$ 65,00", commission_pct: 30, sales: "67k", query: "cooling mat pet viral" },
-      { id: 408, title: "Cortador de Unha LED Safelight", price: "R$ 45,00", commission_pct: 35, sales: "91k", query: "pet nail clipper led viral" },
-      { id: 409, title: "Comedouro Elevado Ergonômico", price: "R$ 55,00", commission_pct: 32, sales: "12k", query: "elevated pet bowl viral" },
-      { id: 410, title: "Kit Banho Dry-Pet Super Toalha", price: "R$ 28,00", commission_pct: 42, sales: "53k", query: "pet bath robe viral" }
+      { id: 411, title: "Lançador de Petiscos Interativo", price: "R$ 65,00", commission_pct: 30, sales: "28k", query: "treat launcher viral" },
+      { id: 412, title: "Cama Nuvem Calmante Anti-Stress", price: "R$ 115,00", commission_pct: 18, sales: "92k", query: "calming pet bed viral" },
+      { id: 413, title: "Coleira LED Recarregável Segurança", price: "R$ 34,00", commission_pct: 35, sales: "45k", query: "led pet collar viral" },
+      { id: 414, title: "Tapete Gelado Refrescante Verão", price: "R$ 56,00", commission_pct: 25, sales: "67k", query: "cooling mat pet viral" },
+      { id: 415, title: "Mochila Pet Panorâmica Astronauta", price: "R$ 145,00", commission_pct: 15, sales: "18k", query: "pet backpack viral" },
+      { id: 416, title: "Cortador de Unha Pet com LED", price: "R$ 39,00", commission_pct: 40, sales: "34k", query: "pet nail clipper led viral" }
     ],
-    'Beleza': [
-      { id: 501, title: "Escova Alisadora 5 em 1 Airflow Pro", price: "R$ 235,00", commission_pct: 18, sales: "95k", query: "hair styler viral tiktok" },
-      { id: 502, title: "Caneta Microblading Efeito Natural 4D", price: "R$ 22,00", commission_pct: 60, sales: "520k", query: "eyebrow pen viral tiktok" },
-      { id: 503, title: "Removedor de Cravos Vácuo Pro-Clean", price: "R$ 72,00", commission_pct: 35, sales: "140k", query: "blackhead suction viral" },
-      { id: 504, title: "Sérum Facial Retinol Booster 30ml", price: "R$ 49,00", commission_pct: 50, sales: "250k", query: "retinol serum viral" },
-      { id: 505, title: "Modelador de Cachos Silk Curls", price: "R$ 35,00", commission_pct: 55, sales: "180k", query: "heatless curls aesthetic" },
-      { id: 506, title: "Kit de Pincéis Crystal Profissional", price: "R$ 65,00", commission_pct: 40, sales: "89k", query: "makeup brush set viral" },
-      { id: 507, title: "Massageador Facial Ice Roller Pro", price: "R$ 28,00", commission_pct: 55, sales: "110k", query: "ice roller face viral" },
-      { id: 508, title: "Máscara LED Terapia 7 Cores", price: "R$ 158,00", commission_pct: 25, sales: "34k", query: "led therapy mask viral" },
-      { id: 509, title: "Espelho Maquiagem LED Touch High", price: "R$ 95,00", commission_pct: 30, sales: "67k", query: "led vanity mirror viral" },
-      { id: 510, title: "Aparelho Limpeza Foreo-Style Luminous", price: "R$ 32,00", commission_pct: 65, sales: "450k", query: "face cleanser viral" }
+    'Fitness': [
+      { id: 601, title: "Corda de Pular Inteligente Digital", price: "R$ 55,00", commission_pct: 35, sales: "42k", query: "smart jump rope viral" },
+      { id: 602, title: "Garrafa de Água Motivacional 2L", price: "R$ 38,00", commission_pct: 45, sales: "210k", query: "motivational water bottle viral" },
+      { id: 603, title: "Rolo Abdominal Rebote Automático", price: "R$ 125,00", commission_pct: 20, sales: "15k", query: "ab roller viral tiktok" },
+      { id: 604, title: "Kit de Faixas Elasticas Premium", price: "R$ 42,00", commission_pct: 40, sales: "88k", query: "resistance bands viral" },
+      { id: 605, title: "Massageador Muscular Phoenix A2", price: "R$ 198,00", commission_pct: 15, sales: "12k", query: "massage gun viral" },
+      { id: 606, title: "Balança Digital de Bioimpedância Smart", price: "R$ 78,00", commission_pct: 30, sales: "45k", query: "smart scale viral" },
+      { id: 607, title: "Halteres Ajustáveis 2-in-1 Pro", price: "R$ 245,00", commission_pct: 10, sales: "8k", query: "adjustable dumbbells viral" },
+      { id: 608, title: "Tapete de Yoga TPE Anti-derrapante", price: "R$ 67,00", commission_pct: 25, sales: "23k", query: "yoga mat aesthetic viral" },
+      { id: 609, title: "Hand Grip com Contador Digital", price: "R$ 25,00", commission_pct: 50, sales: "156k", query: "hand grip viral" },
+      { id: 610, title: "Mini Stepper com Extensores", price: "R$ 289,00", commission_pct: 12, sales: "5k", query: "portable stepper viral" }
+    ],
+    'Gamer': [
+      { id: 701, title: "Barra de Luz RGB Screen Hanging", price: "R$ 145,00", commission_pct: 15, sales: "34k", query: "monitor light bar viral" },
+      { id: 702, title: "Mouse Gamer Ultraleve Honeycomb", price: "R$ 89,00", commission_pct: 25, sales: "56k", query: "honeycomb mouse viral" },
+      { id: 703, title: "Suporte de Headset RGB Streamer", price: "R$ 65,00", commission_pct: 30, sales: "21k", query: "rgb headset stand aesthetic" },
+      { id: 704, title: "Kit Limpeza de Teclado 7 em 1", price: "R$ 25,00", commission_pct: 50, sales: "145k", query: "keyboard cleaning kit viral" },
+      { id: 705, title: "Microfone Condensador RGB Pro S", price: "R$ 178,00", commission_pct: 20, sales: "12k", query: "rgb microphone viral" },
+      { id: 706, title: "Mousepad Gamer RGB Extended 80x30", price: "R$ 54,00", commission_pct: 35, sales: "45k", query: "rgb mousepad viral" },
+      { id: 707, title: "Cadeira Gamer Ergonômica Pro Elite", price: "R$ 689,00", commission_pct: 8, sales: "15k", query: "gaming chair viral" },
+      { id: 708, title: "Alto-falantes Gamer RGB Stereo", price: "R$ 89,00", commission_pct: 25, sales: "23k", query: "pc speakers rgb viral" },
+      { id: 709, title: "Docking Station Nintendo Switch Plus", price: "R$ 115,00", commission_pct: 18, sales: "18k", query: "nintendo switch dock viral" },
+      { id: 710, title: "Anel de LED para Controle Gamepad", price: "R$ 34,00", commission_pct: 40, sales: "67k", query: "controller light viral" }
+    ],
+    'Kids': [
+      { id: 801, title: "Projetor de Desenho Infantil LED", price: "R$ 58,00", commission_pct: 35, sales: "67k", query: "drawing projector viral" },
+      { id: 802, title: "Tablet de Escrita LCD Mágico", price: "R$ 28,00", commission_pct: 45, sales: "310k", query: "lcd writing tablet kids viral" },
+      { id: 803, title: "Cacto Dançante Repetidor e Musical", price: "R$ 45,00", commission_pct: 40, sales: "540k", query: "dancing cactus viral" },
+      { id: 804, title: "Mini Câmera Digital Infantil HD", price: "R$ 115,00", commission_pct: 22, sales: "24k", query: "kids camera viral" },
+      { id: 805, title: "Lousa Mágica Colorida Premium", price: "R$ 34,00", commission_pct: 50, sales: "125k", query: "magic drawing board viral" },
+      { id: 806, title: "Blocos de Montar Magnéticos 64pçs", price: "R$ 89,00", commission_pct: 25, sales: "18k", query: "magnetic blocks viral" },
+      { id: 807, title: "Máquina de Bolhas Gigantes Bazooka", price: "R$ 67,00", commission_pct: 35, sales: "89k", query: "bubble gun viral" },
+      { id: 808, title: "Carro de Controle Remoto Acrobático", price: "R$ 124,00", commission_pct: 20, sales: "34k", query: "stunt car viral" },
+      { id: 809, title: "Kit Slime Faça Você Mesmo Jumbo", price: "R$ 42,00", commission_pct: 45, sales: "56k", query: "slime kit viral" },
+      { id: 810, title: "Relógio Inteligente Kids com GPS", price: "R$ 145,00", commission_pct: 18, sales: "12k", query: "kids smart watch viral" }
     ]
   };
 
@@ -207,13 +283,50 @@ const App: React.FC = () => {
     }
   };
 
-
-
+  // Persistence Sync
   useEffect(() => {
     localStorage.setItem('v-step', step);
     localStorage.setItem('v-products', JSON.stringify(productList));
     localStorage.setItem('v-active', JSON.stringify(activeItems));
   }, [step, productList, activeItems]);
+
+  // Transition synchronization effect
+  useEffect(() => {
+    if (step !== 'ready' || !videoRef.current) return;
+    
+    const checkTransitions = () => {
+      if (!videoRef.current) return;
+      const ct = videoRef.current.currentTime;
+      
+      const transitionDuration = 1.5;
+      const isNear = transitionTimestamps.some(ts => ct >= ts && ct < ts + transitionDuration);
+      
+      if (isNear !== isTransitionActive) {
+        console.log(`[EFFECT] Transition ${isNear ? 'ON' : 'OFF'} at ${ct.toFixed(2)}s`);
+        setIsTransitionActive(isNear);
+      }
+      setCurrentTime(ct);
+    };
+
+    const interval = setInterval(checkTransitions, 50); // High frequency check for smooth sync
+    return () => clearInterval(interval);
+  }, [step, transitionTimestamps, isTransitionActive]);
+
+  // Auto-refresh timer (5 minutes)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      console.log('[AUTO-REFRESH] Sincronizando produtos e tendências...');
+      setProductList(prev => prev.map(p => {
+        const currentPrice = parseFloat(p.price.replace('R$ ', '').replace(',', '.'));
+        const newPrice = currentPrice + (Math.random() - 0.5) * 2;
+        return {
+          ...p,
+          price: `R$ ${newPrice.toFixed(2).replace('.', ',')}`
+        };
+      }));
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const saveToSupabase = async (product: any, platform: string) => {
     const { data, error } = await supabase
@@ -305,14 +418,11 @@ const App: React.FC = () => {
     ];
 
     const ctas = [
-      "🛒 Link OFICIAL com desconto na minha BIO! Corre que o estoque voa! 🚀",
-      "✨ Gostou? O link está na Bio esperando por você! Aproveite o cupom! ✅",
-      "👇 Clique no link da Bio e garanta o seu AGORA! 🛍️",
-      "🔥 Link na Bio + Frete Grátis disponível hoje! Não perde tempo! 📦",
-      "🎁 Presente ideal ou mimo para você? Link na Bio! 💖",
-      "🚀 Digita 'EU QUERO' que te mando o link agora mesmo! 💬",
-      "⚠️ ALERTA DE ESTOQUE BAIXO: Link oficial no meu perfil/bio! 🏃‍♂️",
-      "🌐 Link seguro nos Destaques ou na Bio! ✅",
+      "🛒 LINK OFICIAL COM DESCONTO NA MINHA BIO! Corre que o estoque voa! 🚀",
+      "✨ O segredo está revelado! Link na Bio esperando por você! ✅",
+      "👇 Clique no link da Bio e garanta o seu com desconto AGORA! 🛍️",
+      "🔥 Link na Bio + Frete Grátis liberado hoje! Não perde! 📦",
+      "⚠️ OPORTUNIDADE ÚNICA: Link oficial disponível no perfil! 🏃‍♂️",
       "🛍️ Garanta o seu pelo link oficial na descrição do meu perfil! 🚀"
     ];
 
@@ -354,6 +464,13 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
+  const resetVideoEditor = () => {
+    setActiveFilter('none');
+    setActiveTransition('none');
+    setVideoLegend('');
+    setVideoLegend('');
+  };
+
   const sortByCommission = (array: any[]) => {
     return [...array].sort((a, b) => b.commission_pct - a.commission_pct);
   };
@@ -371,11 +488,39 @@ const App: React.FC = () => {
     }, 2500);
   };
 
+  const goBackToList = () => {
+    setStep('list');
+    setAutomationFinished(false);
+  };
+
+
+  const refillProductList = (niche: string) => {
+    const pool = productDB[niche] || [];
+    // Filtra produtos que já estão na lista ativa ou no histórico
+    const available = pool.filter(p => 
+      !activeItems.some(ai => ai.id === p.id) && 
+      !publicationHistory.some(ph => ph.product_id === p.id)
+    );
+    
+    // Se acabarem os novos, pega do banco geral mas evita os Ativos
+    const finalPool = available.length > 0 ? available : pool.filter(p => !activeItems.some(ai => ai.id === p.id));
+    
+    if (finalPool.length > 0) {
+      const nextItem = finalPool[Math.floor(Math.random() * finalPool.length)];
+      setActiveItems(prev => {
+        const filtered = prev.filter(p => p.id !== selectedProduct?.id);
+        return [...filtered, nextItem].slice(0, 15);
+      });
+    }
+  };
 
   const handleNicheChange = (niche: string) => {
     setActiveNiche(niche);
-    const sortedNiche = sortByCommission(productDB[niche]);
-    setActiveItems(sortedNiche.slice(0, 20));
+    const pool = productDB[niche] || [];
+    const filtered = pool.filter(p => !publicationHistory.some(ph => ph.product_id === p.id));
+    const finalPool = filtered.length >= 10 ? filtered : pool;
+    const shuffled = [...finalPool].sort(() => Math.random() - 0.5);
+    setActiveItems(shuffled.slice(0, 15));
   };
 
 
@@ -391,6 +536,8 @@ const App: React.FC = () => {
 
   const updateMode = (mode: string) => {
     setBoostMode(mode);
+    if (!selectedProduct) return;
+    
     if (mode === 'performance') {
       setCustomCopy(`🔥 ÚLTIMAS UNIDADES: ${selectedProduct.title}!\n🛑 Link na minha Bio com desconto exclusivo! 🛒👇\n#promo #achadinhos #shopee #viral #brasil`);
     } else if (mode === 'funny') {
@@ -399,6 +546,7 @@ const App: React.FC = () => {
   };
 
   const researchTikTok = async (product: any) => {
+    resetVideoEditor();
     setIsScanning(true);
     try {
       // Improved Query for Viral PT-BR content
@@ -426,7 +574,11 @@ const App: React.FC = () => {
         if (sortedVideos.length > 0) {
           setVideoResults(sortedVideos);
           setCurrentVideoIndex(0);
-          setVideoData({ cover: sortedVideos[0].cover, url: sortedVideos[0].url });
+          setVideoData({ 
+            cover: sortedVideos[0].cover, 
+            url: sortedVideos[0].url,
+            id: sortedVideos[0].id 
+          });
           
           const viralLegend = generateCreativeLegend(product);
           setCustomCopy(viralLegend); 
@@ -457,11 +609,16 @@ const App: React.FC = () => {
   };
 
   const swapVideo = () => {
+    resetVideoEditor();
     if (videoResults.length > 1) {
       const nextIndex = (currentVideoIndex + 1) % videoResults.length;
       setCurrentVideoIndex(nextIndex);
       const nextVideo = videoResults[nextIndex];
-      setVideoData({ cover: nextVideo.cover, url: nextVideo.url });
+      setVideoData({ 
+        cover: nextVideo.cover, 
+        url: nextVideo.url,
+        id: nextVideo.id 
+      });
       
       if (selectedProduct) {
         const newLegend = generateCreativeLegend(selectedProduct);
@@ -473,6 +630,179 @@ const App: React.FC = () => {
       showToast("SEM OUTROS VÍDEOS DISPONÍVEIS");
     }
   };
+
+  const handleDownload = async () => {
+    if (!videoData?.url) return;
+    
+    setIsProcessing(true);
+    showToast("REPROCESSANDO MÍDIA COM EFEITOS... ⚡");
+    
+    try {
+      const processor = new VideoProcessor();
+      const options: ProcessingOptions = {
+        filter: activeFilter,
+        legend: videoLegend,
+        isMuted: isMuted,
+        transition: activeTransition as any,
+        trimStart,
+        trimEnd: trimEnd || undefined,
+        transitionTimestamps,
+        videoId: videoData.id
+      };
+      
+      await processor.processAndDownload(videoData.url, options);
+      showToast("VÍDEO EXPORTADO COM SUCESSO! 🚀");
+    } catch (error: any) {
+      console.error("Video Processing Error:", error);
+      showToast("ERRO AO PROCESSAR VÍDEO. TENTANDO DOWNLOAD DIRETO...");
+      window.open(videoData.url, '_blank');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const VisualTimeline = () => {
+    const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!timelineRef.current || !videoRef.current) return;
+      const rect = timelineRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const clickedTime = Math.max(0, Math.min(videoDuration, (x / rect.width) * videoDuration));
+      videoRef.current.currentTime = clickedTime;
+      setCurrentTime(clickedTime);
+    };
+
+    const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      const ms = Math.floor((seconds % 1) * 10);
+      return `${mins}:${secs.toString().padStart(2, '0')}.${ms}`;
+    };
+
+    const addImpactPoint = () => {
+      if (transitionTimestamps.length >= 8) {
+        showToast("MÁXIMO DE 8 PONTOS DE IMPACTO");
+        return;
+      }
+      setTransitionTimestamps(prev => [...prev, currentTime].sort((a,b) => a-b));
+      showToast("PONTO DE IMPACTO ADICIONADO! 🔥");
+    };
+
+    return (
+      <div className="visual-editor-controls space-y-6">
+        {/* Playback & Basic Actions */}
+        <div className="flex items-center justify-between gap-4 px-2">
+          <div className="flex items-center gap-3">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setIsPlaying(!isPlaying)}
+              className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 transition-all ${isPlaying ? 'bg-white text-slate-950 border-white' : 'bg-accent/20 text-accent border-accent/30 shadow-[0_0_20px_rgba(6,182,212,0.2)]'}`}
+            >
+              {isPlaying ? <VolumeX size={24} /> : <Zap size={24} className="animate-pulse" />}
+            </motion.button>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Tempo Atual</span>
+              <span className="text-lg font-mono font-black text-white">{formatTime(currentTime)}</span>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+             <button 
+              onClick={addImpactPoint}
+              className="h-14 px-6 bg-accent text-slate-950 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-accent/20 active:scale-95 transition-all"
+            >
+              <Scissors size={18} /> DIVIDIR
+            </button>
+          </div>
+        </div>
+
+        {/* The Actual Timeline */}
+        <div className="relative">
+          <div className="flex justify-between items-center mb-2 px-1">
+             <span className="text-[9px] font-black text-accent uppercase tracking-[0.3em]">Master_Timeline_v4</span>
+             <span className="text-[9px] font-mono text-white/30 uppercase">{formatTime(videoDuration)} TOTAL</span>
+          </div>
+          
+          <div 
+            className="professional-timeline h-24 bg-slate-900/60 rounded-[1.5rem] border border-white/5 relative overflow-hidden group cursor-pointer shadow-inner"
+            ref={timelineRef}
+            onClick={handleTimelineClick}
+          >
+            {/* Time Ticks */}
+            <div className="absolute inset-x-0 top-0 h-6 border-b border-white/5 flex items-center">
+              {Array.from({ length: Math.ceil(videoDuration) + 1 }).map((_, i) => (
+                <div 
+                  key={i} 
+                  className="absolute h-full flex flex-col items-center justify-end pb-1"
+                  style={{ left: `${(i / videoDuration) * 100}%` }}
+                >
+                  <div className={`w-[1px] bg-white/20 ${i % 5 === 0 ? 'h-3' : 'h-1.5'}`} />
+                  {i % 2 === 0 && <span className="text-[8px] font-black text-white/20 absolute -top-1">{i}s</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Video Strip Visual Representation */}
+            <div className="absolute inset-x-0 top-8 bottom-0 flex gap-0.5 px-0.5 opacity-20 pointer-events-none">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 rounded-sm border border-white/5" />
+              ))}
+            </div>
+
+            {/* Trim Highlight */}
+            <div className="absolute top-6 bottom-0 bg-accent/10 border-x-2 border-accent/40 z-10 pointer-events-none"
+                 style={{ 
+                   left: `${(trimStart / videoDuration) * 100}%`,
+                   width: `${((trimEnd || videoDuration) - trimStart) / videoDuration * 100}%`
+                 }} 
+            />
+
+            {/* Transition Markers (Impact Points) */}
+            {transitionTimestamps.map((ts, i) => (
+              <div key={i} className="absolute top-0 bottom-0 w-[3px] bg-accent z-20 shadow-[0_0_15px_rgba(6,182,212,1)]"
+                   style={{ left: `${(ts / videoDuration) * 100}%` }}>
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-accent rounded-full flex items-center justify-center shadow-lg transform scale-110">
+                  <Zap size={8} className="text-slate-950" />
+                </div>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTransitionTimestamps(prev => prev.filter((_, idx) => idx !== i));
+                  }}
+                  className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 bg-red-500 rounded-lg flex items-center justify-center shadow-xl hover:scale-110 transition-transform"
+                >
+                  <X size={10} className="text-white" />
+                </button>
+              </div>
+            ))}
+
+            {/* Playhead */}
+            <div className="absolute top-0 bottom-0 w-[2px] bg-white z-30 pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.8)]"
+                 style={{ left: `${(currentTime / videoDuration) * 100}%` }}>
+              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45 border border-slate-900" />
+              <div className="absolute inset-y-0 -left-4 -right-4 bg-white/5 blur-sm" />
+            </div>
+          </div>
+        </div>
+
+        {/* Trim Controls */}
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => { setTrimStart(currentTime); showToast("INÍCIO DO VÍDEO DEFINIDO"); }}
+            className="h-12 bg-slate-900 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white hover:border-white/20 transition-all flex items-center justify-center gap-2"
+          >
+            <Scissors size={14} className="text-accent" /> Definir Início
+          </button>
+          <button 
+            onClick={() => { setTrimEnd(currentTime); showToast("FIM DO VÍDEO DEFINIDO"); }}
+            className="h-12 bg-slate-900 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white hover:border-white/20 transition-all flex items-center justify-center gap-2"
+          >
+            <Scissors size={14} className="text-accent" /> Definir Fim
+          </button>
+        </div>
+      </div>
+    );
+  };
+
 
   const runAutomation = (selectedPlatform: 'tiktok' | 'shopee') => {
     navigator.clipboard.writeText(customCopy);
@@ -502,6 +832,8 @@ const App: React.FC = () => {
           setTimeout(() => {
             setAutomationFinished(true);
             showToast("CONCLUÍDO! VERIFIQUE A ABA ABERTA 🚀");
+            // Refill list after posting
+            refillProductList(activeNiche);
           }, 2000);
         }
       }, i * 800);
@@ -707,22 +1039,74 @@ const App: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="p-6 space-y-6 pb-32"
             >
-              <div className="video-preview-container !h-[420px] relative overflow-hidden rounded-[2rem] border-4 border-slate-900 shadow-2xl">
+              <div className="flex items-center justify-between mb-2">
+                <motion.button 
+                  whileTap={{ scale: 0.9 }}
+                  onClick={goBackToList}
+                  className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
+                >
+                  <ArrowLeft size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Voltar para Lista</span>
+                </motion.button>
+                <div className="flex items-center gap-2 text-accent">
+                   <div className="w-2 h-2 bg-accent rounded-full animate-ping" />
+                   <span className="text-[10px] font-black uppercase tracking-widest italic">Edição Pro Ativa</span>
+                </div>
+              </div>
+
+              <div className="video-preview-container !h-[420px] relative overflow-hidden rounded-[2rem] border-4 border-slate-900 shadow-2xl bg-slate-950">
                 {videoData?.url ? (
-                  <video 
-                    src={videoData.url} 
-                    poster={videoData.cover}
-                    autoPlay 
-                    loop 
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
+                  <>
+                    <video 
+                      ref={videoRef}
+                      src={videoData?.url || ''}
+                      onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                      onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                      playsInline
+                      loop
+                      muted={isMuted}
+                      className={`w-full h-full object-cover transition-all duration-300 filter-preview-${activeFilter} ${isTransitionActive ? `transition-preview-${activeTransition}` : ''}`}
+                    />
+                    
+                    <button 
+                      onClick={() => setIsPlaying(!isPlaying)}
+                      className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
+                    >
+                      <div className="bg-white/10 backdrop-blur-md p-6 rounded-full border border-white/20">
+                        {isPlaying ? <VolumeX size={48} className="text-white" /> : <RefreshCcw size={48} className="text-white animate-pulse" />}
+                      </div>
+                    </button>
+                    
+                    {/* Elite Overlays System */}
+                    <div className={`absolute inset-0 pointer-events-none effect-overlay-${activeFilter}`} />
+                    
+                    {videoLegend && (
+                      <div className="absolute inset-x-0 bottom-24 flex justify-center z-20 px-6">
+                        <motion.div 
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="bg-accent text-slate-950 px-6 py-3 rounded-2xl font-black text-xs uppercase italic tracking-tighter text-center shadow-[0_10px_30px_rgba(16,185,129,0.4)] border-2 border-white/20"
+                        >
+                          {videoLegend}
+                        </motion.div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900/50 space-y-4">
                     <Video size={48} className="text-white/10 animate-pulse" />
                     <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Processando Mídia...</span>
                   </div>
                 )}
+
+                <motion.button 
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="absolute bottom-20 right-4 z-30 w-10 h-10 bg-black/60 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 text-white"
+                >
+                  {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                </motion.button>
+
 
                 <div className="absolute inset-x-4 top-4 flex justify-between items-start z-20 pointer-events-none">
                   <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
@@ -731,33 +1115,33 @@ const App: React.FC = () => {
                   </div>
                   <div className="bg-accent px-4 py-2 rounded-2xl shadow-[0_10px_20px_rgba(16,185,129,0.3)] border-2 border-white/20">
                     <div className="text-[8px] font-black text-slate-950 uppercase leading-none opacity-60 text-center mb-0.5">ROI</div>
-                    <div className="text-xl font-black text-slate-950 italic leading-none">{selectedProduct.commission_pct}%</div>
+                    <div className="text-xl font-black text-slate-950 italic leading-none">{selectedProduct?.commission_pct || 0}%</div>
                   </div>
-                </div>
-
-                <div className="absolute inset-x-4 bottom-4 z-20">
-                   <motion.button 
-                    whileTap={{ scale: 0.95 }}
-                    onClick={swapVideo}
-                    className="w-full h-12 bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center justify-center gap-3 hover:bg-black/60 transition-all pointer-events-auto shadow-2xl"
-                   >
-                     <RotateCcw size={16} className="text-accent" />
-                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Trocar de Vídeo</span>
-                   </motion.button>
                 </div>
 
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/20 pointer-events-none opacity-60" />
               </div>
 
+              {/* Main Professional Editor Controls */}
+              <div className="mt-4">
+                <VisualTimeline />
+              </div>
+
+
               <div className="tech-card !p-6 space-y-6">
                 <div className="space-y-3">
                   <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1">Copiar Estratégia</p>
                   <div className="flex items-start justify-between gap-4">
-                    <h3 className="text-lg font-black italic uppercase leading-tight truncate">{selectedProduct.title}</h3>
+                    <h3 className="text-lg font-black italic uppercase leading-tight truncate">{selectedProduct?.title || 'Carregando...'}</h3>
                     <motion.button 
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
-                      onClick={() => { navigator.clipboard.writeText(selectedProduct.title); showToast("TÍTULO COPIADO!"); }}
+                      onClick={() => { 
+                        if (selectedProduct?.title) {
+                          navigator.clipboard.writeText(selectedProduct.title); 
+                          showToast("TÍTULO COPIADO!"); 
+                        }
+                      }}
                       className="shrink-0 p-2 bg-slate-900 border border-white/10 rounded-xl text-accent"
                     >
                       <Copy size={16} />
@@ -784,11 +1168,81 @@ const App: React.FC = () => {
                   </motion.button>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-dim px-2">
-                    <span>Legenda Inteligente</span>
-                    <span className="text-accent/60 italic">{customCopy.length} caracteres</span>
+                <div className="space-y-6 pt-2">
+                  <div className="flex gap-2">
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={swapVideo}
+                      className="flex-1 h-12 bg-slate-900 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-white text-[10px] font-black uppercase tracking-widest hover:border-accent/30 transition-all"
+                    >
+                      <RotateCcw size={14} className="text-accent" /> Trocar Vídeo Original
+                    </motion.button>
                   </div>
+                </div>
+
+                  <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-4 flex items-center gap-2">
+                    <Sparkles size={12} className="text-accent" />
+                    Filtros Virais Pro
+                  </p>
+                  <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar">
+                    {filters.map((f) => (
+                      <motion.button
+                        key={f.id}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setActiveFilter(f.id)}
+                        className={`shrink-0 px-4 py-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 min-w-[80px] ${activeFilter === f.id ? 'bg-accent border-accent text-slate-950 font-black' : 'bg-slate-900 border-white/5 text-white/40'}`}
+                      >
+                        <span className="text-[10px] uppercase truncate w-full text-center tracking-tighter">{f.name}</span>
+                      </motion.button>
+                    ))}
+                  </div>
+
+                  <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-4 flex items-center gap-2">
+                    <Zap size={12} className="text-accent" />
+                    Transições CapCut Pro
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pb-2">
+                    {[
+                      { id: 'fire', name: '🔥 EXPLOSÃO', icon: <Zap size={14} /> },
+                      { id: 'glitch', name: '⚡ GLITCH PRO', icon: <Scissors size={14} /> },
+                      { id: 'zoom', name: 'Zoom', icon: <Maximize2 size={14} /> },
+                      { id: 'beat', name: 'Batida Viral', icon: <Activity size={14} /> },
+                      { id: 'flash', name: 'Flash Branco', icon: <Zap size={14} /> },
+                      { id: 'slide', name: 'Slide Lateral', icon: <MoveRight size={14} /> },
+                      { id: 'blur', name: 'Motion Blur', icon: <Sparkles size={14} /> },
+                      { id: 'shake', name: 'Tremor CapCut', icon: <RefreshCcw size={14} /> },
+                      { id: 'rotate', name: 'Giro 3D Pro', icon: <RotateCcw size={14} /> },
+                      { id: 'none', name: 'Original', icon: <X size={14} /> }
+                    ].map((t) => (
+                      <motion.button
+                        key={t.id}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setActiveTransition(t.id)}
+                        className={`h-12 rounded-xl border flex items-center justify-center gap-2 transition-all ${activeTransition === t.id ? 'bg-white/10 border-accent/50 text-accent outline outline-2 outline-accent/20' : 'bg-slate-900 border-white/5 text-white/20'}`}
+                      >
+                        {t.icon}
+                        <span className="text-[10px] font-black uppercase tracking-tight">{t.name}</span>
+                      </motion.button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-4 pt-4">
+                    <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1 flex items-center gap-2">
+                      <Type size={12} className="text-accent" />
+                      Legenda no Vídeo (Overlay)
+                    </p>
+                    <input 
+                      type="text"
+                      className="w-full bg-slate-900 px-4 h-12 rounded-xl border border-white/5 text-[11px] text-white font-black placeholder:text-white/10 outline-none focus:border-accent/30"
+                      placeholder="EX: OLHA ESSA PROMOÇÃO! 🔥"
+                      value={videoLegend}
+                      onChange={(e) => setVideoLegend(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1 italic">Legenda para Social Media</p>
                   <div className="relative group">
                     <textarea 
                       className="w-full bg-slate-900 p-5 rounded-3xl border border-white/5 text-xs text-slate-100 font-medium outline-none min-h-[140px] resize-none focus:border-accent/30 transition-all leading-relaxed"
@@ -805,7 +1259,7 @@ const App: React.FC = () => {
                     </motion.button>
                   </div>
                 </div>
-              </div>
+
 
               <div className="flex gap-4">
                 <motion.button 
@@ -829,11 +1283,18 @@ const App: React.FC = () => {
 
               <motion.button 
                 whileTap={{ scale: 0.98 }}
-                className="w-full h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center gap-3 text-white/40 hover:text-white hover:bg-white/10 transition-all" 
-                onClick={()=>window.open(videoData.url)}
+                disabled={isProcessing}
+                className={`w-full h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center gap-3 text-white/40 hover:text-white hover:bg-white/10 transition-all ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                onClick={handleDownload}
               >
-                <Download size={18} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Download MP4 (Sem Marca D'água)</span>
+                {isProcessing ? (
+                  <RefreshCcw size={18} className="animate-spin text-accent" />
+                ) : (
+                  <Download size={18} />
+                )}
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {isProcessing ? 'PROCESSANDO EFEITOS...' : "Download MP4 (Com Efeitos Pro)"}
+                </span>
               </motion.button>
             </motion.div>
           )}
