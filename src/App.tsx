@@ -15,9 +15,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 const App: React.FC = () => {
   const [step, setStep] = useState('home');
 
-  const platformUrls = {
-    tiktok: 'https://www.tiktok.com/upload?lang=pt-BR',
-    shopee: 'https://seller.shopee.com.br/creator-center/video-upload/upload'
+  const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    if (type === 'shopee') {
+      // Intent para abrir diretamente a postagem no Shopee Video
+      return isMobile 
+        ? 'shopee://video/publish' 
+        : 'https://shopee.com.br/m/shopee-video';
+    } else {
+      // Intent para abrir o upload do TikTok sem cair no Studio
+      return isMobile 
+        ? 'snssdk1233://publish' 
+        : 'https://www.tiktok.com/upload';
+    }
   };
   const [productList, setProductList] = useState<any[]>([]); 
   const [activeItems, setActiveItems] = useState<any[]>([]); 
@@ -286,7 +297,7 @@ const App: React.FC = () => {
       `O ${product.title} é simplesmente PERFEITO para quem busca praticidade e estilo no dia a dia. Eu estou viciada!`,
       `Sério, a qualidade disso superou todas as minhas expectativas. É aquele tipo de item que todo mundo pergunta onde eu comprei.`,
       `Incrível como algo tão simples pode facilitar tanto a nossa rotina. Se eu soubesse disso antes, teria economizado muito tempo!`,
-      `O queridinho do momento chegou para ficar. Útil, moderno e com um preço que você não vai acreditar por apenas ${product.price}.`,
+      `O queridinho do momento chegou para ficar. Útil, moderno e com um custo-benefício que você não vai acreditar.`,
       `Cada detalhe desse item foi pensado para facilitar sua vida. É o investimento que você merece para sua casa.`,
       `Já são mais de ${product.sales} pessoas usando e amando! Você não pode ficar de fora dessa tendência.`,
       `Economize tempo e esforço com essa tecnologia que é pura inovação. O custo-benefício é de outro planeta! 🚀`,
@@ -296,11 +307,13 @@ const App: React.FC = () => {
     const ctas = [
       "🛒 Link OFICIAL com desconto na minha BIO! Corre que o estoque voa! 🚀",
       "✨ Gostou? O link está na Bio esperando por você! Aproveite o cupom! ✅",
-      "👇 Clique no link da Bio e garanta o seu antes que o preço suba! 🛍️",
+      "👇 Clique no link da Bio e garanta o seu AGORA! 🛍️",
       "🔥 Link na Bio + Frete Grátis disponível hoje! Não perde tempo! 📦",
       "🎁 Presente ideal ou mimo para você? Link na Bio! 💖",
       "🚀 Digita 'EU QUERO' que te mando o link agora mesmo! 💬",
-      "⚠️ ALERTA DE ESTOQUE BAIXO: Link na Bio para garantir o seu! 🏃‍♂️"
+      "⚠️ ALERTA DE ESTOQUE BAIXO: Link oficial no meu perfil/bio! 🏃‍♂️",
+      "🌐 Link seguro nos Destaques ou na Bio! ✅",
+      "🛍️ Garanta o seu pelo link oficial na descrição do meu perfil! 🚀"
     ];
 
     const hashtags = [
@@ -463,7 +476,7 @@ const App: React.FC = () => {
 
   const runAutomation = (selectedPlatform: 'tiktok' | 'shopee') => {
     navigator.clipboard.writeText(customCopy);
-    window.open(platformUrls[selectedPlatform], '_blank');
+    window.open(getPlatformUrl(selectedPlatform), '_blank');
     
     if (selectedProduct) {
       saveToSupabase(selectedProduct, selectedPlatform);
@@ -700,7 +713,6 @@ const App: React.FC = () => {
                     src={videoData.url} 
                     poster={videoData.cover}
                     autoPlay 
-                    muted 
                     loop 
                     playsInline
                     className="w-full h-full object-cover"
@@ -738,9 +750,19 @@ const App: React.FC = () => {
               </div>
 
               <div className="tech-card !p-6 space-y-6">
-                <div className="space-y-1">
+                <div className="space-y-3">
                   <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1">Copiar Estratégia</p>
-                  <h3 className="text-lg font-black italic uppercase leading-tight truncate">{selectedProduct.title}</h3>
+                  <div className="flex items-start justify-between gap-4">
+                    <h3 className="text-lg font-black italic uppercase leading-tight truncate">{selectedProduct.title}</h3>
+                    <motion.button 
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => { navigator.clipboard.writeText(selectedProduct.title); showToast("TÍTULO COPIADO!"); }}
+                      className="shrink-0 p-2 bg-slate-900 border border-white/10 rounded-xl text-accent"
+                    >
+                      <Copy size={16} />
+                    </motion.button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
