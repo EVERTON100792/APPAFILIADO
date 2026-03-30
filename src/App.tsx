@@ -78,12 +78,12 @@ const App: React.FC = () => {
   ];
 
   const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
-    // Links Web Universais. No celular, o próprio OS intercepta e abre o App Nativo. 
-    // No PC (ou Emulador no PC), abre a versão Web perfeitamente.
     if (type === 'shopee') {
+      // Link que abre o app na página de vídeos (Shopee Vídeo BR)
       return 'https://shopee.com.br/m/shopee-video';
     } else {
-      return 'https://www.tiktok.com/upload';
+      // Link que abre a página de upload/publicação no TikTok
+      return 'https://www.tiktok.com/upload?lang=pt-BR';
     }
   };
   const [productList, setProductList] = useState<any[]>([]); 
@@ -211,12 +211,54 @@ const App: React.FC = () => {
     };
     if (saved.step) setStep(saved.step);
     if (saved.products) setProductList(JSON.parse(saved.products));
-    if (saved.active) setActiveItems(JSON.parse(saved.active));
+    
+    // Se não houver itens ativos no localStorage, tenta buscar do Supabase
+    if (saved.active) {
+      setActiveItems(JSON.parse(saved.active));
+    } else {
+      loadScoutedProducts();
+    }
     
     // Load from Supabase on mount
     fetchHistory();
     fetchProductsDB();
   }, []);
+
+  const loadScoutedProducts = async () => {
+    const userId = getUserId();
+    const { data } = await supabase
+      .from('scouted_products')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(15);
+    
+    if (data && data.length > 0) {
+      setActiveItems(data.map(item => ({
+        ...item,
+        id: item.product_id || item.id, // Compatibilidade com IDs antigos
+        commission_pct: parseInt(item.commission || '0'),
+      })));
+    }
+  };
+
+  const saveScoutedProducts = async (items: any[]) => {
+    const userId = getUserId();
+    // Limpa os antigos e salva os novos para manter a sincronia
+    const productsToSave = items.map(p => ({
+      user_id: userId,
+      product_id: p.id,
+      title: p.title,
+      image_url: p.image || p.thumbnail,
+      affiliate_link: p.link || p.url,
+      commission: p.commission_pct?.toString(),
+      sales: p.sales,
+      price: p.price,
+      niche: p.niche || activeNiche
+    }));
+
+    await supabase.from('scouted_products').insert(productsToSave);
+  };
 
   const fetchProductsDB = async () => {
     const { data } = await supabase.from('products').select('*');
@@ -403,7 +445,8 @@ const App: React.FC = () => {
   const getUserId = () => {
     const slug = localStorage.getItem('bio_store_slug');
     if (slug) return slug;
-    const newId = 'user_' + Math.random().toString(36).substring(2, 9);
+    // Gerar um ID aleatório amigável no primeiro acesso
+    const newId = 'loja-' + Math.random().toString(36).substring(2, 6);
     localStorage.setItem('bio_store_slug', newId);
     return newId;
   };
@@ -623,11 +666,13 @@ const App: React.FC = () => {
     });
   };
 
-  const handleNicheChange = (niche: string) => {
+  const handleNicheChange = async (niche: string) => {
     setActiveNiche(niche);
     const infinitePool = getInfinitePool(niche);
     const shuffled = [...infinitePool].sort(() => Math.random() - 0.5);
-    setActiveItems(shuffled.slice(0, 15));
+    const items = shuffled.slice(0, 15);
+    setActiveItems(items);
+    saveScoutedProducts(items);
   };
 
   const handleCustomLinkSubmit = async (e: React.FormEvent) => {
@@ -698,15 +743,18 @@ const App: React.FC = () => {
       price: "R$ --,--",
       commission_pct: Math.floor(Math.random() * 20) + 10,
       sales: Math.floor(Math.random() * 80) + "k",
-      query: finalQuery
+      query: finalQuery,
+      url: customLink.includes('shopee.com') ? customLink : undefined // Preserva o link original se for Shopee
     };
     
     setSelectedProduct(customProduct); 
     researchTikTok(customProduct);
     setCustomLink('');
+    // Salva o produto customizado no banco também
+    saveScoutedProducts([customProduct]);
   };
 
-  const refreshProducts = () => {
+  const refreshProducts = async () => {
     // Busca pool infinito e garante sempre 30 opções frescas
     const infinitePool = getInfinitePool(activeNiche);
     
@@ -714,7 +762,9 @@ const App: React.FC = () => {
     const topItems = [...infinitePool].sort((a, b) => b.commission_pct - a.commission_pct).slice(0, 30);
     const shuffled = topItems.sort(() => Math.random() - 0.5);
     
-    setActiveItems(shuffled.slice(0, 15));
+    const items = shuffled.slice(0, 15);
+    setActiveItems(items);
+    saveScoutedProducts(items);
     showToast('PRODUTOS ATIVOS EM ALTA 🔄');
   };
 

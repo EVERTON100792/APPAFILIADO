@@ -241,24 +241,31 @@ export const BioManager: React.FC = () => {
           </div>
 
           {editingSlug ? (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="flex-1 relative">
-                <AtSign size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" />
+            <div className="space-y-4">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-emerald-500/5 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                <AtSign size={16} className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-500 z-10" />
                 <input
                   type="text"
                   value={slugInput}
                   onChange={e => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''))}
                   placeholder="ex: meus-achadinhos"
-                  className="w-full bg-[#0a0a0a] border-2 border-emerald-500/50 rounded-2xl pl-10 pr-4 py-4 text-white font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all text-sm"
+                  className="w-full bg-[#0a0a0a] border-2 border-emerald-500/30 rounded-2xl pl-12 pr-6 py-5 text-white font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all text-base sm:text-sm relative z-10"
                   onKeyDown={e => e.key === 'Enter' && handleSaveSlug()}
                   autoFocus
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={handleSaveSlug} className="flex-1 sm:flex-none px-8 py-4 bg-emerald-500 text-black rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
-                  SALVAR
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={handleSaveSlug} 
+                  className="flex-1 px-8 py-5 bg-emerald-500 text-black rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
+                >
+                  SALVAR ALTERAÇÕES
                 </button>
-                <button onClick={() => setEditingSlug(false)} className="px-5 py-4 border border-white/10 rounded-2xl text-slate-400 hover:text-white transition-colors">
+                <button 
+                  onClick={() => setEditingSlug(false)} 
+                  className="px-6 py-5 border border-white/10 rounded-2xl text-slate-400 hover:text-white transition-colors hover:bg-white/5 active:scale-[0.98]"
+                >
                   ✕
                 </button>
               </div>
