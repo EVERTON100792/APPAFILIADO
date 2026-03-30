@@ -105,6 +105,18 @@ const App: React.FC = () => {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [databaseProducts, setDatabaseProducts] = useState<any[]>([]);
   
+  // ── SISTEMA DE ÁUDIO VIRAL ──
+  const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
+  const [audioMixOption, setAudioMixOption] = useState<'original' | 'music' | 'mix'>('original');
+
+  const viralTracks = [
+    { id: 'phonk', name: 'Phonk Viral 🏎️', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
+    { id: 'bass', name: 'Bass Boosted 🔊', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
+    { id: 'happy', name: 'Happy Shopee 🛍️', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
+    { id: 'tension', name: 'Suspense Build 🕒', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3' },
+    { id: 'lofi', name: 'Lofi Chill ☕', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3' },
+  ];
+  
   // Bio Store Quick Add State
   const [bioTitle, setBioTitle] = useState('');
   const [bioImageUrl, setBioImageUrl] = useState('');
@@ -967,8 +979,9 @@ const App: React.FC = () => {
         trimEnd: trimEnd || undefined,
         transitionTimestamps,
         videoId: videoData.id,
-        // ✅ Usa o vídeo já carregado na UI — elimina CORS
         existingVideoEl: videoRef.current || undefined,
+        musicUrl: selectedMusic || undefined,
+        audioMixMode: audioMixOption
       };
       await processor.processAndDownload(videoData.url, options);
       showToast("VÍDEO EXPORTADO COM SUCESSO! 🚀");
@@ -1810,6 +1823,50 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="space-y-4">
+                  <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1 italic">
+                    Trilha Sonora Viral 🎵
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                    {viralTracks.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedMusic(selectedMusic === m.url ? null : m.url)}
+                        className={`shrink-0 px-4 py-3 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                          selectedMusic === m.url 
+                            ? 'bg-accent text-slate-950 border-accent shadow-lg shadow-accent/20' 
+                            : 'bg-white/5 border-white/5 text-slate-400 hover:border-white/10'
+                        }`}
+                      >
+                        {m.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedMusic && (
+                    <div className="grid grid-cols-3 gap-2">
+                       {[
+                         { id: 'original', label: 'Original', icon: '🗣️' },
+                         { id: 'music', label: 'Somente Música', icon: '🎧' },
+                         { id: 'mix', label: 'Mix Pro (Voz+Bit)', icon: '🎚️' },
+                       ].map(opt => (
+                         <button
+                           key={opt.id}
+                           onClick={() => setAudioMixOption(opt.id as any)}
+                           className={`flex flex-col items-center justify-center gap-1 p-3 rounded-2xl border transition-all ${
+                             audioMixOption === opt.id 
+                               ? 'bg-white/10 border-accent text-accent' 
+                               : 'bg-black/20 border-white/5 text-slate-500'
+                           }`}
+                         >
+                           <span className="text-sm">{opt.icon}</span>
+                           <span className="text-[8px] font-black uppercase text-center leading-tight">{opt.label}</span>
+                         </button>
+                       ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
                   <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1 italic">Legenda para Social Media</p>
                   <div className="relative group">
                     <textarea 
@@ -2030,12 +2087,12 @@ const App: React.FC = () => {
             initial={{ opacity: 0, y: 50, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 50, x: '-50%' }}
-            className="fixed bottom-32 left-1/2 -px-8 py-4 bg-accent text-slate-950 rounded-2xl min-w-[280px] shadow-3xl z-[200] border-2 border-white/20"
+            className="fixed bottom-36 left-1/2 px-8 py-5 bg-slate-900/90 backdrop-blur-2xl text-accent rounded-3xl min-w-[300px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[200] border border-accent/30"
           >
-             <div className="flex items-center gap-4 px-6 justify-center">
-                <div className="w-2 h-2 bg-slate-950 rounded-full animate-pulse" />
-                <span className="text-xs font-black italic uppercase tracking-widest">{toast}</span>
-                <div className="w-2 h-2 bg-slate-950 rounded-full animate-pulse" />
+             <div className="flex items-center gap-4 justify-center">
+                <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
+                <span className="text-[11px] font-black italic uppercase tracking-[0.2em]">{toast}</span>
+                <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
              </div>
           </motion.div>
         )}

@@ -8,8 +8,9 @@ export interface ProcessingOptions {
   trimStart?: number;
   trimEnd?: number;
   transitionTimestamps?: number[];
-  // Elemento de vídeo já carregado na UI (evita re-fetch e problemas de CORS)
   existingVideoEl?: HTMLVideoElement;
+  musicUrl?: string;
+  audioMixMode?: 'original' | 'music' | 'mix';
 }
 
 export class VideoProcessor {
@@ -152,19 +153,67 @@ export class VideoProcessor {
         if (!options.isMuted) {
           try {
             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const source = audioCtx.createMediaElementSource(video);
             const destination = audioCtx.createMediaStreamDestination();
-            source.connect(destination);
-            source.connect(audioCtx.destination); // Mantém o som saindo nos falantes
+            
+            const originalSource = audioCtx.createMediaElementSource(video);
+            const originalGain = audioCtx.createGain();
+            
+            // Lógica de mixagem baseada na opção do usuário
+            const mode = options.audioMixMode || 'original';
+            
+            // Configurar Volumes Base
+            if (mode === 'original') {
+              originalGain.gain.value = 1;
+            } else if (mode === 'mix') {
+              originalGain.gain.value = 0.4; // Voz original ao fundo
+            } else {
+              originalGain.gain.value = 0; // Silenciado
+            }
+
+            originalSource.connect(originalGain);
+            originalGain.connect(destination);
+            originalGain.connect(audioCtx.destination);
+
+            // Carregar e Mixar Música se houver
+            if (options.musicUrl && mode !== 'original') {
+               const musicAudio = new Audio();
+               musicAudio.crossOrigin = "anonymous";
+               musicAudio.src = options.musicUrl;
+               musicAudio.loop = true;
+               
+               const musicSource = audioCtx.createMediaElementSource(musicAudio);
+               const musicGain = audioCtx.createGain();
+               
+               if (mode === 'mix') {
+                 musicGain.gain.value = 0.8; // Música de fundo firme
+               } else {
+                 musicGain.gain.value = 1; // Somente música
+               }
+               
+               musicSource.connect(musicGain);
+               musicGain.connect(destination);
+               
+               // Sincronizar play da música
+               musicAudio.currentTime = Math.random() * 20; // Começa em ponto aleatório para 'tempero'
+               musicAudio.play().catch(e => console.warn("[MUSIC] Play falhou:", e));
+               
+               // Cleanup no stop
+               const oldOnStop = this.recorder?.onstop;
+               if (this.recorder) {
+                 this.recorder.onstop = (e) => {
+                   musicAudio.pause();
+                   if (oldOnStop) (oldOnStop as any)(e);
+                 };
+               }
+            }
             
             const audioTrack = destination.stream.getAudioTracks()[0];
             if (audioTrack) {
               this.stream.addTrack(audioTrack);
-              console.log("[AUDIO] Track de áudio injetada com sucesso via AudioContext");
+              console.log(`[AUDIO] Mix [${mode}] pronto.`);
             }
           } catch (audioErr) {
             console.warn("[AUDIO] Falha ao capturar via AudioContext (CORS provável):", audioErr);
-            // Fallback para captureStream legada
             try {
                const vs = (video as any).captureStream?.() || (video as any).mozCaptureStream?.();
                if (vs?.getAudioTracks().length > 0) this.stream.addTrack(vs.getAudioTracks()[0]);
