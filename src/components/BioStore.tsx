@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ExternalLink, ShoppingBag, Zap, ArrowUpRight, Sparkles } from 'lucide-react';
+import { ShoppingBag, Zap, ArrowUpRight, Sparkles } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 interface BioItem {
