@@ -316,11 +316,11 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] uppercase font-black tracking-widest text-emerald-500/70 ml-1">Título de Vendas</label>
+                <label className="text-[10px] uppercase font-black tracking-widest text-emerald-500/70 ml-1">Nome do Produto</label>
                 <div className="relative group">
-                  <Type size={14} className="absolute left-4 top-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
-                  <textarea required placeholder="Ex: Melhore sua iluminação com o Ring Light Pro de 2m! 🔥" value={title} onChange={e => setTitle(e.target.value)}
-                    className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-bold resize-none h-32 leading-relaxed" />
+                  <Type size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
+                  <input type="text" required placeholder="Ex: Ring Light Pro 2 metros + Tripé 🔥" value={title} onChange={e => setTitle(e.target.value)}
+                    className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-bold" />
                 </div>
               </div>
 
