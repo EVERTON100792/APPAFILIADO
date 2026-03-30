@@ -430,8 +430,7 @@ const App: React.FC = () => {
     return hooks[safeId % hooks.length];
   };
 
-  const getProductsByNiche = () => {
-  };
+
 
 
   const showToast = (msg: string) => {

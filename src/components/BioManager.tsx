@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
-  MousePointerClick, RefreshCcw, AtSign, Bell, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Sparkles, Lightbulb
+  MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
+  ShieldCheck, Lightbulb
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
