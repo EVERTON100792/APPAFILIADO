@@ -178,6 +178,15 @@ export class VideoProcessor {
             if (options.musicUrl && mode !== 'original') {
                const musicAudio = new Audio();
                musicAudio.crossOrigin = "anonymous";
+               
+               // Tenta carregar normalmente, se falhar usa proxy
+               musicAudio.onerror = () => {
+                 if (musicAudio.src === options.musicUrl) {
+                   console.warn("⚠️ Som bloqueado por CORS. Fallback via Proxy...");
+                   musicAudio.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(options.musicUrl!)}`;
+                 }
+               };
+               
                musicAudio.src = options.musicUrl;
                musicAudio.loop = true;
                

@@ -110,11 +110,11 @@ const App: React.FC = () => {
   const [audioMixOption, setAudioMixOption] = useState<'original' | 'music' | 'mix'>('original');
 
   const viralTracks = [
-    { id: 'phonk', name: 'Phonk Viral 🏎️', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
-    { id: 'bass', name: 'Bass Boosted 🔊', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
-    { id: 'happy', name: 'Happy Shopee 🛍️', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
-    { id: 'tension', name: 'Suspense Build 🕒', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3' },
-    { id: 'lofi', name: 'Lofi Chill ☕', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3' },
+    { id: 'phonk', name: 'Phonk Viral 🏎️', url: 'https://cdn.pixabay.com/download/audio/2022/11/22/audio_feb499f57d.mp3?filename=phonk-125039.mp3' },
+    { id: 'bass', name: 'Bass Boosted 🔊', url: 'https://cdn.pixabay.com/download/audio/2023/09/11/audio_141662243d.mp3?filename=bass-164744.mp3' },
+    { id: 'happy', name: 'Happy Shopee 🛍️', url: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=funny-ukulele-11721.mp3' },
+    { id: 'tension', name: 'Suspense Build 🕒', url: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_c36395dc6c.mp3?filename=suspense-7071.mp3' },
+    { id: 'lofi', name: 'Lofi Chill ☕', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1002e1c944.mp3?filename=lofi-study-112191.mp3' },
   ];
   
   // Bio Store Quick Add State
