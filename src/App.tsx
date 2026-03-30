@@ -4,7 +4,7 @@ import {
   Home, Database, Copy, RefreshCcw,
   Shield, Video, Zap, ArrowRight, Activity, Search, RotateCcw,
   Download, Terminal, LayoutGrid, Unlock, ArrowLeft, Volume2, VolumeX, Sparkles, Type,
-  Maximize2, MoveRight, X, Scissors
+  Maximize2, MoveRight, X, Scissors, ShoppingBag
 } from 'lucide-react';
 
 
@@ -14,8 +14,29 @@ import { supabase } from './supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VideoProcessor } from './utils/VideoProcessor';
 import type { ProcessingOptions } from './utils/VideoProcessor';
+import { BioStore } from './components/BioStore';
+import { BioManager } from './components/BioManager';
+// import { productDB } from './data/productDB';
+
+function getSmartSearchName(title: string): string {
+  if (!title) return '';
+  // Remover qualquer coisa após hífen ou vírgula
+  let cleanTitle = title.split('-')[0].split(',')[0];
+  // Remover caracteres especiais
+  cleanTitle = cleanTitle.replace(/[^\w\sÀ-ú]/gi, ' ');
+  // Dividir em palavras
+  let words = cleanTitle.split(/\s+/).filter(w => w.length > 0);
+  // Lista de palavras menos genéricas
+  const stopWords = new Set(['a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 'na', 'no', 'que']);
+  words = words.filter(w => !stopWords.has(w.toLowerCase()));
+  // Pegar até 3 palavras principais
+  return words.slice(0, 3).join(' ');
+}
 
 const App: React.FC = () => {
+  const bioUserId = new URLSearchParams(window.location.search).get('loja');
+  if (bioUserId) return <BioStore userId={bioUserId} />;
+
   const [step, setStep] = useState('home');
 
   const [activeFilter, setActiveFilter] = useState('none');
@@ -23,6 +44,7 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoLegend, setVideoLegend] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [usedLegends, setUsedLegends] = useState<Set<string>>(new Set());
 
   // Advanced Editing State
   const [trimStart, setTrimStart] = useState(0);
@@ -38,7 +60,7 @@ const App: React.FC = () => {
   // Sync isPlaying with video element
   useEffect(() => {
     if (videoRef.current) {
-      if (isPlaying) videoRef.current.play();
+      if (isPlaying) videoRef.current.play().catch(() => {});
       else videoRef.current.pause();
     }
   }, [isPlaying]);
@@ -56,18 +78,12 @@ const App: React.FC = () => {
   ];
 
   const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
+    // Links Web Universais. No celular, o próprio OS intercepta e abre o App Nativo. 
+    // No PC (ou Emulador no PC), abre a versão Web perfeitamente.
     if (type === 'shopee') {
-      // Intent para abrir diretamente a postagem no Shopee Video (Android/iOS)
-      return isMobile 
-        ? 'shopeevideo://publish' 
-        : 'https://shopee.com.br/m/shopee-video';
+      return 'https://shopee.com.br/m/shopee-video';
     } else {
-      // Intent para abrir o upload do TikTok diretamente na câmera/galeria
-      return isMobile 
-        ? 'snssdk1233://publish' 
-        : 'https://www.tiktok.com/upload';
+      return 'https://www.tiktok.com/upload';
     }
   };
   const [productList, setProductList] = useState<any[]>([]); 
@@ -80,11 +96,20 @@ const App: React.FC = () => {
   const [automationFinished, setAutomationFinished] = useState(false);
   const [boostMode, setBoostMode] = useState('none');
   const [activeNiche, setActiveNiche] = useState('Cozinha');
+  const [customLink, setCustomLink] = useState('');
   const [consoleLogs, setConsoleLogs] = useState<{msg: string, type?: string}[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [videoResults, setVideoResults] = useState<any[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [lastLegendIndex, setLastLegendIndex] = useState(0);
+  const [databaseProducts, setDatabaseProducts] = useState<any[]>([]);
+
+  // Sync volume with isMuted strictly
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+      videoRef.current.volume = isMuted ? 0 : 1;
+    }
+  }, [isMuted, videoData]);
 
   // Ultra-Premium Scanning HUD
   const ScanningHUD = ({ active }: { active: boolean }) => (
@@ -149,104 +174,20 @@ const App: React.FC = () => {
 
 
 
-  const niches = ['Cozinha', 'Tecnologia', 'Beleza', 'Decoração', 'Pet', 'Fitness', 'Gamer', 'Kids'];
-  const productDB: Record<string, any[]> = {
-    'Cozinha': [
-      { id: 101, title: "Espremedor de Alho Pro Stainless", price: "R$ 47,90", commission_pct: 25, sales: "45.2k", query: "garlic press viral tiktok" },
-      { id: 102, title: "Cortador de Legumes 12 em 1 Multifucional", price: "R$ 89,90", commission_pct: 18, sales: "22.8k", query: "vegetable slicer viral" },
-      { id: 103, title: "Organizador de Geladeira Empilhável", price: "R$ 34,50", commission_pct: 12, sales: "88.1k", query: "fridge organization viral" },
-      { id: 104, title: "Mini Processador Elétrico Turbo 300ml", price: "R$ 59,00", commission_pct: 35, sales: "124k", query: "mini food chopper viral" },
-      { id: 105, title: "Seladora a Vácuo Profissional KeepFresh", price: "R$ 115,00", commission_pct: 22, sales: "15.4k", query: "vacuum sealer viral" },
-      { id: 106, title: "Afiador de Facas Tungstênio 3 Estágios", price: "R$ 31,90", commission_pct: 40, sales: "56.7k", query: "knife sharpener viral" },
-      { id: 111, title: "Airfryer Silicone Liner Premium", price: "R$ 25,00", commission_pct: 30, sales: "89k", query: "airfryer silicone viral" },
-      { id: 112, title: "Escorredor Retrátil de Pia Silicon", price: "R$ 38,00", commission_pct: 25, sales: "45k", query: "sink strainer viral" },
-      { id: 113, title: "Dispenser de Sabão Automático Pro", price: "R$ 54,00", commission_pct: 35, sales: "12k", query: "soap dispenser viral" },
-      { id: 114, title: "Batedeira de Mão Portátil USB", price: "R$ 67,00", commission_pct: 20, sales: "34k", query: "hand mixer portable viral" }
-    ],
-    'Beleza': [
-      { id: 901, title: "Escova Alisadora 5 em 1 Turbo", price: "R$ 125,00", commission_pct: 20, sales: "56k", query: "hair straightener brush viral" },
-      { id: 902, title: "Mini Geladeira de SkinCare RGB", price: "R$ 245,00", commission_pct: 12, sales: "18k", query: "skincare fridge aesthetic" },
-      { id: 903, title: "Removedor de Cravos por Sucção Pro", price: "R$ 45,00", commission_pct: 40, sales: "89k", query: "blackhead remover viral" },
-      { id: 904, title: "Espelho Maquiagem LED Touch High", price: "R$ 89,00", commission_pct: 25, sales: "34k", query: "makeup mirror led viral" },
-      { id: 905, title: "Modelador de Cachos Automático Wireless", price: "R$ 167,00", commission_pct: 15, sales: "45k", query: "automatic hair curler viral" },
-      { id: 906, title: "Kit Pincéis Maquiagem Profissional 24pçs", price: "R$ 54,00", commission_pct: 30, sales: "12k", query: "makeup brushes set viral" },
-      { id: 907, title: "Massageador Facial Gua Sha Elétrico", price: "R$ 78,00", commission_pct: 35, sales: "23k", query: "electric gua sha viral" },
-      { id: 908, title: "Limpador de Pincéis de Maquiagem Auto", price: "R$ 42,00", commission_pct: 40, sales: "67k", query: "brush cleaner viral" },
-      { id: 909, title: "Caneta Depiladora Sobrancelha Precision", price: "R$ 29,00", commission_pct: 50, sales: "156k", query: "eyebrow trimmer viral" },
-      { id: 910, title: "Máscara LED Terapia Facial 7 Cores", price: "R$ 198,00", commission_pct: 12, sales: "9k", query: "led face mask beauty viral" }
-    ],
-    'Tecnologia': [
-      { id: 201, title: "Smartwatch Ultra 9 Series Retina", price: "R$ 199,00", commission_pct: 15, sales: "145k", query: "smartwatch ultra viral" },
-      { id: 202, title: "Fone Bluetooth ANC High definition", price: "R$ 145,00", commission_pct: 20, sales: "88k", query: "anc earbuds viral" },
-      { id: 203, title: "Teclado Mecânico Gamer RGB Silent", price: "R$ 250,00", commission_pct: 12, sales: "15k", query: "mechanical keyboard aesthetic" },
-      { id: 204, title: "Projetor Portátil Cinema 4K Android", price: "R$ 450,00", commission_pct: 10, sales: "28k", query: "portable projector viral" },
-      { id: 211, title: "Umbiificador de Mesa RGB Crystal", price: "R$ 85,00", commission_pct: 35, sales: "67k", query: "crystal humidifier viral" },
-      { id: 212, title: "Suporte MagSafe 3 em 1 Desktop", price: "R$ 125,00", commission_pct: 20, sales: "34k", query: "magsafe stand viral" },
-      { id: 213, title: "Hub USB-C 7 em 1 Aluminum Pro", price: "R$ 134,00", commission_pct: 18, sales: "12k", query: "usb-c hub viral" },
-      { id: 214, title: "Power Bank MagSafe 10000mAh", price: "R$ 156,00", commission_pct: 15, sales: "45k", query: "magsafe power bank viral" },
-      { id: 215, title: "Mouse Vertical Ergonômico Wireless", price: "R$ 89,00", commission_pct: 25, sales: "21k", query: "vertical mouse viral" },
-      { id: 216, title: "SSD Portátil 1TB High Speed NVMe", price: "R$ 389,00", commission_pct: 8, sales: "14k", query: "portable ssd viral" }
-    ],
-    'Decoração': [
-      { id: 301, title: "Luminária Sunset Rainbow Premium", price: "R$ 55,00", commission_pct: 35, sales: "250k", query: "sunset lamp aesthetic" },
-      { id: 302, title: "Umidificador de Ar Flame Vulcan", price: "R$ 95,00", commission_pct: 25, sales: "89k", query: "flame diffuser viral" },
-      { id: 303, title: "Projetor Astronauta Galáxia 2.0", price: "R$ 115,00", commission_pct: 20, sales: "310k", query: "astronaut projector viral" },
-      { id: 304, title: "Arandela LED Sem Fio Recarregável", price: "R$ 78,00", commission_pct: 30, sales: "45k", query: "cordless wall light viral" },
-      { id: 311, title: "Quadro de Areia Movediça 3D Relax", price: "R$ 89,00", commission_pct: 28, sales: "12k", query: "sand art viral" },
-      { id: 312, title: "Vaso Flutuante Levitação Magnética", price: "R$ 245,00", commission_pct: 15, sales: "8k", query: "floating pot viral" },
-      { id: 313, title: "Relógio Digital 3D LED Modern", price: "R$ 42,00", commission_pct: 40, sales: "156k", query: "3d led clock viral" },
-      { id: 314, title: "Fita LED RGBIC Smart App", price: "R$ 67,00", commission_pct: 35, sales: "89k", query: "smart led strip viral" },
-      { id: 315, title: "Espelho Irregular Orgânico Design", price: "R$ 134,00", commission_pct: 12, sales: "15k", query: "irregular mirror aesthetic" },
-      { id: 316, title: "Luminária de Livro Dobrável Madeira", price: "R$ 54,00", commission_pct: 30, sales: "34k", query: "book lamp viral" }
-    ],
-    'Pet': [
-      { id: 401, title: "Escova Vapor X-Steam para Gatos", price: "R$ 42,00", commission_pct: 45, sales: "215k", query: "steamy cat brush viral" },
-      { id: 402, title: "Bebedouro Fonte de Água Ultra Silent", price: "R$ 98,00", commission_pct: 20, sales: "56k", query: "pet fountain viral" },
-      { id: 403, title: "Brinquedo Peixe Robô Realista Pro", price: "R$ 29,00", commission_pct: 50, sales: "340k", query: "flopping fish pet viral" },
-      { id: 404, title: "Rede de Janela Cat-Sky Garden", price: "R$ 82,00", commission_pct: 25, sales: "42k", query: "cat window bed viral" },
-      { id: 411, title: "Lançador de Petiscos Interativo", price: "R$ 65,00", commission_pct: 30, sales: "28k", query: "treat launcher viral" },
-      { id: 412, title: "Cama Nuvem Calmante Anti-Stress", price: "R$ 115,00", commission_pct: 18, sales: "92k", query: "calming pet bed viral" },
-      { id: 413, title: "Coleira LED Recarregável Segurança", price: "R$ 34,00", commission_pct: 35, sales: "45k", query: "led pet collar viral" },
-      { id: 414, title: "Tapete Gelado Refrescante Verão", price: "R$ 56,00", commission_pct: 25, sales: "67k", query: "cooling mat pet viral" },
-      { id: 415, title: "Mochila Pet Panorâmica Astronauta", price: "R$ 145,00", commission_pct: 15, sales: "18k", query: "pet backpack viral" },
-      { id: 416, title: "Cortador de Unha Pet com LED", price: "R$ 39,00", commission_pct: 40, sales: "34k", query: "pet nail clipper led viral" }
-    ],
-    'Fitness': [
-      { id: 601, title: "Corda de Pular Inteligente Digital", price: "R$ 55,00", commission_pct: 35, sales: "42k", query: "smart jump rope viral" },
-      { id: 602, title: "Garrafa de Água Motivacional 2L", price: "R$ 38,00", commission_pct: 45, sales: "210k", query: "motivational water bottle viral" },
-      { id: 603, title: "Rolo Abdominal Rebote Automático", price: "R$ 125,00", commission_pct: 20, sales: "15k", query: "ab roller viral tiktok" },
-      { id: 604, title: "Kit de Faixas Elasticas Premium", price: "R$ 42,00", commission_pct: 40, sales: "88k", query: "resistance bands viral" },
-      { id: 605, title: "Massageador Muscular Phoenix A2", price: "R$ 198,00", commission_pct: 15, sales: "12k", query: "massage gun viral" },
-      { id: 606, title: "Balança Digital de Bioimpedância Smart", price: "R$ 78,00", commission_pct: 30, sales: "45k", query: "smart scale viral" },
-      { id: 607, title: "Halteres Ajustáveis 2-in-1 Pro", price: "R$ 245,00", commission_pct: 10, sales: "8k", query: "adjustable dumbbells viral" },
-      { id: 608, title: "Tapete de Yoga TPE Anti-derrapante", price: "R$ 67,00", commission_pct: 25, sales: "23k", query: "yoga mat aesthetic viral" },
-      { id: 609, title: "Hand Grip com Contador Digital", price: "R$ 25,00", commission_pct: 50, sales: "156k", query: "hand grip viral" },
-      { id: 610, title: "Mini Stepper com Extensores", price: "R$ 289,00", commission_pct: 12, sales: "5k", query: "portable stepper viral" }
-    ],
-    'Gamer': [
-      { id: 701, title: "Barra de Luz RGB Screen Hanging", price: "R$ 145,00", commission_pct: 15, sales: "34k", query: "monitor light bar viral" },
-      { id: 702, title: "Mouse Gamer Ultraleve Honeycomb", price: "R$ 89,00", commission_pct: 25, sales: "56k", query: "honeycomb mouse viral" },
-      { id: 703, title: "Suporte de Headset RGB Streamer", price: "R$ 65,00", commission_pct: 30, sales: "21k", query: "rgb headset stand aesthetic" },
-      { id: 704, title: "Kit Limpeza de Teclado 7 em 1", price: "R$ 25,00", commission_pct: 50, sales: "145k", query: "keyboard cleaning kit viral" },
-      { id: 705, title: "Microfone Condensador RGB Pro S", price: "R$ 178,00", commission_pct: 20, sales: "12k", query: "rgb microphone viral" },
-      { id: 706, title: "Mousepad Gamer RGB Extended 80x30", price: "R$ 54,00", commission_pct: 35, sales: "45k", query: "rgb mousepad viral" },
-      { id: 707, title: "Cadeira Gamer Ergonômica Pro Elite", price: "R$ 689,00", commission_pct: 8, sales: "15k", query: "gaming chair viral" },
-      { id: 708, title: "Alto-falantes Gamer RGB Stereo", price: "R$ 89,00", commission_pct: 25, sales: "23k", query: "pc speakers rgb viral" },
-      { id: 709, title: "Docking Station Nintendo Switch Plus", price: "R$ 115,00", commission_pct: 18, sales: "18k", query: "nintendo switch dock viral" },
-      { id: 710, title: "Anel de LED para Controle Gamepad", price: "R$ 34,00", commission_pct: 40, sales: "67k", query: "controller light viral" }
-    ],
-    'Kids': [
-      { id: 801, title: "Projetor de Desenho Infantil LED", price: "R$ 58,00", commission_pct: 35, sales: "67k", query: "drawing projector viral" },
-      { id: 802, title: "Tablet de Escrita LCD Mágico", price: "R$ 28,00", commission_pct: 45, sales: "310k", query: "lcd writing tablet kids viral" },
-      { id: 803, title: "Cacto Dançante Repetidor e Musical", price: "R$ 45,00", commission_pct: 40, sales: "540k", query: "dancing cactus viral" },
-      { id: 804, title: "Mini Câmera Digital Infantil HD", price: "R$ 115,00", commission_pct: 22, sales: "24k", query: "kids camera viral" },
-      { id: 805, title: "Lousa Mágica Colorida Premium", price: "R$ 34,00", commission_pct: 50, sales: "125k", query: "magic drawing board viral" },
-      { id: 806, title: "Blocos de Montar Magnéticos 64pçs", price: "R$ 89,00", commission_pct: 25, sales: "18k", query: "magnetic blocks viral" },
-      { id: 807, title: "Máquina de Bolhas Gigantes Bazooka", price: "R$ 67,00", commission_pct: 35, sales: "89k", query: "bubble gun viral" },
-      { id: 808, title: "Carro de Controle Remoto Acrobático", price: "R$ 124,00", commission_pct: 20, sales: "34k", query: "stunt car viral" },
-      { id: 809, title: "Kit Slime Faça Você Mesmo Jumbo", price: "R$ 42,00", commission_pct: 45, sales: "56k", query: "slime kit viral" },
-      { id: 810, title: "Relógio Inteligente Kids com GPS", price: "R$ 145,00", commission_pct: 18, sales: "12k", query: "kids smart watch viral" }
-    ]
+  const niches = [
+    { id: 'Todos', label: 'Todos', icon: '🔥' },
+    { id: 'Cozinha', label: 'Cozinha', icon: '🍳' },
+    { id: 'Tecnologia', label: 'Eletrônicos', icon: '⚡' },
+    { id: 'Beleza', label: 'Beleza', icon: '💄' },
+    { id: 'Decoração', label: 'Casa & Deco', icon: '🏠' },
+    { id: 'Pet', label: 'Pet', icon: '🐾' },
+    { id: 'Fitness', label: 'Fitness', icon: '💪' },
+    { id: 'Gamer', label: 'Gamer', icon: '🎮' },
+    { id: 'Kids', label: 'Kids', icon: '🧸' },
+  ];
+  const getInfinitePool = (niche: string) => {
+    const staticPool = niche === 'Todos' ? databaseProducts : databaseProducts.filter(p => p.niche === niche);
+    return staticPool.filter(p => !publicationHistory.some(ph => ph.product_id === p.id));
   };
 
   // Persistence
@@ -262,7 +203,13 @@ const App: React.FC = () => {
     
     // Load from Supabase on mount
     fetchHistory();
+    fetchProductsDB();
   }, []);
+
+  const fetchProductsDB = async () => {
+    const { data } = await supabase.from('products').select('*');
+    if (data) setDatabaseProducts(data);
+  };
 
   // Sync Supabase when entering history tab
   useEffect(() => {
@@ -317,6 +264,7 @@ const App: React.FC = () => {
     const timer = setInterval(() => {
       console.log('[AUTO-REFRESH] Sincronizando produtos e tendências...');
       setProductList(prev => prev.map(p => {
+        if (!p.price || typeof p.price !== 'string') return p;
         const currentPrice = parseFloat(p.price.replace('R$ ', '').replace(',', '.'));
         const newPrice = currentPrice + (Math.random() - 0.5) * 2;
         return {
@@ -359,103 +307,124 @@ const App: React.FC = () => {
   };
 
   const generateCreativeLegend = (product: any) => {
-    // 1. Hooks (Captadores de Atenção)
-    const generalHooks = [
-      "😱 SOCORRO! Esse achadinho da Shopee mudou minha vida!",
-      "Você não vai acreditar no que eu encontrei hoje... 🔥",
-      "PARE TUDO o que está fazendo e veja esse vídeo! 🛑",
-      "Gente, achei o item MAIS VIRAL da semana! 🏆",
-      "Aquilo que você não sabia que precisava até agora... 🤫",
-      "Diga adeus ao sofrimento com esse queridinho aqui! ✨",
-      "É por isso que eu amo a internet! Olha esse achado 🌈",
-      "POV: Você encontrou o item dos seus sonhos na Shopee ☁️",
-      "Minha melhor compra de 2025 até agora! Sem dúvidas! 🥇",
-      "O segredo que as blogueiras não te contam... 🤫🔥"
+    try {
+      const title = (product?.title || "Achadinho Viral") as string;
+      const sales = (product?.sales || "Algumas") as string;
+      const t = title.toLowerCase();
+      const hooks: string[] = [];
+
+      if (/alho|legumes|cortador|processador|espremedor|batedeira|airfryer|afiador|escorredor|dispenser/.test(t))
+        hooks.push(
+          `Cozinhar ficou muito mais facil com o ${title.split(' ').slice(0,3).join(' ')}! Achei na Shopee! 🍳`,
+          `O item que TODA cozinha precisa: ${title.split(' ').slice(0,3).join(' ')} que achei!`,
+          `Chega de sofrer na cozinha! Esse ${title.split(' ')[0]} resolveu tudo 🔪`);
+      if (/smart|bluetooth|usb|hub|ssd|power|wireless|rgb|fone|projetor|mouse|teclado/.test(t))
+        hooks.push(
+          `Tecnologia de ponta! O ${title.split(' ').slice(0,3).join(' ')} chegou! ⚡`,
+          `Setup top comeca com o ${title.split(' ').slice(0,3).join(' ')} da Shopee! 💻`,
+          `${sales} pessoas ja mudaram o setup com esse ${title.split(' ')[0]}! Tu ta perdendo! 🤖`);
+      if (/maquiagem|mascara|sobrancelha|skin|gua sha|removedor|espelho|modelador|escova/.test(t))
+        hooks.push(
+          `Minha pele nunca foi tao bonita desde que descobri o ${title.split(' ').slice(0,3).join(' ')}! ✨`,
+          `${sales} mulheres ja amam esse ${title.split(' ')[0]}... voce ainda nao tem? 💄`,
+          `O segredo de pele perfeita ta na Shopee! 🧖`);
+      if (/pet|gato|cachorro|peixe|fonte|petisco|coleira|tapete|mochila/.test(t))
+        hooks.push(
+          `Meu pet ficou MALUCO com o ${title.split(' ').slice(0,3).join(' ')}! Olha isso 🐾`,
+          `${sales} tutores ja compraram o ${title.split(' ')[0]}... seu pet merece! ❤️`,
+          `A melhor compra para seu filho de 4 patas: ${title.split(' ').slice(0,3).join(' ')} 🐶`);
+      if (/luminaria|umidificador|quadro|vaso|relogio|fita led|espelho decorativo/.test(t))
+        hooks.push(
+          `Transformei meu quarto com o ${title.split(' ').slice(0,3).join(' ')}! 🏠`,
+          `${sales} casas ja tem essa vibe linda... a sua ainda nao? 🌿`,
+          `Decoracao de revista: ${title.split(' ').slice(0,4).join(' ')} na Shopee! ✨`);
+      if (/corda|garrafa|rolo|faixas|massageador|balanca|halteres|tapete yoga|hand grip|stepper/.test(t))
+        hooks.push(
+          `Nao tem desculpa! O ${title.split(' ').slice(0,3).join(' ')} cabe na bolsa! 💪`,
+          `${sales} pessoas treinando em casa com o ${title.split(' ')[0]}... e voce? 🏃`,
+          `Fitness em casa nunca foi tao pratico: ${title.split(' ').slice(0,3).join(' ')}! 🔥`);
+      if (/infantil|cacto|lousa|blocos|bolhas|controle|slime|tablet lcd/.test(t))
+        hooks.push(
+          `Meu filho nao larga o ${title.split(' ').slice(0,3).join(' ')} desde que chegou! 🧸`,
+          `${sales} criancas ja amam esse ${title.split(' ')[0]}... o seu vai amar tambem! ⭐`,
+          `O presente perfeito: ${title.split(' ').slice(0,3).join(' ')} da Shopee! 🎮`);
+
+      hooks.push(
+        `ENCONTREI! O ${title.split(' ').slice(0,4).join(' ')} na Shopee! 😱`,
+        `POV: Voce acaba de encontrar o ${title.split(' ').slice(0,3).join(' ')} e a vida muda 🔥`,
+        `${sales} pessoas nao podem estar erradas! O ${title.split(' ')[0]} e INCRIVEL! 🏆`,
+        `Inacreditavel! O ${title.split(' ').slice(0,3).join(' ')} e real demais! ⚡`
+      );
+
+      const bodies = [
+        `O ${title} chegou para resolver aquele problema do dia a dia! Com ${sales} vendas, e um dos melhores custo-beneficio da Shopee agora. Frete rapido e chega perfeito.`,
+        `Serio, ${sales} pessoas ja compraram o ${title} e aprovaram! É impossivel nao indicar. Testei e fiquei impressionada com a qualidade!`,
+        `Olha que achado! O ${title} ta fazendo sucesso: ${sales} vendas falam por si. A qualidade superou minhas expectativas e chegou mais rapido do que esperava!`,
+        `Se voce ainda nao conhece o ${title}, precisa ver isso! Sao ${sales} compradores satisfeitos por um motivo. Vem com tudo, vale a pena!`,
+      ];
+
+      const nicheHashtags: Record<string, string> = {
+        'Cozinha':    '#cozinha #dicasdecozinha #organizacaodacasa #cozinheira #utensilioscozinha',
+        'Tecnologia': '#gadgets #techbrasil #setupgamer #tecnologiabarata #gadgetsviral',
+        'Beleza':     '#skincare #makeupbrasil #belezanatural #rotinadebeleza #dicasdebeleza',
+        'Pet':        '#petlovers #cachorros #gatos #petshopbr #animaisfofos',
+        'Decoração':  '#decorcasa #homedecor #casaorganizada #decoracaobr #decoracaomoderna',
+        'Fitness':    '#fitness #gym #emagrecimento #saudeebemestar #exerciciosemcasa',
+        'Gamer':      '#gamer #setupgamer #gaming #gamesbrasil #rgbsetup',
+        'Kids':       '#criancas #brinquedos #maesdebrasil #maternidade #kids',
+        'Todos':      '#achadinhos #shopee #viral #achadosshopee #ofertasdodia',
+      };
+      const hashtags = (nicheHashtags[activeNiche] || nicheHashtags['Todos']) + ' #shopeebrasil';
+
+      const ctas = [
+        '🛒 LINK COM DESCONTO NA MINHA BIO! Corre! 🚀',
+        '✅ Link na Bio com frete gratis hoje! Nao perde! 📦',
+        '👇 Garanta o seu pelo link da Bio agora! 🛍️',
+        '⚠️ Link oficial na bio do perfil! Vale muito a pena! ⭐',
+      ];
+
+      const safeId = product && typeof product.id === 'number' ? product.id : 1;
+      const seed = safeId * 31 + usedLegends.size * 7 + Math.floor(Date.now() / 5000);
+      const hook = hooks[seed % hooks.length];
+      const body = bodies[(seed + 3) % bodies.length];
+      const cta  = ctas[(seed + 7) % ctas.length];
+
+      const structures = [
+        `${hook}\n\n${body}\n\n${cta}\n\n${hashtags}`,
+        `${hook}\n\n🔥 ${title}\n${body}\n\n🛍️ COMPRE: Link na Bio!\n\n${hashtags}`,
+        `Voce achou isso?! 😍\n\n${body}\n\n${hook}\n\n👉 LINK NA BIO\n\n${hashtags}`,
+        `Parece mentira mas e real! 😱\n\n${body}\n\n${cta}\n\n${hashtags}`,
+      ];
+
+      let legend = structures[(seed + 11) % structures.length];
+
+      if (usedLegends.has(legend)) {
+        legend = `${hook} (ACHADO!)\n\n${body}\n\n${cta}\n\n${hashtags}`;
+      }
+      setUsedLegends(prev => new Set([...prev, legend]));
+      return legend;
+    } catch (error) {
+      return "Compre o seu na Shopee pelo link da bio! ✅";
+    }
+  };
+
+  const generateOverlayLegend = (product: any) => {
+    const title = (product?.title || "Este Produto").split(' ').slice(0,4).join(' ').toUpperCase();
+    const hooks = [
+      `🚨 ACHEI BEM MAIS BARATO!\n👉 LINK NA BIO`,
+      `🔥 O SEGREDO QUE NINGUÉM CONTA: ${title}\n👉 LINK NA BIO`,
+      `😱 PARE DE GASTAR ATOA! OLHA ISSO\n🔗 LINK NA MINHA BIO`,
+      `😍 TESTEI O FAMOSO ${title} DA SHOPEE!\n👉 LINK NA BIO`,
+      `🛍️ COMPREI O ${title} E OLHA NO QUE DEU!\n🔗 LINK NA BIO`,
+      `✨ O ITEM QUE DEIXOU A INTERNET MALUCA!\n👉 LINK NA BIO`,
+      `🏆 ACHADINHO VIP COM DESCONTO!\n🔗 LINK DO ITEM NA BIO`,
+      `💰 ECONOMIZEI MUITO COMPRANDO ESSE ${title}!\n👉 LINK NA BIO`
     ];
+    const safeId = product && typeof product.id === 'number' ? product.id : Math.floor(Math.random() * 100);
+    return hooks[safeId % hooks.length];
+  };
 
-    const nicheHooks: Record<string, string[]> = {
-      'Cozinha': [
-        "Sua cozinha NUNCA MAIS será a mesma depois disso! 🍳",
-        "Chega de sofrer na hora de cozinhar! Olha essa solução 🔪",
-        "O item que toda dona de casa precisa ter (e eu não vivo sem) 🏠",
-        "Cozinhar virou terapia com esse achadinho aqui! 🥗"
-      ],
-      'Tecnologia': [
-        "O gadget mais insano que já passou por aqui! ⚡",
-        "Seu setup vai pro próximo nível com esse item! 💻",
-        "Tecnologia de ponta por um preço de banana... 🤯",
-        "O futuro chegou na minha casa e eu posso provar! 🤖"
-      ],
-      'Beleza': [
-        "Minha rotina de skin care mudou 100% com isso! ✨",
-        "O segredo para uma pele de porcelana... 🧖‍♀️",
-        "Gastei pouco e pareço que saí do salão! 💄",
-        "Todo mundo me pergunta o que eu estou usando... 🤫"
-      ],
-      'Pet': [
-        "Meu pet ficou MALUCO com esse presente! 🐾",
-        "A melhor coisa que já comprei para o meu filho de 4 patas 🐶",
-        "Seu pet merece esse conforto aqui! 🐱",
-        "Diversão garantida e muita fofura com esse achado! ❤️"
-      ],
-      'Decoração': [
-        "Transformei meu quarto gastando quase nada! 🛌",
-        "Dicas de decoração que parecem de revista... 🏡",
-        "Sua casa muito mais aconchegante com esse detalhe ✨",
-        "O item que faltava para o seu cantinho ficar perfeito 🌿"
-      ]
-    };
-
-    const valueProps = [
-      `O ${product.title} é simplesmente PERFEITO para quem busca praticidade e estilo no dia a dia. Eu estou viciada!`,
-      `Sério, a qualidade disso superou todas as minhas expectativas. É aquele tipo de item que todo mundo pergunta onde eu comprei.`,
-      `Incrível como algo tão simples pode facilitar tanto a nossa rotina. Se eu soubesse disso antes, teria economizado muito tempo!`,
-      `O queridinho do momento chegou para ficar. Útil, moderno e com um custo-benefício que você não vai acreditar.`,
-      `Cada detalhe desse item foi pensado para facilitar sua vida. É o investimento que você merece para sua casa.`,
-      `Já são mais de ${product.sales} pessoas usando e amando! Você não pode ficar de fora dessa tendência.`,
-      `Economize tempo e esforço com essa tecnologia que é pura inovação. O custo-benefício é de outro planeta! 🚀`,
-      `Sabe aquele problema que te irritava todo dia? Esse produto resolve num piscar de olhos. Fantástico! ⚡`
-    ];
-
-    const ctas = [
-      "🛒 LINK OFICIAL COM DESCONTO NA MINHA BIO! Corre que o estoque voa! 🚀",
-      "✨ O segredo está revelado! Link na Bio esperando por você! ✅",
-      "👇 Clique no link da Bio e garanta o seu com desconto AGORA! 🛍️",
-      "🔥 Link na Bio + Frete Grátis liberado hoje! Não perde! 📦",
-      "⚠️ OPORTUNIDADE ÚNICA: Link oficial disponível no perfil! 🏃‍♂️",
-      "🛍️ Garanta o seu pelo link oficial na descrição do meu perfil! 🚀"
-    ];
-
-    const hashtags = [
-      "#shopee #achadinhos #viral #achadosshopee #utilidades #casa #decoracao #promo",
-      "#achadinhosshopee #shopeebrasil #comprinhas #dicas #casaorganizada #viralvideo",
-      "#shopeehaul #organização #achados #utilidadesdomesticas #promocao #brasil",
-      "#shopeecheck #utilidadesdecasa #dicadodia #compras #acheinashopee #viralreels",
-      "#lifehacks #shopeebr #ofertas #descontos #shopeefinds #tiktokmademebuyit"
-    ];
-
-    const selectedNicheHooks = nicheHooks[activeNiche] || [];
-    const allHooks = [...generalHooks, ...selectedNicheHooks];
-    
-    // Improved Randomization to prevent repetition
-    const getTimeSeed = () => Math.floor(Date.now() / 1000);
-    const seed = (product.id || 0) + lastLegendIndex + getTimeSeed();
-    
-    const hook = allHooks[seed % allHooks.length];
-    const body = valueProps[(seed + 3) % valueProps.length];
-    const cta = ctas[(seed + 7) % ctas.length];
-    const tags = hashtags[(seed + 11) % hashtags.length];
-
-    setLastLegendIndex(prev => prev + 1);
-
-    const structures = [
-      `${hook}\n\n${body}\n\n${cta}\n\n${tags}`,
-      `${hook}\n\n🔥 DESTAQUE: ${product.title}\n${body}\n\n🛍️ COMPRE AQUI: Link na Bio!\n\n${tags}`,
-      `O QUE VOCÊ ACHOU DISSO? 😍\n\n${body}\n\n${hook}\n\n👉 LINK NA BIO\n\n${tags}`,
-      `Parece mentira, mas é real! 😱\n\n${body}\n\n${cta}\n\n${tags}`
-    ];
-
-    return structures[seed % structures.length];
+  const getProductsByNiche = () => {
   };
 
 
@@ -479,9 +448,11 @@ const App: React.FC = () => {
     setIsScanning(true);
     setStep('scouting');
     setTimeout(() => {
-      const allProducts = Object.values(productDB).flat();
-      setProductList(allProducts);
-      const sortedNiche = sortByCommission(productDB[activeNiche]);
+      setProductList(databaseProducts);
+      
+      const infinitePool = getInfinitePool(activeNiche);
+      const sortedNiche = sortByCommission(infinitePool);
+      
       setActiveItems(sortedNiche.slice(0, 20)); 
       setStep('list');
       setIsScanning(false);
@@ -495,32 +466,123 @@ const App: React.FC = () => {
 
 
   const refillProductList = (niche: string) => {
-    const pool = productDB[niche] || [];
-    // Filtra produtos que já estão na lista ativa ou no histórico
-    const available = pool.filter(p => 
-      !activeItems.some(ai => ai.id === p.id) && 
-      !publicationHistory.some(ph => ph.product_id === p.id)
-    );
-    
-    // Se acabarem os novos, pega do banco geral mas evita os Ativos
-    const finalPool = available.length > 0 ? available : pool.filter(p => !activeItems.some(ai => ai.id === p.id));
-    
-    if (finalPool.length > 0) {
-      const nextItem = finalPool[Math.floor(Math.random() * finalPool.length)];
-      setActiveItems(prev => {
-        const filtered = prev.filter(p => p.id !== selectedProduct?.id);
-        return [...filtered, nextItem].slice(0, 15);
-      });
-    }
+    setActiveItems(prev => {
+      // Manter na tela APENAS itens que AINDA NÃO FORAM POSTADOS
+      const currentUnpublished = prev.filter(p => 
+        !publicationHistory.some(ph => ph.product_id === p.id) && 
+        p.id !== selectedProduct?.id
+      );
+
+      // Precisamos completar para ter 15 ativos na tela. 
+      const needed = 15 - currentUnpublished.length;
+      
+      if (needed <= 0) return currentUnpublished;
+
+      // Obtém produtos do pool infinito que não estão sendo mostrados
+      let availableSource = getInfinitePool(niche);
+      let available = availableSource.filter(p => !currentUnpublished.some(ai => ai.id === p.id));
+      
+      // Filtra e randomiza os top items
+      const topAvailable = [...available].sort((a, b) => b.commission_pct - a.commission_pct).slice(0, Math.max(needed * 2, 20));
+      const shuffled = topAvailable.sort(() => Math.random() - 0.5);
+      
+      return [...currentUnpublished, ...shuffled.slice(0, needed)];
+    });
   };
 
   const handleNicheChange = (niche: string) => {
     setActiveNiche(niche);
-    const pool = productDB[niche] || [];
-    const filtered = pool.filter(p => !publicationHistory.some(ph => ph.product_id === p.id));
-    const finalPool = filtered.length >= 10 ? filtered : pool;
-    const shuffled = [...finalPool].sort(() => Math.random() - 0.5);
+    const infinitePool = getInfinitePool(niche);
+    const shuffled = [...infinitePool].sort(() => Math.random() - 0.5);
     setActiveItems(shuffled.slice(0, 15));
+  };
+
+  const handleCustomLinkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customLink) return;
+
+    setIsScanning(true);
+    let extractedName = customLink.trim();
+    let stringParseSuccess = false;
+
+    // 1. Tenta tirar o nome da própria string se for um link completo da Shopee 
+    // (100% à prova de falhas de anti-bot)
+    try {
+      if (extractedName.includes('shopee.com')) {
+        const url = new URL(extractedName.startsWith('http') ? extractedName : `https://${extractedName}`);
+        let pathName = url.pathname.split('/')[1];
+        // Shopee BR product URLs always have "-i." before the ID. If it doesn't, it's a shortlink/hash.
+        if (pathName && pathName.includes('-i.')) {
+           pathName = pathName.replace(/-i\.\d+\.\d+.*$/, '');
+           const candidateName = decodeURIComponent(pathName.replace(/-/g, ' '));
+           if (candidateName.length >= 3 && candidateName.toLowerCase() !== 'buyer') {
+              extractedName = candidateName;
+              stringParseSuccess = true;
+           }
+        }
+      }
+    } catch (e) { }
+
+    // 2. Se for link curto (s.shopee.com.br) apelamos pro Proxy Local 
+    if (!stringParseSuccess && extractedName.includes('shopee.com.br')) {
+      try {
+        const targetUrl = extractedName.startsWith('http') ? extractedName : `https://${extractedName}`;
+        
+        // Usa a Edge Function recém-criada no Supabase (Proxy em Nuvem Vitalício)
+        const { data, error } = await supabase.functions.invoke('shopee-proxy', {
+          body: { url: targetUrl }
+        });
+
+        if (error) {
+          throw error;
+        }
+        
+        // Edge function agora retorna o JSON exato com o title desmascarado do redirecionamento
+        if (data && data.title && data.title.length > 3) {
+           extractedName = data.title;
+        }
+
+      } catch (err) {
+        console.log("Falha no Proxy em Nuvem", err);
+      }
+    }
+
+    if (extractedName.length > 90) extractedName = extractedName.substring(0, 90);
+    
+    // Se depois de tudo isso ainda é uma URL da Shopee completa, falhamos em ler o título real
+    if (extractedName.includes('shopee.com') || extractedName.includes('shp.ee')) {
+       showToast("Link não resolvido. Buscando por termo genérico.");
+       extractedName = "Achadinho Shopee Brasil";
+    }
+
+    // Tenta arrancar o core da pesquisa
+    const searchWords = getSmartSearchName(extractedName);
+    const finalQuery = searchWords.length > 3 ? searchWords : extractedName;
+
+    const customProduct = {
+      id: "custom_" + Date.now(),
+      title: extractedName.toUpperCase(),
+      price: "R$ --,--",
+      commission_pct: Math.floor(Math.random() * 20) + 10,
+      sales: Math.floor(Math.random() * 80) + "k",
+      query: finalQuery
+    };
+    
+    setSelectedProduct(customProduct); 
+    researchTikTok(customProduct);
+    setCustomLink('');
+  };
+
+  const refreshProducts = () => {
+    // Busca pool infinito e garante sempre 30 opções frescas
+    const infinitePool = getInfinitePool(activeNiche);
+    
+    // Traz os que tem maior comissão primeiro para engajamento imediato, misturando levemente
+    const topItems = [...infinitePool].sort((a, b) => b.commission_pct - a.commission_pct).slice(0, 30);
+    const shuffled = topItems.sort(() => Math.random() - 0.5);
+    
+    setActiveItems(shuffled.slice(0, 15));
+    showToast('PRODUTOS ATIVOS EM ALTA 🔄');
   };
 
 
@@ -545,60 +607,123 @@ const App: React.FC = () => {
     }
   };
 
+  const addToBio = async (p: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const { error } = await supabase.from('bio_store').insert({
+      user_id: 'default_user',
+      title: p.title,
+      image_url: p.image || p.thumbnail || 'https://placehold.co/200x200/0a0a0a/ff6b6b?text=🛒',
+      affiliate_link: p.link || p.url || `https://shopee.com.br/search?keyword=${encodeURIComponent(p.title)}`
+    });
+    if (!error) {
+      showToast('✅ Produto publicado na sua Bio!');
+    } else {
+      showToast('❌ Erro ao publicar na Bio');
+    }
+  };
+
   const researchTikTok = async (product: any) => {
     resetVideoEditor();
     setIsScanning(true);
     try {
-      // Improved Query for Viral PT-BR content
-      const query = encodeURIComponent(`${product.title} shopee brasil achadinhos viral`);
-      const response = await fetch(`https://www.tikwm.com/api/feed/search?keywords=${query}&count=15&cursor=0`);
-      const data = await response.json();
-      
-      if (data.data?.videos && data.data.videos.length > 0) {
-        // Filter and sort by engagement (if available)
-        const sortedVideos = data.data.videos
-          .filter((v: any) => v.play || v.wmplay)
-          .map((v: any) => ({
+      // ── ETAPA 1: Extrair o núcleo semântico do produto (máximo 3 palavras PT-BR)
+      let baseTerm = product.query || product.title || '';
+      baseTerm = baseTerm
+        .replace(/[^a-zA-ZÀ-ÿ0-9 ]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      // Filtrar stopwords comuns (evita poluição na query)
+      const stopWords = new Set(['de','do','da','dos','das','para','com','em','no','na','um','uma','os','as','o','a','e','kit','conjunto','conjunto','pacote','unidade','und','pcs','peças','peça']);
+      const coreWords = baseTerm.split(' ').filter((w: string) => w.length > 2 && !stopWords.has(w.toLowerCase())).slice(0, 3);
+      const coreQuery = coreWords.join(' ');
+
+      // ── ETAPA 2: Montar 3 estratégias progressivas de busca PT-BR
+      const strategies = [
+        // Estratégia A: Query com termos BR explícitos + parâmetros de região
+        { query: `${coreQuery} shopee brasil`, extraParams: '&region=BR&language=pt-BR' },
+        // Estratégia B: Unboxing em português puro, sem "shopee" para ampliar resultados PT-BR
+        { query: `unboxing ${coreQuery} brasil`, extraParams: '&region=BR' },
+        // Estratégia C: Nome do produto direto + "achei no shopee" (termo viral BR)
+        { query: `${coreQuery} achei no shopee`, extraParams: '&region=BR' },
+      ];
+
+      // Regexes para detectar tokens de PT-BR e eliminar vídeos claramente em inglês
+      const ptBrPattern = /[àáâãéêíóôõúüçÀÁÂÃÉÊÍÓÔÕÚÜÇ]|shopee|brasil|achei|comprei|chegou|resenha|unbox|barato|produto/i;
+      const englishPattern = /\b(the|this|my|is|are|was|were|that|with|from|have|you|for|and|but)\b/i;
+
+      let allVideos: any[] = [];
+
+      for (const strategy of strategies) {
+        const q = encodeURIComponent(strategy.query);
+        try {
+          const resp = await fetch(
+            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0${strategy.extraParams}`,
+            { signal: AbortSignal.timeout(8000) }
+          );
+          const json = await resp.json();
+          if (json.data?.videos?.length > 0) {
+            allVideos = [...allVideos, ...json.data.videos];
+          }
+        } catch {/* falha silenciosa na estratégia */}
+        
+        if (allVideos.length >= 10) break; // Chega de buscar se já temos material suficiente
+      }
+
+      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
+
+      // ── ETAPA 3: Filtrar e ranquear por relevância PT-BR e engajamento
+      const scored = allVideos
+        .filter((v: any) => v.play || v.wmplay) // só vídeos com URL real
+        .map((v: any) => {
+          const text = `${v.title || ''} ${v.author?.nickname || ''}`;
+          const ptScore  = (ptBrPattern.test(text) ? 3 : 0);    // bônus por ser PT-BR
+          const enPenalty = (englishPattern.test(text) ? -5 : 0); // penaliza inglês
+          const engageScore = Math.log1p(v.digg_count || 0);      // likes (log para não dominar)
+          // Bônus relevância produto: verifica se o título do vídeo menciona palavras-chave do produto
+          const productWords = coreWords.filter((w: string) => w.length > 3);
+          const productMatch = productWords.some((w: string) => text.toLowerCase().includes(w.toLowerCase()));
+          const productBonus = productMatch ? 5 : 0;
+          return {
             id: v.video_id,
             url: v.play || v.wmplay,
             cover: v.cover,
             title: v.title,
-            author: v.author?.nickname || 'Viral Creator',
-            stats: {
-              views: v.play_count || 0,
-              likes: v.digg_count || 0
-            }
-          }))
-          .sort((a: any, b: any) => b.stats.likes - a.stats.likes);
+            author: v.author?.nickname || 'Creator BR',
+            stats: { views: v.play_count || 0, likes: v.digg_count || 0 },
+            _score: ptScore + enPenalty + engageScore + productBonus
+          };
+        })
+        .filter((v: any) => v._score > -3) // elimina vídeos com forte sinal de inglês
+        .sort((a: any, b: any) => b._score - a._score); // Melhor score primeiro
 
-        if (sortedVideos.length > 0) {
-          setVideoResults(sortedVideos);
-          setCurrentVideoIndex(0);
-          setVideoData({ 
-            cover: sortedVideos[0].cover, 
-            url: sortedVideos[0].url,
-            id: sortedVideos[0].id 
-          });
-          
-          const viralLegend = generateCreativeLegend(product);
-          setCustomCopy(viralLegend); 
-          
-          showToast("VIRAL PT-BR LOCALIZADO! 🔥");
+      if (scored.length === 0) throw new Error('Nenhum vídeo PT-BR localizado');
 
-          setTimeout(() => {
-            setStep('treating');
-            setTimeout(() => {
-              setStep('ready');
-              showToast("VÍDEO PRONTO PARA POSTAR! 🚀");
-            }, 3000);
-          }, 1500);
+      // Remover duplicatas por video_id
+      const seen = new Set<string>();
+      const unique = scored.filter((v: any) => {
+        if (seen.has(v.id)) return false;
+        seen.add(v.id);
+        return true;
+      });
 
-        } else {
-          throw new Error("Nenhum vídeo compatível encontrado");
-        }
-      } else {
-        throw new Error("Conteúdo viral não localizado");
-      }
+      setVideoResults(unique);
+      setCurrentVideoIndex(0);
+      setVideoData({ cover: unique[0].cover, url: unique[0].url, id: unique[0].id });
+
+      const viralLegend = generateCreativeLegend(product);
+      setCustomCopy(viralLegend);
+      setVideoLegend(generateOverlayLegend(product));
+
+      showToast(`🇧🇷 ${unique.length} VÍDEOS BR LOCALIZADOS! 🔥`);
+
+      setTimeout(() => {
+        setStep('treating');
+        setTimeout(() => {
+          setStep('ready');
+          showToast("VÍDEO PRONTO PARA POSTAR! 🚀");
+        }, 3000);
+      }, 1500);
+
     } catch (error) {
       console.error("TikTok Research Error:", error);
       showToast("MOTOR DE BUSCA TEMPORARIAMENTE OFFLINE");
@@ -607,6 +732,7 @@ const App: React.FC = () => {
       setIsScanning(false);
     }
   };
+
 
   const swapVideo = () => {
     resetVideoEditor();
@@ -623,6 +749,8 @@ const App: React.FC = () => {
       if (selectedProduct) {
         const newLegend = generateCreativeLegend(selectedProduct);
         setCustomCopy(newLegend); 
+        // Recupera legenda visual no SWAP de vídeo
+        setVideoLegend(generateOverlayLegend(selectedProduct));
       }
 
       showToast("VÍDEO ALTERNATIVO CARREGADO");
@@ -633,29 +761,27 @@ const App: React.FC = () => {
 
   const handleDownload = async () => {
     if (!videoData?.url) return;
-    
     setIsProcessing(true);
-    showToast("REPROCESSANDO MÍDIA COM EFEITOS... ⚡");
-    
+    showToast("RENDERIZANDO VÍDEO COM EFEITOS... ⚡");
     try {
       const processor = new VideoProcessor();
       const options: ProcessingOptions = {
         filter: activeFilter,
         legend: videoLegend,
-        isMuted: isMuted,
+        isMuted: false, // Força o áudio na exportação, ignorando o mute da UI
         transition: activeTransition as any,
         trimStart,
         trimEnd: trimEnd || undefined,
         transitionTimestamps,
-        videoId: videoData.id
+        videoId: videoData.id,
+        // ✅ Usa o vídeo já carregado na UI — elimina CORS
+        existingVideoEl: videoRef.current || undefined,
       };
-      
       await processor.processAndDownload(videoData.url, options);
       showToast("VÍDEO EXPORTADO COM SUCESSO! 🚀");
     } catch (error: any) {
       console.error("Video Processing Error:", error);
-      showToast("ERRO AO PROCESSAR VÍDEO. TENTANDO DOWNLOAD DIRETO...");
-      window.open(videoData.url, '_blank');
+      showToast("ERRO AO RENDERIZAR — TENTE NOVAMENTE 📲");
     } finally {
       setIsProcessing(false);
     }
@@ -870,6 +996,17 @@ const App: React.FC = () => {
 
       <main className="content-area relative z-0">
         <AnimatePresence mode="wait">
+          {step === 'bio' && (
+            <motion.div 
+              key="bio" 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              className="h-[calc(100vh-10rem)] overflow-y-auto p-4 md:p-8"
+            >
+              <BioManager />
+            </motion.div>
+          )}
           {step === 'home' && (
             <motion.div 
               key="home" 
@@ -937,41 +1074,82 @@ const App: React.FC = () => {
               key="list" 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-6 space-y-6 pb-32"
+              className="p-6 space-y-5 pb-32"
             >
-              <div className="flex justify-between items-end mb-2">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-black uppercase leading-none italic">Garimpo <span className="text-accent">Elite</span></h2>
-                  <p className="text-[9px] text-dim font-black uppercase tracking-widest">Tendências de Alta Conversão</p>
+              {/* Pesquisa por Link da Shopee */}
+              <form onSubmit={handleCustomLinkSubmit} className="flex gap-2">
+                <input 
+                  type="text"
+                  value={customLink}
+                  onChange={(e) => setCustomLink(e.target.value)}
+                  placeholder="Cole o link ou o nome de um produto..."
+                  className="flex-1 bg-slate-900/80 border border-white/10 rounded-2xl px-4 py-3 text-[12px] text-white focus:outline-none focus:border-accent shadow-inner placeholder:text-white/30"
+                />
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  type="submit"
+                  className="bg-accent text-slate-950 px-5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 flex items-center justify-center gap-2 hover:bg-accent/80 transition-colors"
+                >
+                  <Search size={14} /> BUSCAR
+                </motion.button>
+              </form>
+
+              {/* Header */}
+              <div className="flex justify-between items-center">
+                <div className="space-y-0.5">
+                  <h2 className="text-2xl font-black uppercase leading-none italic">Packs <span className="text-accent">Shopee</span></h2>
+                  <p className="text-[9px] text-dim font-black uppercase tracking-widest">Fotos e vídeos gerados pela SquadOS™</p>
                 </div>
-                <div className="bg-accent/10 border border-accent/30 text-accent text-[10px] px-3 py-1 font-black uppercase rounded-lg">
+                <div className="bg-accent/10 border border-accent/30 text-accent text-[10px] px-3 py-1.5 font-black uppercase rounded-lg">
                    {activeItems.length} ATIVOS
                 </div>
               </div>
-              
-              <div className="niche-selector no-scrollbar">
+
+              {/* Botão Atualizar Produtos */}
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={refreshProducts}
+                className="w-full h-12 bg-accent/10 border border-accent/30 rounded-2xl flex items-center justify-center gap-3 text-accent text-[11px] font-black uppercase tracking-widest hover:bg-accent/20 transition-all"
+              >
+                <RefreshCcw size={15} />
+                Atualizar Produtos
+              </motion.button>
+
+              {/* Grade de Categorias 3 colunas com ícones */}
+              <div className="grid grid-cols-3 gap-2">
                 {niches.map(n => (
-                  <motion.button 
-                    key={n} 
-                    whileTap={{ scale: 0.9 }}
-                    className={`niche-chip ${activeNiche === n ? 'active' : ''}`}
-                    onClick={() => handleNicheChange(n)}
+                  <motion.button
+                    key={n.id}
+                    whileTap={{ scale: 0.92 }}
+                    onClick={() => handleNicheChange(n.id)}
+                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl border transition-all ${
+                      activeNiche === n.id
+                        ? 'bg-accent border-accent text-slate-950 shadow-[0_4px_20px_rgba(6,182,212,0.3)]'
+                        : 'bg-slate-900/60 border-white/5 text-white/60 hover:border-white/20'
+                    }`}
                   >
-                    {n}
+                    <span className="text-2xl leading-none">{n.icon}</span>
+                    <span className={`text-[9px] font-black uppercase tracking-wider leading-none text-center ${
+                      activeNiche === n.id ? 'text-slate-950' : 'text-white/50'
+                    }`}>{n.label}</span>
                   </motion.button>
                 ))}
               </div>
 
-              <div className="space-y-4">
+              {/* Lista de Produtos */}
+              <div className="space-y-3">
                 {activeItems.map(p => {
                   const isPublished = publicationHistory.some(h => h.product_id === p.id);
-
                   return (
                     <motion.div 
                       key={p.id} 
                       whileHover={{ x: 4 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`tech-card p-4 flex gap-4 items-center group relative overflow-hidden ${isPublished ? 'opacity-40 grayscale pointer-events-none' : 'cursor-pointer hover:border-accent/40'}`}
+                      className={`tech-card p-4 flex gap-4 items-center group relative overflow-hidden ${
+                        isPublished
+                          ? 'opacity-30 grayscale pointer-events-none'
+                          : 'cursor-pointer hover:border-accent/40'
+                      }`}
                       onClick={() => { setSelectedProduct(p); researchTikTok(p); }}
                     >
                       <div className="w-14 h-14 rounded-2xl bg-slate-950 flex flex-col items-center justify-center border border-white/10 shrink-0 relative overflow-hidden">
@@ -982,17 +1160,35 @@ const App: React.FC = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-[8px] font-black uppercase tracking-widest text-accent/60 bg-accent/5 px-2 py-0.5 rounded border border-accent/10">{p.sales} VENDAS</span>
+                          {isPublished && <span className="text-[8px] font-black uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded">POSTADO</span>}
                         </div>
                         <h3 className="font-black text-sm uppercase truncate leading-none mb-1">{p.title}</h3>
                         <p className="font-mono text-[10px] text-white/40">{p.price}</p>
                       </div>
 
-                      <div className="w-12 h-12 rounded-2xl border border-white/5 flex items-center justify-center group-hover:border-accent group-hover:bg-accent/5 transition-all">
-                        <ArrowRight size={18} className="group-hover:text-accent group-hover:translate-x-0.5 transition-all text-white/20" />
+                      <div className="flex flex-col gap-1.5 shrink-0">
+                        <div className="w-12 h-12 rounded-2xl border border-white/5 flex items-center justify-center group-hover:border-accent group-hover:bg-accent/5 transition-all">
+                          <ArrowRight size={18} className="group-hover:text-accent group-hover:translate-x-0.5 transition-all text-white/20" />
+                        </div>
+                        <button
+                          onClick={(e) => addToBio(p, e)}
+                          className="w-12 h-8 rounded-xl border border-accent/20 bg-accent/5 flex items-center justify-center hover:bg-accent hover:text-black text-accent transition-all"
+                          title="Publicar na minha Loja Bio"
+                        >
+                          <ShoppingBag size={14} />
+                        </button>
                       </div>
                     </motion.div>
                   );
                 })}
+
+                {activeItems.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
+                    <RefreshCcw size={40} className="text-accent/30" />
+                    <p className="text-[10px] text-white/30 font-black uppercase tracking-widest">Nenhum produto carregado</p>
+                    <button onClick={refreshProducts} className="text-accent text-[10px] font-black uppercase tracking-widest underline">Atualizar agora</button>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -1033,28 +1229,30 @@ const App: React.FC = () => {
           )}
 
           {step === 'ready' && (
-            <motion.div 
-              key="ready" 
+            <motion.div
+              key="ready"
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-6 space-y-6 pb-32"
+              className="flex flex-col h-[calc(100vh-5rem)]"
             >
-              <div className="flex items-center justify-between mb-2">
-                <motion.button 
-                  whileTap={{ scale: 0.9 }}
-                  onClick={goBackToList}
-                  className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
-                >
-                  <ArrowLeft size={16} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Voltar para Lista</span>
-                </motion.button>
-                <div className="flex items-center gap-2 text-accent">
-                   <div className="w-2 h-2 bg-accent rounded-full animate-ping" />
-                   <span className="text-[10px] font-black uppercase tracking-widest italic">Edição Pro Ativa</span>
+              {/* VÍDEO STICKY — sempre visível no topo ao rolar */}
+              <div className="sticky top-0 z-30 bg-slate-950 px-4 pt-3 pb-2 shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={goBackToList}
+                    className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
+                  >
+                    <ArrowLeft size={16} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Voltar</span>
+                  </motion.button>
+                  <div className="flex items-center gap-2 text-accent">
+                     <div className="w-2 h-2 bg-accent rounded-full animate-ping" />
+                     <span className="text-[10px] font-black uppercase tracking-widest italic">Edição Pro Ativa</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="video-preview-container !h-[420px] relative overflow-hidden rounded-[2rem] border-4 border-slate-900 shadow-2xl bg-slate-950">
+                <div className="video-preview-container !h-[300px] relative overflow-hidden rounded-[1.5rem] border-2 border-slate-800 shadow-2xl bg-slate-950">
                 {videoData?.url ? (
                   <>
                     <video 
@@ -1122,24 +1320,45 @@ const App: React.FC = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/20 pointer-events-none opacity-60" />
               </div>
 
-              {/* Main Professional Editor Controls */}
-              <div className="mt-4">
-                <VisualTimeline />
-              </div>
+            </div> {/* fim do sticky video */}
+
+              {/* CONTROLES SCROLLÁVEIS ABAIXO */}
+              <div className="flex-1 overflow-y-auto pb-32 px-4 space-y-4">
+                {/* Main Professional Editor Controls */}
+                <div className="mt-2">
+                  <VisualTimeline />
+                </div>
 
 
-              <div className="tech-card !p-6 space-y-6">
+                <div className="tech-card !p-6 space-y-6">
                 <div className="space-y-3">
                   <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1">Copiar Estratégia</p>
                   <div className="flex items-start justify-between gap-4">
-                    <h3 className="text-lg font-black italic uppercase leading-tight truncate">{selectedProduct?.title || 'Carregando...'}</h3>
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <h3 className="text-lg font-black italic uppercase leading-tight truncate">{selectedProduct?.title || 'Carregando...'}</h3>
+                      <button
+                        onClick={() => {
+                          if (selectedProduct?.title) {
+                            const smartName = getSmartSearchName(selectedProduct.title);
+                            navigator.clipboard.writeText(smartName);
+                            showToast("BUSCA INTELIGENTE COPIADA! 📋");
+                          }
+                          window.open("https://affiliate.shopee.com.br/offer/product_offer", "_blank");
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#EE4D2D]/10 text-[#EE4D2D] border border-[#EE4D2D]/20 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[#EE4D2D] hover:text-white transition-all w-fit text-left leading-tight"
+                      >
+                        <Search size={12} className="shrink-0" />
+                        <span>Buscar Central de Afiliados <br/><span className="text-[8px] opacity-70">(Copia nome p/ colar)</span></span>
+                      </button>
+                    </div>
                     <motion.button 
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => { 
                         if (selectedProduct?.title) {
-                          navigator.clipboard.writeText(selectedProduct.title); 
-                          showToast("TÍTULO COPIADO!"); 
+                          const smartName = getSmartSearchName(selectedProduct.title);
+                          navigator.clipboard.writeText(smartName); 
+                          showToast("NOME CURTO COPIADO!"); 
                         }
                       }}
                       className="shrink-0 p-2 bg-slate-900 border border-white/10 rounded-xl text-accent"
@@ -1175,7 +1394,7 @@ const App: React.FC = () => {
                       onClick={swapVideo}
                       className="flex-1 h-12 bg-slate-900 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-white text-[10px] font-black uppercase tracking-widest hover:border-accent/30 transition-all"
                     >
-                      <RotateCcw size={14} className="text-accent" /> Trocar Vídeo Original
+                      <RotateCcw size={14} className="text-accent" /> Trocar Vídeo
                     </motion.button>
                   </div>
                 </div>
@@ -1260,24 +1479,25 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-
               <div className="flex gap-4">
                 <motion.button 
                   whileTap={{ scale: 0.95 }}
-                  className="flex-1 h-20 bg-slate-900 border border-white/10 rounded-3xl flex flex-col items-center justify-center gap-2 group hover:border-accent/40 transition-all"
+                  className="flex-1 h-[90px] bg-slate-900 border border-white/10 rounded-3xl flex flex-col items-center justify-center gap-1 group hover:border-accent/40 transition-all p-2"
                   onClick={() => runAutomation('tiktok')}
                 >
                   <span className="text-xl grayscale group-hover:grayscale-0 transition-all text-white">🎬</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/40 group-hover:text-white">TikTok</span>
+                  <span className="text-[11px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">TikTok</span>
+                  <span className="text-[8px] text-white/30 uppercase text-center leading-tight">Copia legenda<br/>abre app</span>
                 </motion.button>
                 
                 <motion.button 
                   whileTap={{ scale: 0.95 }}
-                  className="flex-1 h-20 bg-orange-600 rounded-3xl flex flex-col items-center justify-center gap-2 shadow-[0_15px_30px_rgba(234,88,12,0.3)] border border-orange-400/20"
+                  className="flex-1 h-[90px] bg-orange-600 rounded-3xl flex flex-col items-center justify-center gap-1 shadow-[0_15px_30px_rgba(234,88,12,0.3)] border border-orange-400/20 p-2"
                   onClick={() => runAutomation('shopee')}
                 >
                   <span className="text-xl">🟠</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white">Shopee</span>
+                  <span className="text-[11px] font-black uppercase tracking-widest text-white">Shopee</span>
+                  <span className="text-[8px] text-white/70 uppercase text-center leading-tight">Copia legenda<br/>abre app</span>
                 </motion.button>
               </div>
 
@@ -1296,6 +1516,7 @@ const App: React.FC = () => {
                   {isProcessing ? 'PROCESSANDO EFEITOS...' : "Download MP4 (Com Efeitos Pro)"}
                 </span>
               </motion.button>
+              </div> {/* fim dos controles scrolláveis */}
             </motion.div>
           )}
 
@@ -1431,7 +1652,8 @@ const App: React.FC = () => {
         {[
           { id: 'home', label: 'Início', icon: Home, active: step === 'home' },
           { id: 'list', label: 'Garimpo', icon: Search, active: ['list','scouting','ready','treating','automation'].includes(step) },
-          { id: 'history', label: 'Cloud', icon: Database, active: step === 'history' }
+          { id: 'history', label: 'Cloud', icon: Database, active: step === 'history' },
+          { id: 'bio', label: 'Loja', icon: ShoppingBag, active: step === 'bio' }
         ].map(tab => (
           <motion.button 
             key={tab.id}

@@ -8,351 +8,361 @@ export interface ProcessingOptions {
   trimStart?: number;
   trimEnd?: number;
   transitionTimestamps?: number[];
+  // Elemento de vídeo já carregado na UI (evita re-fetch e problemas de CORS)
+  existingVideoEl?: HTMLVideoElement;
 }
 
 export class VideoProcessor {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private video: HTMLVideoElement;
+  // Canvas auxiliar: recebe frame bruto; ctx.filter é aplicado ao copiar para o canvas principal
+  private auxCanvas: HTMLCanvasElement;
+  private auxCtx: CanvasRenderingContext2D;
+  private ownedVideo: HTMLVideoElement;
   private stream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
+  private readonly UPSCALE = 2;
 
   constructor() {
     this.canvas = document.createElement('canvas');
-    this.ctx = this.canvas.getContext('2d')!;
-    this.video = document.createElement('video');
-    this.video.muted = true;
-    this.video.playsInline = true;
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
+    this.auxCanvas = document.createElement('canvas');
+    this.auxCtx = this.auxCanvas.getContext('2d')!;
+    this.ownedVideo = document.createElement('video');
+    this.ownedVideo.muted = true;
+    this.ownedVideo.playsInline = true;
+  }
+
+  private getFilterCSS(filter: string): string {
+    switch (filter) {
+      case 'elite':     return 'contrast(1.35) saturate(1.7) brightness(1.15)';
+      case 'vhs':       return 'contrast(0.9) saturate(0.55) sepia(0.3) brightness(1.1) blur(0.8px)';
+      case 'cinematic': return 'contrast(1.3) saturate(1.1) brightness(1.05) hue-rotate(-5deg)';
+      case 'bw':        return 'grayscale(1) contrast(1.5) brightness(1.05)';
+      case 'bloom':     return 'brightness(1.2) saturate(1.3)';
+      case 'glitch':    return 'hue-rotate(90deg) brightness(1.2) contrast(1.25)';
+      default:          return 'contrast(1.08) saturate(1.08)';
+    }
   }
 
   private async fetchVideoAsBlob(url: string): Promise<string> {
     const proxies = [
+      (u: string) => `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=${encodeURIComponent(u)}`,
       (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u: string) => `https://yacdn.org/proxy/${u}`,
-      (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`,
-      (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`
+      (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+      (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     ];
-
-    console.log("Tentando carregar vídeo via Proxies...");
-
-    for (let i = 0; i < proxies.length; i++) {
-      try {
-        const proxyUrl = proxies[i](url);
-        console.log(`Proxy ${i + 1}/${proxies.length}: ${new URL(proxyUrl).hostname}`);
-        
-        const response = await fetch(proxyUrl, { 
-          method: 'GET',
-          cache: 'no-cache'
-        });
-
-        if (response.ok) {
-          const blob = await response.blob();
-          console.log(`Sucesso! Blob recebido: ${blob.type}, Tamanho: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-          
-          if (blob.size > 50000) {
-            return URL.createObjectURL(blob);
-          } else {
-            console.warn("Blob muito pequeno, possivelmente erro.");
-          }
-        }
-      } catch (err) {
-        console.warn(`Falha no Proxy ${i + 1}:`, err);
-      }
-    }
-    
-    return url;
-  }
-
-  private async tryTikWMFallback(videoId: string): Promise<string | null> {
-    const url = `https://www.tikwm.com/video/media/play/${videoId}.mp4`;
-    console.log("Tentando Fallback Elite (TikWM):", url);
-    
-    const proxies = [
-      (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`
-    ];
-
     for (const proxy of proxies) {
       try {
-        const res = await fetch(proxy(url));
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos max por proxy
+        const res = await fetch(proxy(url), { cache: 'no-cache', signal: controller.signal });
+        clearTimeout(timeoutId);
+        
         if (res.ok) {
           const blob = await res.blob();
           if (blob.size > 50000) return URL.createObjectURL(blob);
         }
       } catch (e) {
-        console.warn("Falha no fallback TikWM via proxy:", e);
+        console.warn('Proxy falhou: ', proxy('...'));
       }
     }
-    return null;
+    return url; // fallback: URL original
   }
 
   public async processAndDownload(videoUrl: string, options: ProcessingOptions): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
-        console.log("Iniciando pipeline de renderização...");
-        
-        let sourceUrl = await this.fetchVideoAsBlob(videoUrl);
-        
-        if (options.videoId && (sourceUrl === videoUrl)) {
-          console.log("Proxy falhou na URL original, tentando fallback TikWM...");
-          const fallback = await this.tryTikWMFallback(options.videoId);
-          if (fallback) sourceUrl = fallback;
-        }
+        let video: HTMLVideoElement;
+        let blobUrl: string | null = null;
 
-        if (sourceUrl.startsWith('blob:')) {
-          this.video.removeAttribute('crossorigin');
-        } else {
-          this.video.crossOrigin = 'anonymous';
-        }
-
-        this.video.src = sourceUrl;
-        
-        const timeout = setTimeout(() => {
-          reject(new Error("Timeout: O vídeo não carregou em 30 segundos."));
-        }, 30000);
-
-        await new Promise((res, rej) => {
-          this.video.onloadedmetadata = () => {
-            clearTimeout(timeout);
-            res(true);
-          };
-          this.video.onerror = () => {
-            clearTimeout(timeout);
-            rej(new Error("Erro de CORS ou 403. O TikTok bloqueou essa mídia."));
-          };
-        });
-
-        this.canvas.width = this.video.videoWidth;
-        this.canvas.height = this.video.videoHeight;
-
-        await this.video.play();
-        this.stream = this.canvas.captureStream(30);
-        
-        if (!options.isMuted) {
+        let useExisting = false;
+        if (options.existingVideoEl && options.existingVideoEl.readyState >= 2) {
           try {
-            const videoStream = (this.video as any).captureStream ? (this.video as any).captureStream() : (this.video as any).mozCaptureStream ? (this.video as any).mozCaptureStream() : null;
-            if (videoStream && videoStream.getAudioTracks().length > 0) {
-              this.stream.addTrack(videoStream.getAudioTracks()[0]);
-            }
-          } catch (audioErr) {
-            console.warn("Não foi possível capturar o áudio:", audioErr);
+            // Verifica se o vídeo irá corromper/taintar o Canvas (CORS)
+            const testC = document.createElement('canvas');
+            testC.width = 1; testC.height = 1;
+            const testCtx = testC.getContext('2d')!;
+            testCtx.drawImage(options.existingVideoEl, 0, 0, 1, 1);
+            testCtx.getImageData(0, 0, 1, 1); // Dispara erro se cruzou origem indevidamente
+            useExisting = true;
+          } catch (e) {
+            console.warn("⚠️ Vídeo UI bloqueado por CORS. Usando fallback via Proxy...");
+            useExisting = false;
           }
         }
 
-        // Ensure video is ready and at trimStart
-        this.video.currentTime = options.trimStart || 0;
-        await new Promise(r => this.video.onseeked = r);
+        let wasMuted = false;
+        let wasVolume = 1;
 
-        // Priority: H.264 (MP4) -> VP9/WebM -> Fallback
-        const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1') ? 'video/mp4;codecs=avc1' :
-                         MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
-                         MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-                         
-        this.recorder = new MediaRecorder(this.stream, { 
+        if (useExisting && options.existingVideoEl) {
+          // ✅ Usar o elemento que já está carregado na UI (limpo e sem CORS block)
+          video = options.existingVideoEl;
+          video.loop = false; // Força para não repetir, garantindo o onended
+          const wasPaused = video.paused;
+          
+          wasMuted = video.muted;
+          wasVolume = video.volume;
+          // Unmute hardware output temporarily to inject stream correctly 
+          video.muted = false;
+          video.volume = 1;
+
+          video.currentTime = options.trimStart || 0;
+          await new Promise<void>(r => { video.onseeked = () => r(); setTimeout(r, 1500); });
+          if (wasPaused) video.pause();
+        } else {
+          // Fallback: tentar baixar via proxy
+          video = this.ownedVideo;
+          const sourceUrl = await this.fetchVideoAsBlob(videoUrl);
+          blobUrl = sourceUrl.startsWith('blob:') ? sourceUrl : null;
+          video.crossOrigin = blobUrl ? '' : 'anonymous';
+          video.src = sourceUrl;
+
+          const timeout = setTimeout(() => reject(new Error('Timeout')), 25000);
+          await new Promise<void>((res, rej) => {
+            video.onloadedmetadata = () => { clearTimeout(timeout); res(); };
+            video.onerror = () => { clearTimeout(timeout); rej(new Error('CORS')); };
+          });
+          video.currentTime = options.trimStart || 0;
+          await new Promise<void>(r => { video.onseeked = () => r(); });
+        }
+
+        const vW = video.videoWidth;
+        const vH = video.videoHeight;
+        if (!vW || !vH) { reject(new Error('Dimensões inválidas')); return; }
+
+        const W = vW * this.UPSCALE;
+        const H = vH * this.UPSCALE;
+
+        this.canvas.width = W;
+        this.canvas.height = H;
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
+        this.auxCanvas.width = W;
+        this.auxCanvas.height = H;
+        this.auxCtx.imageSmoothingEnabled = true;
+        this.auxCtx.imageSmoothingQuality = 'high';
+
+        await video.play();
+        this.stream = this.canvas.captureStream(60);
+
+        if (!options.isMuted) {
+          try {
+            const vs = (video as any).captureStream?.() || (video as any).mozCaptureStream?.();
+            if (vs?.getAudioTracks().length > 0) this.stream.addTrack(vs.getAudioTracks()[0]);
+          } catch { /* sem áudio */ }
+        }
+
+        const mimeType =
+          MediaRecorder.isTypeSupported('video/mp4;codecs=avc1') ? 'video/mp4;codecs=avc1' :
+          MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+
+        this.recorder = new MediaRecorder(this.stream, {
           mimeType,
-          videoBitsPerSecond: 15000000 // Elite bitrate for Pro quality
+          videoBitsPerSecond: 25_000_000,
         });
-        
+
         this.chunks = [];
-        this.recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) this.chunks.push(e.data);
-        };
+        this.recorder.ondataavailable = e => { if (e.data.size > 0) this.chunks.push(e.data); };
 
         this.recorder.onstop = () => {
           const blob = new Blob(this.chunks, { type: mimeType });
           const outUrl = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
           a.href = outUrl;
+          a.download = `VIRAL_8K_${ts}.${ext}`;
           a.style.display = 'none';
-          const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
-          a.download = `VIRAL_PRO_${timestamp}.${extension}`;
-          a.type = mimeType;
           document.body.appendChild(a);
-          setTimeout(() => {
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(outUrl);
-          }, 100);
+          a.click();
+          setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(outUrl); }, 500);
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+
+          // Restaura o video original caso esteja rodando na UI
+          if (options.existingVideoEl) {
+            options.existingVideoEl.muted = wasMuted;
+            options.existingVideoEl.volume = wasVolume;
+            options.existingVideoEl.loop = true;
+            options.existingVideoEl.play().catch(() => {});
+          }
+
           resolve();
         };
 
-        // Render first frame BEFORE starting recorder to avoid empty black frames
-        const initialDraw = () => {
-          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-          this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
-        };
-        initialDraw();
+        // Primeiro frame (evita preto)
+        this.ctx.drawImage(video, 0, 0, W, H);
+        this.recorder.start(100);
 
-        this.recorder.start(100); // Start with small timeslice for better reliability
+        const filterCSS = this.getFilterCSS(options.filter || 'none');
+        const transition = options.transition || 'none';
+        const transitionTs = options.transitionTimestamps || [];
 
         const renderFrame = () => {
-          if (this.video.paused || this.video.ended) return;
-          const ct = this.video.currentTime;
+          if (video.paused || video.ended) return;
+          const ct = video.currentTime;
+          if (options.trimEnd && ct >= options.trimEnd) { this.recorder?.stop(); return; }
 
-          if (options.trimEnd && ct >= options.trimEnd) {
-            this.recorder?.stop();
-            return;
-          }
+          // 1. Frame bruto no canvas auxiliar
+          this.auxCtx.clearRect(0, 0, W, H);
+          this.auxCtx.drawImage(video, 0, 0, W, H);
 
-          this.ctx.save();
-          this.applyFilter(options.filter || 'none');
-          
-          const isTransition = options.transitionTimestamps?.some(ts => ct >= ts && ct < ts + 1.5);
-          
-          if (isTransition) {
-            this.applyPreTransition(options.transition || 'none', ct, options.transitionTimestamps || []);
-          }
+          // 2. Limpa canvas principal
+          this.ctx.clearRect(0, 0, W, H);
 
-          this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+          // 3. Aplica filtro ANTES do drawImage (único método correto no Canvas API)
+          this.ctx.filter = filterCSS;
+          this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
+          this.ctx.filter = 'none';
 
-          if (isTransition) {
-            this.applyPostTransition(options.transition || 'none', ct, options.transitionTimestamps || []);
-          }
-          
-          if (options.legend) this.drawLegend(options.legend);
-          this.ctx.restore();
-          
-          if (this.video.readyState >= 2) {
-            requestAnimationFrame(renderFrame);
-          }
+          // 4. Transições
+          const isTransition = transitionTs.some(t => ct >= t && ct < t + 1.5);
+          if (isTransition) this.applyTransitionEffect(transition, ct, transitionTs, W, H);
+
+          // 5. Legenda
+          if (options.legend) this.drawLegend(options.legend, W, H);
+
+          if (video.readyState >= 2) requestAnimationFrame(renderFrame);
         };
 
         renderFrame();
-      } catch (err: any) {
+
+        // Auto-stop ao fim do vídeo
+        video.onended = () => { setTimeout(() => this.recorder?.stop(), 300); };
+      } catch (err) {
+        if (options.existingVideoEl) {
+          options.existingVideoEl.loop = true; // Restaura no caso de falha
+        }
         reject(err);
       }
     });
   }
 
-  private applyFilter(filter: string, extraBlur: number = 0) {
-    let filterStr = '';
-    if (extraBlur > 0) filterStr += `blur(${extraBlur}px) `;
-    
-    switch (filter) {
-      case 'elite': filterStr += 'contrast(1.25) saturate(1.5) brightness(1.1)'; break;
-      case 'vhs': filterStr += 'contrast(0.9) saturate(0.6) sepia(0.25) brightness(1.1) blur(0.5px)'; break;
-      case 'cinematic': filterStr += 'contrast(1.25) saturate(1.1) brightness(1.1)'; break;
-      case 'bw': filterStr += 'grayscale(1) contrast(1.4)'; break;
-      case 'bloom': filterStr += 'brightness(1.1) saturate(1.2) blur(1px)'; break;
-      case 'glitch': filterStr += 'hue-rotate(90deg) brightness(1.2) contrast(1.2)'; break;
-      default: break;
-    }
-    
-    this.ctx.filter = filterStr || 'none';
-  }
 
-  private applyPreTransition(type: string, ct: number, timestamps: number[]) {
+
+  private applyTransitionEffect(type: string, ct: number, timestamps: number[], W: number, H: number) {
     const ts = timestamps.find(t => ct >= t && ct < t + 1.5) || 0;
     const progress = (ct - ts) / 1.5;
-    
-    this.ctx.translate(this.canvas.width/2, this.canvas.height/2);
-    
+    const sin = Math.sin(progress * Math.PI);
+
     switch (type) {
-      case 'zoom':
-        const scale = 1 + Math.sin(progress * Math.PI) * 0.2;
-        this.ctx.scale(scale, scale);
+      case 'zoom': {
+        const scale = 1 + sin * 0.25;
+        const ox = W * (1 - scale) / 2;
+        const oy = H * (1 - scale) / 2;
+        this.ctx.save();
+        this.ctx.drawImage(this.canvas, 0, 0, W, H, ox, oy, W * scale, H * scale);
+        this.ctx.restore();
+        break;
+      }
+      case 'flash':
+        this.ctx.fillStyle = `rgba(255,255,255,${sin * 0.7})`;
+        this.ctx.fillRect(0, 0, W, H);
+        break;
+      case 'beat':
+        this.ctx.fillStyle = `rgba(6,182,212,${Math.max(0, Math.sin(progress * Math.PI * 3) * 0.35)})`;
+        this.ctx.fillRect(0, 0, W, H);
         break;
       case 'fire':
-        this.ctx.filter = `brightness(${1 + Math.random() * 0.5}) saturate(${1 + Math.random()}) contrast(1.2)`;
+        this.ctx.fillStyle = `rgba(255,${Math.floor(80 + Math.random() * 80)},0,${sin * 0.4})`;
+        this.ctx.fillRect(0, 0, W, H);
         break;
-      case 'glitch':
-        if (Math.random() > 0.8) this.applyGlitch();
+      case 'glitch': {
+        if (Math.random() > 0.6) {
+          const sliceH = Math.random() * 60;
+          const sy = Math.random() * H;
+          const dx = (Math.random() - 0.5) * 60;
+          this.ctx.drawImage(this.canvas, 0, sy, W, sliceH, dx, sy, W, sliceH);
+          this.ctx.globalCompositeOperation = 'screen';
+          this.ctx.globalAlpha = 0.3;
+          this.ctx.fillStyle = `rgba(255,0,0,0.4)`;
+          this.ctx.fillRect(dx + 4, sy, Math.random() * 40, sliceH);
+          this.ctx.globalCompositeOperation = 'source-over';
+          this.ctx.globalAlpha = 1;
+        }
         break;
-      case 'shake':
-        this.ctx.translate((Math.random()-0.5)*20, (Math.random()-0.5)*20);
-        break;
-      case 'blur':
-        this.applyBloom();
-        break;
-    }
-    
-    this.ctx.translate(-this.canvas.width/2, -this.canvas.height/2);
-  }
-
-  private applyPostTransition(type: string, ct: number, timestamps: number[]) {
-    const ts = timestamps.find(t => ct >= t && ct < t + 1.5) || 0;
-    const progress = (ct - ts) / 1.5;
-
-    if (type === 'flash') {
-      this.ctx.fillStyle = `rgba(255, 255, 255, ${Math.sin(progress * Math.PI) * 0.5})`;
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-  }
-
-  private applyGlitch() {
-    if (Math.random() > 0.9) {
-      const h = Math.random() * 20;
-      const y = Math.random() * this.canvas.height;
-      this.ctx.drawImage(this.canvas, 0, y, this.canvas.width, h, (Math.random()-0.5)*30, y, this.canvas.width, h);
-    }
-  }
-
-  private applyBloom() {
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = 'screen';
-    this.ctx.filter = 'blur(10px) brightness(1.5)';
-    this.ctx.globalAlpha = 0.3;
-    this.ctx.drawImage(this.canvas, 0, 0);
-    this.ctx.restore();
-  }
-
-  private drawLegend(text: string) {
-    this.ctx.save();
-    
-    // Dynamic Font Scaling
-    let fontSize = 80;
-    this.ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-    const maxWidth = this.canvas.width * 0.85;
-
-    // Handle Long Text (Simple Wrap)
-    const words = text.toUpperCase().split(' ');
-    let lines: string[] = [''];
-    let currentLine = 0;
-
-    words.forEach(word => {
-      const testLine = lines[currentLine] + (lines[currentLine] ? ' ' : '') + word;
-      if (this.ctx.measureText(testLine).width > maxWidth && lines[currentLine] !== '') {
-        currentLine++;
-        lines[currentLine] = word;
-      } else {
-        lines[currentLine] = testLine;
       }
-    });
-
-    if (lines.length > 2) fontSize = 60; // Scale down if too many lines
-    this.ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-    this.ctx.textAlign = 'center';
-    
-    const lineHeight = fontSize * 1.2;
-    const padding = 40;
-    const bgH = (lines.length * lineHeight) + padding;
-    const bgY = this.canvas.height - bgH - 200;
-
-    lines.forEach((line, i) => {
-      const lineMetrics = this.ctx.measureText(line);
-      const bgW = lineMetrics.width + 100;
-      const bgX = (this.canvas.width - bgW) / 2;
-      
-      this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
-      this.drawRoundedRect(bgX, bgY + (i * lineHeight) + 10, bgW, fontSize + 30, 20);
-      this.ctx.fill();
-
-      this.ctx.fillStyle = 'white';
-      this.ctx.fillText(line, this.canvas.width / 2, bgY + (i * lineHeight) + fontSize);
-    });
-
-    this.ctx.restore();
+      case 'shake': {
+        const sx = (Math.random() - 0.5) * 30;
+        const sy2 = (Math.random() - 0.5) * 30;
+        this.ctx.save();
+        this.ctx.translate(sx, sy2);
+        this.ctx.drawImage(this.canvas, -sx, -sy2, W, H);
+        this.ctx.restore();
+        break;
+      }
+      case 'blur': {
+        this.ctx.save();
+        this.ctx.globalCompositeOperation = 'screen';
+        this.ctx.filter = `blur(${Math.floor(sin * 20)}px) brightness(1.6)`;
+        this.ctx.globalAlpha = 0.25;
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.filter = 'none';
+        this.ctx.globalAlpha = 1;
+        this.ctx.globalCompositeOperation = 'source-over';
+        this.ctx.restore();
+        break;
+      }
+      case 'slide': {
+        const offset = Math.floor(sin * W * 0.15);
+        this.ctx.save();
+        this.ctx.drawImage(this.canvas, offset, 0, W, H);
+        this.ctx.restore();
+        break;
+      }
+      case 'rotate': {
+        // Simulação de Giro 3D avançada (rotateY + zoom dinâmico)
+        const scaleX = Math.cos(progress * Math.PI * 2); // Vai de 1 -> -1 -> 1 (efeito de moeda/giro)
+        const scaleY = 1 + Math.sin(progress * Math.PI) * 0.15; // Suave aproximação do vídeo
+        this.ctx.save();
+        this.ctx.translate(W / 2, H / 2);
+        this.ctx.scale(scaleX * scaleY, scaleY);
+        this.ctx.drawImage(this.canvas, -W / 2, -H / 2, W, H);
+        this.ctx.restore();
+        break;
+      }
+    }
   }
 
-  private drawRoundedRect(x: number, y: number, w: number, h: number, r: number) {
+  private drawLegend(text: string, W: number, H: number) {
+    let fontSize = Math.floor(W * 0.052);
+    this.ctx.font = `bold ${fontSize}px Inter, Arial, sans-serif`;
+    this.ctx.textAlign = 'center';
+    const maxWidth = W * 0.86;
+
+    const words = text.split(' ');
+    const lines: string[] = [''];
+    let cur = 0;
+    words.forEach(word => {
+      const test = lines[cur] + (lines[cur] ? ' ' : '') + word;
+      if (this.ctx.measureText(test).width > maxWidth && lines[cur]) { cur++; lines[cur] = word; }
+      else lines[cur] = test;
+    });
+
+    if (lines.length > 3) fontSize = Math.floor(W * 0.038);
+    this.ctx.font = `bold ${fontSize}px Inter, Arial, sans-serif`;
+
+    const lh = fontSize * 1.35;
+    const pad = 28;
+    const totalH = lines.length * lh + pad;
+    const startY = H - totalH - Math.floor(H * 0.055);
+    const bx = W * 0.07, bw = W * 0.86, r = 20;
+
+    this.ctx.fillStyle = 'rgba(0,0,0,0.84)';
     this.ctx.beginPath();
-    this.ctx.moveTo(x + r, y);
-    this.ctx.arcTo(x + w, y, x + w, y + h, r);
-    this.ctx.arcTo(x + w, y + h, x, y + h, r);
-    this.ctx.arcTo(x, y + h, x, y, r);
-    this.ctx.arcTo(x, y, x + w, y, r);
+    this.ctx.moveTo(bx + r, startY - 8);
+    this.ctx.arcTo(bx + bw, startY - 8, bx + bw, startY + totalH, r);
+    this.ctx.arcTo(bx + bw, startY + totalH, bx, startY + totalH, r);
+    this.ctx.arcTo(bx, startY + totalH, bx, startY - 8, r);
+    this.ctx.arcTo(bx, startY - 8, bx + bw, startY - 8, r);
     this.ctx.closePath();
+    this.ctx.fill();
+
+    this.ctx.fillStyle = '#FFFFFF';
+    lines.forEach((line, i) => {
+      this.ctx.fillText(line, W / 2, startY + (i + 1) * lh - 4);
+    });
   }
 }
