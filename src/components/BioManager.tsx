@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb
+  ShieldCheck, Lightbulb, Upload, Loader2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -48,6 +48,8 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
   const [saving, setSaving] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [activeTip, setActiveTip] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   let toastCounter = 0;
 
   useEffect(() => {
@@ -111,6 +113,46 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
       showToast('🛍️ Produto publicado na sua loja!', 'success');
     } else {
       showToast('❌ Erro ao publicar. Tente novamente.', 'error');
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Por favor, selecione um arquivo de imagem.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Imagem muito grande! Máximo 5MB.', 'error');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const filePath = `${storeSlug}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      setImageUrl(publicUrl);
+      showToast('📸 Imagem enviada com sucesso!', 'success');
+    } catch (error: any) {
+      console.error('Erro no upload:', error);
+      showToast('Erro ao enviar imagem. Verifique as permissões de Storage.', 'error');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -301,6 +343,24 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
                   <ImageIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
                   <input type="url" required placeholder="URL da foto do produto..." value={imageUrl} onChange={e => setImageUrl(e.target.value)}
                     className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-medium" />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 hover:border-emerald-500/40 rounded-xl text-slate-400 hover:text-emerald-400 transition-all text-[10px] font-black uppercase tracking-widest"
+                  >
+                    {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                    {uploading ? 'ENVIANDO...' : 'ANEXAR IMAGEM'}
+                  </button>
                 </div>
                 <AnimatePresence>
                   {imageUrl && (
