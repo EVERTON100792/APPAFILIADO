@@ -102,6 +102,12 @@ const App: React.FC = () => {
   const [videoResults, setVideoResults] = useState<any[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [databaseProducts, setDatabaseProducts] = useState<any[]>([]);
+  
+  // Bio Store Quick Add State
+  const [bioTitle, setBioTitle] = useState('');
+  const [bioImageUrl, setBioImageUrl] = useState('');
+  const [bioLink, setBioLink] = useState('');
+  const [isSavingToBio, setIsSavingToBio] = useState(false);
 
   // Sync volume with isMuted strictly
   useEffect(() => {
@@ -1385,6 +1391,90 @@ const App: React.FC = () => {
                     <Activity size={18} />
                     <span className="text-[9px] font-black uppercase">Foco Viral</span>
                   </motion.button>
+                </div>
+
+                {/* QUICK ADD TO BIO STORE - ACID PREMIUM STYLE */}
+                <div className="pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <ShoppingBag size={14} className="text-accent" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Publicar na Vitrine <span className="text-accent italic">(Opcional)</span></span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (videoLegend) setBioTitle(videoLegend);
+                        if (videoData?.thumbnail) setBioImageUrl(videoData.thumbnail);
+                        showToast("✨ CAMPOS PREENCHIDOS!");
+                      }}
+                      className="text-[9px] font-black uppercase tracking-widest text-accent hover:text-white transition-colors flex items-center gap-1 bg-accent/5 px-2 py-1 rounded-md border border-accent/10"
+                    >
+                      <Sparkles size={10} /> Preencher Auto
+                    </button>
+                  </div>
+                  
+                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] uppercase font-black tracking-widest text-accent/70 ml-1">Link Afiliado</label>
+                      <input 
+                        type="url" 
+                        placeholder="https://shope.ee/..." 
+                        value={bioLink} 
+                        onChange={e => setBioLink(e.target.value)}
+                        className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] uppercase font-black tracking-widest text-accent/70 ml-1">URL da Imagem</label>
+                      <input 
+                        type="url" 
+                        placeholder="Cole o link da foto do produto..." 
+                        value={bioImageUrl} 
+                        onChange={e => setBioImageUrl(e.target.value)}
+                        className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] uppercase font-black tracking-widest text-accent/70 ml-1">Título de Vendas</label>
+                      <textarea 
+                        placeholder="Ex: Oferta exclusiva! 🔥" 
+                        value={bioTitle} 
+                        onChange={e => setBioTitle(e.target.value)}
+                        className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all h-20 resize-none font-medium"
+                      />
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        const slug = localStorage.getItem('bio_store_slug') || 'default_user';
+                        if (!bioLink || !bioImageUrl || !bioTitle) {
+                          showToast("⚠️ Preencha todos os campos da vitrine!");
+                          return;
+                        }
+                        setIsSavingToBio(true);
+                        const { error } = await supabase.from('bio_store').insert({
+                          user_id: slug,
+                          title: bioTitle,
+                          image_url: bioImageUrl,
+                          affiliate_link: bioLink
+                        });
+                        setIsSavingToBio(false);
+                        if (!error) {
+                          showToast("🛍️ PUBLICADO COM SUCESSO!");
+                          setBioLink(''); setBioImageUrl(''); setBioTitle('');
+                        } else {
+                          showToast("❌ Erro ao publicar. Tente novamente.");
+                        }
+                      }}
+                      disabled={isSavingToBio}
+                      className="w-full py-3 bg-accent/10 border border-accent/20 hover:bg-accent hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"
+                    >
+                      {isSavingToBio ? <RefreshCcw className="animate-spin" size={12} /> : <Zap size={12} fill="currentColor" />}
+                      {isSavingToBio ? 'PUBLICANDO...' : 'ADICIONAR À MINHA LOJA'}
+                    </button>
+                    <p className="text-[8px] text-slate-600 text-center font-bold tracking-tight">O item aparecerá imediatamente no seu link da bio.</p>
+                  </div>
                 </div>
 
                 <div className="space-y-6 pt-2">
