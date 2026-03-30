@@ -27,7 +27,7 @@ const PRO_TIPS = [
   "🔥 O link personalizado 'meusachadinhos' é o que mais converte no TikTok."
 ];
 
-export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId = 'default_user' }) => {
+export const BioManager: React.FC = () => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +38,7 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
 
   // URL Slug personalizado
   const [storeSlug, setStoreSlug] = useState(() => {
-    return localStorage.getItem('bio_store_slug') || defaultUserId;
+    return localStorage.getItem('bio_store_slug') || 'meu-link';
   });
   const [slugInput, setSlugInput] = useState(storeSlug);
   const [editingSlug, setEditingSlug] = useState(false);

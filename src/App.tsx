@@ -111,6 +111,10 @@ const App: React.FC = () => {
   const [bioLink, setBioLink] = useState('');
   const [isSavingToBio, setIsSavingToBio] = useState(false);
 
+  // ── MONETIZAÇÃO & ACESSO GATED ──
+  const [isPro, setIsPro] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+
   // Sync volume with isMuted strictly
   useEffect(() => {
     if (videoRef.current) {
@@ -219,6 +223,116 @@ const App: React.FC = () => {
     if (data) setDatabaseProducts(data);
   };
 
+  // Verificação de Assinatura (Simulada para MVP, conectada ao Supabase)
+  const checkSubscription = async () => {
+    setIsLoadingAuth(true);
+    try {
+      const slug = localStorage.getItem('bio_store_slug');
+      const ADMIN_SLUGS = ['meu-link', 'admin', 'everton', 'achadinhos_brasil_'];
+      
+      // 1. Acesso Desenvolvedor (Admin Slugs)
+      if (slug && ADMIN_SLUGS.includes(slug.toLowerCase())) {
+        setIsPro(true);
+        setIsLoadingAuth(false);
+        return;
+      }
+
+      // 2. Lógica de Trial (24 horas)
+      const firstAccess = localStorage.getItem('first_access_date');
+      if (!firstAccess) {
+        localStorage.setItem('first_access_date', Date.now().toString());
+        setIsPro(true); // Primeiro acesso libera trial
+      } else {
+        const trialExpired = Date.now() - parseInt(firstAccess) > 24 * 60 * 60 * 1000;
+        if (!trialExpired) {
+          setIsPro(true);
+        } else {
+          // Se o trial expirou, verifica se é Pro real
+          const isProMember = localStorage.getItem('is_pro_member') === 'true';
+          setIsPro(isProMember);
+        }
+      }
+
+      // 3. Verificação Global (Supabase Config)
+      const { data } = await supabase
+        .from('config')
+        .select('value')
+        .eq('key', 'app_access_mode')
+        .single();
+      
+      if (data?.value === 'public') {
+        setIsPro(true);
+      }
+    } catch (e) {
+      console.error('Subscription check error:', e);
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  };
+
+  useEffect(() => {
+    checkSubscription();
+  }, []);
+
+  const LockScreen = () => (
+    <div className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
+      <div className="absolute inset-0 cyber-grid opacity-20" />
+      <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-transparent" />
+      
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="relative z-10 space-y-8 max-w-md"
+      >
+        <div className="w-24 h-24 bg-slate-900 border-2 border-accent/20 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(6,182,212,0.15)]">
+          <Shield size={48} className="text-accent animate-pulse" />
+        </div>
+        
+        <div className="space-y-4">
+          <h2 className="text-4xl font-black italic uppercase italic tracking-tighter leading-tight">
+            ACESSO <span className="text-accent">BLOQUEADO</span>
+          </h2>
+          <p className="text-xs text-dim uppercase tracking-[0.2em] font-medium leading-relaxed">
+            Sua conta não possui uma licença <span className="text-white font-black">PRO</span> ativa para usar o Squad de Automação.
+          </p>
+        </div>
+
+        <div className="bg-slate-900/50 border border-white/5 rounded-3xl p-6 space-y-4 backdrop-blur-xl">
+          <div className="flex items-center gap-3 text-left">
+            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+              <Zap size={16} />
+            </div>
+            <p className="text-[10px] font-bold uppercase text-white/60">Vídeos Virais Ilimitados</p>
+          </div>
+          <div className="flex items-center gap-3 text-left">
+            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+              <ShoppingBag size={16} />
+            </div>
+            <p className="text-[10px] font-bold uppercase text-white/60">Sua Própria Loja Link-na-Bio</p>
+          </div>
+          <div className="flex items-center gap-3 text-left">
+            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+              <Database size={16} />
+            </div>
+            <p className="text-[10px] font-bold uppercase text-white/60">Automação Shopee & TikTok</p>
+          </div>
+        </div>
+
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          className="w-full h-16 bg-accent text-slate-950 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-accent/20"
+          onClick={() => window.location.href = 'https://pay.kiwify.com.br/seulink'} // Exemplo de link de checkout
+        >
+          DESBLOQUEAR AGORA
+        </motion.button>
+        
+        <p className="text-[9px] text-white/20 uppercase tracking-widest font-medium">
+          Já pagou? <button onClick={checkSubscription} className="text-accent underline">Clique aqui para atualizar</button>
+        </p>
+      </motion.div>
+    </div>
+  );
+
   // Sync Supabase when entering history tab
   useEffect(() => {
     if (step === 'history') {
@@ -228,12 +342,14 @@ const App: React.FC = () => {
 
 
   const fetchHistory = async () => {
-    const { data, error } = await supabase
+    const userId = getUserId();
+    const { data } = await supabase
       .from('publication_history')
       .select('*')
+      .eq('user_id', userId)
       .order('timestamp', { ascending: false });
     
-    if (!error && data) {
+    if (data) {
       setPublicationHistory(data);
     }
   };
@@ -284,11 +400,21 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const getUserId = () => {
+    const slug = localStorage.getItem('bio_store_slug');
+    if (slug) return slug;
+    const newId = 'user_' + Math.random().toString(36).substring(2, 9);
+    localStorage.setItem('bio_store_slug', newId);
+    return newId;
+  };
+
   const saveToSupabase = async (product: any, platform: string) => {
+    const userId = getUserId();
     const { data, error } = await supabase
       .from('publication_history')
       .insert([
         { 
+          user_id: userId,
           product_id: product.id, 
           title: product.title, 
           platform: platform 
@@ -617,7 +743,7 @@ const App: React.FC = () => {
   const addToBio = async (p: any, e: React.MouseEvent) => {
     e.stopPropagation();
     const { error } = await supabase.from('bio_store').insert({
-      user_id: 'default_user',
+      user_id: getUserId(),
       title: p.title,
       image_url: p.image || p.thumbnail || 'https://placehold.co/200x200/0a0a0a/ff6b6b?text=🛒',
       affiliate_link: p.link || p.url || `https://shopee.com.br/search?keyword=${encodeURIComponent(p.title)}`
@@ -633,77 +759,87 @@ const App: React.FC = () => {
     resetVideoEditor();
     setIsScanning(true);
     try {
-      // ── ETAPA 1: Extrair o núcleo semântico do produto (máximo 3 palavras PT-BR)
+      // ── ETAPA 1: Extrair o núcleo semântico do produto (Alta Precisão)
       let baseTerm = product.query || product.title || '';
       baseTerm = baseTerm
         .replace(/[^a-zA-ZÀ-ÿ0-9 ]/g, ' ')
+        .replace(/\b(oferta|promoção|queima|estoque|barato|shopee|link|bio|brasil|br|kit|conjunto|pacote|unidade|und|pcs|peças|peça)\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
-      // Filtrar stopwords comuns (evita poluição na query)
-      const stopWords = new Set(['de','do','da','dos','das','para','com','em','no','na','um','uma','os','as','o','a','e','kit','conjunto','conjunto','pacote','unidade','und','pcs','peças','peça']);
-      const coreWords = baseTerm.split(' ').filter((w: string) => w.length > 2 && !stopWords.has(w.toLowerCase())).slice(0, 3);
+
+      const stopWords = new Set(['de','do','da','dos','das','para','com','em','no','na','um','uma','os','as','o','a','e']);
+      const coreWords = baseTerm.split(' ').filter((w: string) => w.length > 2 && !stopWords.has(w.toLowerCase())).slice(0, 4);
+      
+      if (coreWords.length === 0) throw new Error('Nome do produto muito curto para busca precisa');
+      
       const coreQuery = coreWords.join(' ');
 
-      // ── ETAPA 2: Montar 3 estratégias progressivas de busca PT-BR
+      // ── ETAPA 2: Estratégias de busca cirúrgicas
       const strategies = [
-        // Estratégia A: Query com termos BR explícitos + parâmetros de região
-        { query: `${coreQuery} shopee brasil`, extraParams: '&region=BR&language=pt-BR' },
-        // Estratégia B: Unboxing em português puro, sem "shopee" para ampliar resultados PT-BR
-        { query: `unboxing ${coreQuery} brasil`, extraParams: '&region=BR' },
-        // Estratégia C: Nome do produto direto + "achei no shopee" (termo viral BR)
-        { query: `${coreQuery} achei no shopee`, extraParams: '&region=BR' },
+        { query: `${coreQuery} review brasil`, extraParams: '&region=BR' },
+        { query: `achadinho ${coreQuery}`, extraParams: '&region=BR' },
+        { query: `${coreQuery} teste`, extraParams: '&region=BR' },
       ];
 
-      // Regexes para detectar tokens de PT-BR e eliminar vídeos claramente em inglês
-      const ptBrPattern = /[àáâãéêíóôõúüçÀÁÂÃÉÊÍÓÔÕÚÜÇ]|shopee|brasil|achei|comprei|chegou|resenha|unbox|barato|produto/i;
-      const englishPattern = /\b(the|this|my|is|are|was|were|that|with|from|have|you|for|and|but)\b/i;
+      const ptBrPattern = /[àáâãéêíóôõúüçÀÁÂÃÉÊÍÓÔÕÚÜÇ]|achei|comprei|chegou|resenha|unbox|barato|produto/i;
+      const englishPattern = /\b(the|this|my|is|are|was|were|that|with|from|have|you|for|and|but|review|unboxing|test|wow|omg|cool)\b/i;
 
       let allVideos: any[] = [];
-
       for (const strategy of strategies) {
         const q = encodeURIComponent(strategy.query);
         try {
           const resp = await fetch(
-            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0${strategy.extraParams}`,
-            { signal: AbortSignal.timeout(8000) }
+            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=15&cursor=0${strategy.extraParams}`,
+            { signal: AbortSignal.timeout(6000) }
           );
           const json = await resp.json();
           if (json.data?.videos?.length > 0) {
             allVideos = [...allVideos, ...json.data.videos];
           }
-        } catch {/* falha silenciosa na estratégia */}
-        
-        if (allVideos.length >= 10) break; // Chega de buscar se já temos material suficiente
+        } catch {}
+        if (allVideos.length >= 15) break;
       }
 
-      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
+      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado para este produto');
 
-      // ── ETAPA 3: Filtrar e ranquear por relevância PT-BR e engajamento
+      // ── ETAPA 3: Filtragem RADICAL de relevância
       const scored = allVideos
-        .filter((v: any) => v.play || v.wmplay) // só vídeos com URL real
+        .filter((v: any) => (v.play || v.wmplay) && v.duration > 5) // Mínimo 5 seg
         .map((v: any) => {
-          const text = `${v.title || ''} ${v.author?.nickname || ''}`;
-          const ptScore  = (ptBrPattern.test(text) ? 3 : 0);    // bônus por ser PT-BR
-          const enPenalty = (englishPattern.test(text) ? -5 : 0); // penaliza inglês
-          const engageScore = Math.log1p(v.digg_count || 0);      // likes (log para não dominar)
-          // Bônus relevância produto: verifica se o título do vídeo menciona palavras-chave do produto
-          const productWords = coreWords.filter((w: string) => w.length > 3);
-          const productMatch = productWords.some((w: string) => text.toLowerCase().includes(w.toLowerCase()));
-          const productBonus = productMatch ? 5 : 0;
+          const text = `${v.title || ''} ${v.author?.nickname || ''} ${v.music_info?.title || ''}`.toLowerCase();
+          
+          // 1. Match de Palavras-Chave (Obrigatório)
+          let matches = 0;
+          coreWords.forEach(w => { if (text.includes(w.toLowerCase())) matches++; });
+          
+          const matchRatio = matches / coreWords.length;
+          
+          // 2. Penalidade de Idioma
+          const ptScore = ptBrPattern.test(text) ? 20 : 0;
+          const enPenalty = englishPattern.test(text) ? -30 : 0;
+          
+          // 3. Blacklist de Lixo Aguda
+          const blackList = ['dance', 'funny', 'cat', 'dog', 'pubg', 'freefire', 'roblox', 'edit', 'anime', 'meme'];
+          const garbagePenalty = blackList.some(w => text.includes(w)) ? -100 : 0;
+
+          // Score final: Prioridade TOTAL para o match de palavras
+          // Se não tiver ao menos 1 match, o score despenca
+          const finalScore = (matches === 0 ? -100 : (matchRatio * 100) + ptScore + enPenalty + garbagePenalty);
+
           return {
             id: v.video_id,
             url: v.play || v.wmplay,
             cover: v.cover,
             title: v.title,
-            author: v.author?.nickname || 'Creator BR',
-            stats: { views: v.play_count || 0, likes: v.digg_count || 0 },
-            _score: ptScore + enPenalty + engageScore + productBonus
+            duration: v.duration,
+            author: v.author?.nickname || 'Criador',
+            _score: finalScore
           };
         })
-        .filter((v: any) => v._score > -3) // elimina vídeos com forte sinal de inglês
-        .sort((a: any, b: any) => b._score - a._score); // Melhor score primeiro
+        .filter((v: any) => v._score > 40) // Só aceita vídeos com alta confiança
+        .sort((a: any, b: any) => b._score - a._score);
 
-      if (scored.length === 0) throw new Error('Nenhum vídeo PT-BR localizado');
+      if (scored.length === 0) throw new Error('Vídeos encontrados não são precisos o suficiente');
 
       // Remover duplicatas por video_id
       const seen = new Set<string>();
@@ -1020,6 +1156,7 @@ const App: React.FC = () => {
 
   return (
     <div className="app-container overflow-hidden bg-slate-950 text-slate-50 font-inter">
+      {(!isPro && !isLoadingAuth) && <LockScreen />}
       <ScanningHUD active={isScanning} />
       
       <header className="h-20 border-b border-white/5 flex items-center justify-between px-6 bg-slate-950/50 backdrop-blur-xl sticky top-0 z-40">
@@ -1039,6 +1176,14 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-2">
+          {isPro && (
+            <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                {['meu-link', 'admin', 'everton', 'achadinhos_brasil_'].includes((localStorage.getItem('bio_store_slug') || '').toLowerCase()) ? 'SQUAD ADMIN' : 'SQUAD PRO'}
+              </span>
+            </div>
+          )}
           <div className="px-3 py-1.5 rounded-full bg-accent/5 border border-accent/20 flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Status: Link Online</span>
@@ -1510,7 +1655,7 @@ const App: React.FC = () => {
 
                     <button
                       onClick={async () => {
-                        const slug = localStorage.getItem('bio_store_slug') || 'default_user';
+                        const slug = getUserId();
                         if (!bioLink || !bioImageUrl || !bioTitle) {
                           showToast("⚠️ Preencha todos os campos da vitrine!");
                           return;

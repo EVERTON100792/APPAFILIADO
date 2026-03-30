@@ -138,30 +138,50 @@ export class VideoProcessor {
         this.canvas.width = W;
         this.canvas.height = H;
         this.ctx.imageSmoothingEnabled = true;
-        this.ctx.imageSmoothingQuality = 'high';
+        this.ctx.imageSmoothingQuality = 'low'; // Ganho de performance mantendo upscale
         this.auxCanvas.width = W;
         this.auxCanvas.height = H;
         this.auxCtx.imageSmoothingEnabled = true;
-        this.auxCtx.imageSmoothingQuality = 'high';
+        this.auxCtx.imageSmoothingQuality = 'low';
 
         await video.play();
-        this.stream = this.canvas.captureStream(60);
+        
+        // ── NOVO SISTEMA DE ÁUDIO (AudioContext) ──
+        this.stream = this.canvas.captureStream(30); // 30 FPS é suficiente e mais leve que 60
 
         if (!options.isMuted) {
           try {
-            const vs = (video as any).captureStream?.() || (video as any).mozCaptureStream?.();
-            if (vs?.getAudioTracks().length > 0) this.stream.addTrack(vs.getAudioTracks()[0]);
-          } catch { /* sem áudio */ }
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const source = audioCtx.createMediaElementSource(video);
+            const destination = audioCtx.createMediaStreamDestination();
+            source.connect(destination);
+            source.connect(audioCtx.destination); // Mantém o som saindo nos falantes
+            
+            const audioTrack = destination.stream.getAudioTracks()[0];
+            if (audioTrack) {
+              this.stream.addTrack(audioTrack);
+              console.log("[AUDIO] Track de áudio injetada com sucesso via AudioContext");
+            }
+          } catch (audioErr) {
+            console.warn("[AUDIO] Falha ao capturar via AudioContext (CORS provável):", audioErr);
+            // Fallback para captureStream legada
+            try {
+               const vs = (video as any).captureStream?.() || (video as any).mozCaptureStream?.();
+               if (vs?.getAudioTracks().length > 0) this.stream.addTrack(vs.getAudioTracks()[0]);
+            } catch {}
+          }
         }
 
         const mimeType =
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
           MediaRecorder.isTypeSupported('video/mp4;codecs=avc1') ? 'video/mp4;codecs=avc1' :
-          MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
-          MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+
+        console.log(`[RECORDER] Iniciando com MimeType: ${mimeType}`);
 
         this.recorder = new MediaRecorder(this.stream, {
           mimeType,
-          videoBitsPerSecond: 25_000_000,
+          videoBitsPerSecond: 8_000_000, // 8Mbps é balanceado para mobile (era 25Mbps!)
         });
 
         this.chunks = [];
