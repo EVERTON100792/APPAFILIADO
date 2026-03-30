@@ -4,7 +4,7 @@ import {
   Home, Database, Copy, RefreshCcw,
   Shield, Video, Zap, ArrowRight, Activity, Search, RotateCcw,
   Download, Terminal, LayoutGrid, Unlock, ArrowLeft, Volume2, VolumeX, Sparkles, Type,
-  Maximize2, MoveRight, X, Scissors, ShoppingBag
+  Maximize2, MoveRight, X, Scissors, ShoppingBag, Upload
 } from 'lucide-react';
 
 
@@ -98,6 +98,8 @@ const App: React.FC = () => {
   const [activeNiche, setActiveNiche] = useState('Cozinha');
   const [customLink, setCustomLink] = useState('');
   const [consoleLogs, setConsoleLogs] = useState<{msg: string, type?: string}[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [videoResults, setVideoResults] = useState<any[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -935,6 +937,51 @@ const App: React.FC = () => {
   };
 
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validação básica
+    if (!file.type.startsWith('image/')) {
+      showToast("POR FAVOR, SELECIONE UMA IMAGEM! 🖼️");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("IMAGEM MUITO GRANDE! LIMITE 5MB ⚖️");
+      return;
+    }
+
+    setIsUploading(true);
+    showToast("SUBINDO IMAGEM... ⏳");
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `products/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      setBioImageUrl(publicUrl);
+      showToast("IMAGEM ANEXADA COM SUCESSO! ✅");
+    } catch (error: any) {
+      console.error('Erro no upload:', error);
+      showToast(`ERRO NO UPLOAD: ${error.message || 'Tente novamente'}`);
+    } finally {
+      setIsUploading(false);
+      // Limpar o input para permitir selecionar a mesma imagem se necessário
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const runAutomation = (selectedPlatform: 'tiktok' | 'shopee') => {
     navigator.clipboard.writeText(customCopy);
     window.open(getPlatformUrl(selectedPlatform), '_blank');
@@ -1423,14 +1470,31 @@ const App: React.FC = () => {
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] uppercase font-black tracking-widest text-accent/70 ml-1">URL da Imagem</label>
+                     <div className="space-y-1.5">
+                      <div className="flex items-center justify-between ml-1">
+                        <label className="text-[9px] uppercase font-black tracking-widest text-accent/70">URL da Imagem</label>
+                        <button 
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isUploading}
+                          className="text-[9px] font-black uppercase tracking-widest text-accent hover:text-white transition-colors flex items-center gap-1 bg-accent/5 px-2 py-1 rounded-md border border-accent/10"
+                        >
+                          {isUploading ? <RefreshCcw size={10} className="animate-spin" /> : <Upload size={10} />}
+                          {isUploading ? 'SUBINDO...' : 'ANEXAR IMAGEM'}
+                        </button>
+                      </div>
                       <input 
                         type="url" 
                         placeholder="Cole o link da foto do produto..." 
                         value={bioImageUrl} 
                         onChange={e => setBioImageUrl(e.target.value)}
                         className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all"
+                      />
+                      <input 
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageUpload}
+                        accept="image/*"
+                        className="hidden"
                       />
                     </div>
 
