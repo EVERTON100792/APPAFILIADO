@@ -173,8 +173,10 @@ export class VideoProcessor {
         }
 
         const mimeType =
-          MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
+          MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2') ? 'video/mp4;codecs=avc1,mp4a.40.2' :
           MediaRecorder.isTypeSupported('video/mp4;codecs=avc1') ? 'video/mp4;codecs=avc1' :
+          MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
           MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
 
         console.log(`[RECORDER] Iniciando com MimeType: ${mimeType}`);
@@ -192,7 +194,7 @@ export class VideoProcessor {
           const outUrl = URL.createObjectURL(blob);
           const a = document.createElement('a');
           const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-          const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          const ext = 'mp4'; // Força mp4 sempre
           a.href = outUrl;
           a.download = `VIRAL_8K_${ts}.${ext}`;
           a.style.display = 'none';

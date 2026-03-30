@@ -810,7 +810,7 @@ const App: React.FC = () => {
           
           // 1. Match de Palavras-Chave (Obrigatório)
           let matches = 0;
-          coreWords.forEach(w => { if (text.includes(w.toLowerCase())) matches++; });
+          coreWords.forEach((w: string) => { if (text.includes(w.toLowerCase())) matches++; });
           
           const matchRatio = matches / coreWords.length;
           
@@ -1455,6 +1455,7 @@ const App: React.FC = () => {
                     <video 
                       ref={videoRef}
                       src={videoData?.url || ''}
+                      crossOrigin="anonymous"
                       onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                       onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
                       playsInline
