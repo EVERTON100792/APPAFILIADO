@@ -115,6 +115,8 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este produto da sua vitrine?')) return;
+
     const { error } = await supabase.from('bio_store').delete().eq('id', id);
     if (!error) {
       fetchItems();
@@ -383,7 +385,8 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
                     </div>
 
                     <button onClick={() => handleDelete(item.id)}
-                      className="w-12 h-12 flex items-center justify-center text-red-500/20 hover:text-red-500 hover:bg-red-500/10 rounded-2xl transition-all shrink-0 opacity-0 group-hover:opacity-100 mr-2">
+                      className="w-12 h-12 flex items-center justify-center text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-2xl transition-all shrink-0 mr-2 bg-red-500/5 border border-red-500/10"
+                      title="Excluir produto">
                       <Trash2 size={20} />
                     </button>
                   </motion.div>
