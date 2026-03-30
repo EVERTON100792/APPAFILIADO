@@ -199,7 +199,7 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
           </div>
 
           {editingSlug ? (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <div className="flex-1 relative">
                 <AtSign size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" />
                 <input
@@ -212,12 +212,14 @@ export const BioManager: React.FC<{ defaultUserId?: string }> = ({ defaultUserId
                   autoFocus
                 />
               </div>
-              <button onClick={handleSaveSlug} className="px-8 py-4 bg-emerald-500 text-black rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
-                SALVAR
-              </button>
-              <button onClick={() => setEditingSlug(false)} className="px-4 py-4 border border-white/10 rounded-2xl text-slate-400 hover:text-white transition-colors">
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={handleSaveSlug} className="flex-1 sm:flex-none px-8 py-4 bg-emerald-500 text-black rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
+                  SALVAR
+                </button>
+                <button onClick={() => setEditingSlug(false)} className="px-5 py-4 border border-white/10 rounded-2xl text-slate-400 hover:text-white transition-colors">
+                  ✕
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center justify-between gap-4 flex-wrap">
