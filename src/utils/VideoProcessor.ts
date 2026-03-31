@@ -204,11 +204,11 @@ export class VideoProcessor {
         });
 
         videoEncoder.configure({
-          codec: 'avc1.4d002a', // High Profile, Level 4.2 (Máxima compatibilidade 1080p/2K)
+          codec: 'avc1.4d0033', // High Profile, Level 5.1 (Suporta resoluções profissionais e 4K)
           width: W,
           height: H,
           bitrate: 8_000_000,
-          avc: { format: 'avc' } // MP4 exige formato 'avc' (avcC), não 'annexb'
+          avc: { format: 'avc' } // MP4 exige formato 'avc' (avcC)
         });
 
         const audioEncoder = new AudioEncoder({
