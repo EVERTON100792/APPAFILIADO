@@ -33,11 +33,20 @@ function getSmartSearchName(title: string): string {
   return words.slice(0, 3).join(' ');
 }
 
+type Step = 'home' | 'scouting' | 'list' | 'ready' | 'treating' | 'automation' | 'history' | 'bio' | 'plans';
+
 const App: React.FC = () => {
   const bioUserId = new URLSearchParams(window.location.search).get('loja');
   if (bioUserId) return <BioStore userId={bioUserId} />;
 
-  const [step, setStep] = useState('home');
+  const isStoreConfigured = () => {
+    const slug = (localStorage.getItem('bio_store_slug') || '').toLowerCase();
+    const unconfiguredSlugs = ['', 'meu-link', 'admin', 'null', 'undefined', 'default', 'escolha-seu-link'];
+    return slug && !unconfiguredSlugs.includes(slug);
+  };
+
+  // Forçar sempre 'home' como primeira aba ao abrir, se estiver configurado
+  const [step, setStep] = useState<Step>('home');
 
   const [activeFilter, setActiveFilter] = useState('none');
   const [activeTransition, setActiveTransition] = useState('none');
@@ -74,7 +83,8 @@ const App: React.FC = () => {
     { id: 'vhs', name: 'VHS Elite' },
     { id: 'bloom', name: 'Dreamy Bloom' },
     { id: 'cinematic', name: 'Cinematic' },
-    { id: 'bw', name: 'Dramático' }
+    { id: 'bw', name: 'Dramático' },
+    { id: 'ultra8k', name: '💎 8K ULTRA HD' }
   ];
 
   const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
@@ -134,6 +144,11 @@ const App: React.FC = () => {
       videoRef.current.volume = isMuted ? 0 : 1;
     }
   }, [isMuted, videoData]);
+
+  // ── PREVIEW & STABILITY ──
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
   // Ultra-Premium Scanning HUD
   const ScanningHUD = ({ active }: { active: boolean }) => (
@@ -221,7 +236,18 @@ const App: React.FC = () => {
       products: localStorage.getItem('v-products'),
       active: localStorage.getItem('v-active')
     };
-    if (saved.step) setStep(saved.step);
+    // Garantir fluxo de onboarding
+    if (!isStoreConfigured()) {
+      setStep('bio');
+    } else {
+      // Restaurar passo anterior ou ir para home
+      const lastStep = localStorage.getItem('v-step') as Step;
+      if (lastStep && !['scouting', 'ready', 'treating', 'automation'].includes(lastStep)) {
+        setStep(lastStep);
+      } else {
+        setStep('home');
+      }
+    }
     if (saved.products) setProductList(JSON.parse(saved.products));
     
     // Se não houver itens ativos no localStorage, tenta buscar do Supabase
@@ -994,230 +1020,49 @@ const App: React.FC = () => {
     }
   };
 
-  const openVideoPreview = (blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    const previewWindow = window.open('', '_blank');
-    if (!previewWindow) {
-      showToast("⚠️ BLOQUEADOR DE POPUPS ATIVO! LIBERE PARA VER O VÍDEO.");
-      return;
+  const closePreview = () => {
+    setShowDownloadModal(false);
+    if (previewBlob) {
+      URL.revokeObjectURL(URL.createObjectURL(previewBlob));
+      setPreviewBlob(null);
     }
+  };
 
-    const title = selectedProduct?.title || "Seu Vídeo Viral";
-    
-    previewWindow.document.write(`
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Preview Viral Squad - ${title}</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
-        <style>
-          :root {
-            --accent: #06b6d4;
-            --bg: #050505;
-            --card: #0a0a0a;
-            --text: #f8fafc;
-          }
-          * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-          body { 
-            background-color: var(--bg); 
-            color: var(--text); 
-            font-family: 'Inter', sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-            overflow-x: hidden;
-          }
-          .cyber-grid {
-            position: fixed;
-            inset: 0;
-            background-image: 
-              linear-gradient(to right, rgba(6, 182, 212, 0.05) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(6, 182, 212, 0.05) 1px, transparent 1px);
-            background-size: 40px 40px;
-            pointer-events: none;
-            z-index: -1;
-          }
-          .container {
-            max-width: 500px;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-            animation: fadeIn 0.6s ease-out;
-          }
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 8px;
-          }
-          .header h1 {
-            font-weight: 900;
-            font-style: italic;
-            text-transform: uppercase;
-            letter-spacing: -1px;
-            font-size: 24px;
-            line-height: 1;
-          }
-          .header h1 span { color: var(--accent); }
-          .header p {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 3px;
-            color: rgba(255,255,255,0.3);
-            margin-top: 8px;
-          }
-          .video-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 9/16;
-            background: #000;
-            border-radius: 32px;
-            overflow: hidden;
-            border: 2px solid rgba(255,255,255,0.05);
-            box-shadow: 0 40px 100px rgba(0,0,0,0.8), 0 0 30px rgba(6, 182, 212, 0.1);
-          }
-          video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-          }
-          .btn-download {
-            background: var(--accent);
-            color: #000;
-            border: none;
-            padding: 18px;
-            border-radius: 20px;
-            font-weight: 900;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            box-shadow: 0 10px 30px rgba(6, 182, 212, 0.3);
-            width: 100%;
-            margin-top: 10px;
-          }
-          .btn-download:hover {
-            transform: scale(1.02);
-            filter: brightness(1.1);
-            box-shadow: 0 15px 40px rgba(6, 182, 212, 0.4);
-          }
-          .btn-download:active { transform: scale(0.98); }
-          
-          .info-card {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.05);
-            padding: 20px;
-            border-radius: 24px;
-            backdrop-filter: blur(20px);
-          }
-          .info-card h3 {
-            font-size: 14px;
-            font-weight: 900;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-            color: rgba(255,255,255,0.9);
-          }
-          .info-card p {
-            font-size: 12px;
-            color: rgba(255,255,255,0.4);
-            line-height: 1.5;
-          }
-          .footer-note {
-            text-align: center;
-            font-size: 10px;
-            color: rgba(255,255,255,0.2);
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-top: 20px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="cyber-grid"></div>
-        <div class="container">
-          <header class="header">
-            <h1>VIRAL<span>SQUAD</span></h1>
-            <p>Ready to Sync • High Performance</p>
-          </header>
-
-          <div class="video-wrapper">
-            <video src="${url}" controls autoplay loop playsinline></video>
-          </div>
-
-          <div class="info-card">
-            <h3>${title.length > 40 ? title.substring(0, 40) + '...' : title}</h3>
-            <p>O vídeo foi processado com sucesso. Clique no botão abaixo para salvar na sua galeria e começar a lucrar.</p>
-          </div>
-
-          <button class="btn-download" onclick="downloadVideo()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            SALVAR NO DISPOSITIVO
-          </button>
-
-          <p class="footer-note">Garantia de Qualidade SquadOS™ • 1080p Export</p>
-        </div>
-
-        <script>
-          function downloadVideo() {
-            const a = document.createElement('a');
-            a.href = '${url}';
-            a.download = 'video_viral_squad_${Date.now()}.mp4';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-          }
-
-          // Cleanup object URL when window is closed
-          window.onbeforeunload = () => {
-            // No need to manually revoke here as the window is closing, 
-            // but in a real SPA we would.
-          };
-        </script>
-      </body>
-      </html>
-    `);
-    previewWindow.document.close();
+  const triggerDownload = () => {
+    if (!previewBlob || !downloadLinkRef.current) return;
+    const url = URL.createObjectURL(previewBlob);
+    downloadLinkRef.current.href = url;
+    downloadLinkRef.current.download = `viral-squad-${Date.now()}.mp4`;
+    downloadLinkRef.current.click();
+    URL.revokeObjectURL(url);
+    showToast("DOWNLOAD INICIADO! 🚀");
   };
 
   const handleDownload = async () => {
-    if (!videoData?.url) return;
+    if (!videoData || isProcessing) return;
+    setIsPlaying(false);
     setIsProcessing(true);
-    showToast("RENDERIZANDO VÍDEO COM EFEITOS... ⚡");
+    
     try {
       const processor = new VideoProcessor();
       const options: ProcessingOptions = {
         filter: activeFilter,
         legend: videoLegend,
-        isMuted: false, // Força o áudio na exportação, ignorando o mute da UI
+        isMuted: isMuted,
         transition: activeTransition as any,
-        trimStart,
+        trimStart: trimStart,
         trimEnd: trimEnd || undefined,
-        transitionTimestamps,
-        videoId: videoData.id,
+        transitionTimestamps: transitionTimestamps,
         existingVideoEl: videoRef.current || undefined,
         musicUrl: selectedMusic || undefined,
         audioMixMode: audioMixOption
       };
       
-      const videoBlob = await processor.renderVideo(videoData.url, options);
-      openVideoPreview(videoBlob);
-      showToast("VÍDEO PRONTO PARA DOWNLOAD! 🚀");
+      showToast("INICIANDO RENDERIZAÇÃO ULTRA HD... ⚙️");
+      const blob = await processor.renderVideo(videoData.url, options);
+      setPreviewBlob(blob);
+      setShowDownloadModal(true);
+      showToast("VÍDEO PRONTO PARA O SUCESSO! 🔥");
     } catch (error: any) {
       console.error("Video Processing Error:", error);
       showToast("ERRO AO RENDERIZAR — TENTE NOVAMENTE 📲");
@@ -1465,7 +1310,7 @@ const App: React.FC = () => {
           </div>
           <div className="flex flex-col">
             <h1 className="text-xl font-black tracking-tighter uppercase leading-none italic">
-              VIRAL<span className="text-accent">SQUAD</span>
+              VIRAL<span className="text-accent">SQUAD</span> <span className="text-[10px] text-accent/50 ml-1">v1.6.0</span>
             </h1>
             <span className="text-[8px] font-black tracking-[0.3em] uppercase opacity-40">Stealth Engine v4.0</span>
           </div>
@@ -1487,6 +1332,12 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {(!isStoreConfigured()) && (
+        <div className="bg-amber-500 text-black text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center animate-pulse z-[40] sticky top-20">
+          ⚠️ ALERTA SQUAD: CONFIGURE SEU LINK NA ABA LOJA PARA DESBLOQUEAR A PLATAFORMA!
+        </div>
+      )}
+
       <main className="content-area relative z-0">
         <AnimatePresence mode="wait">
           {step === 'bio' && (
@@ -1497,7 +1348,7 @@ const App: React.FC = () => {
               exit={{ opacity: 0, scale: 1.05 }}
               className="h-[calc(100vh-10rem)] overflow-y-auto p-4 md:p-8"
             >
-              <BioManager />
+              <BioManager onProceed={() => setStep('home')} />
             </motion.div>
           )}
           {step === 'home' && (
@@ -1536,10 +1387,14 @@ const App: React.FC = () => {
                 <motion.button 
                   whileHover={{ scale: 1.05, y: -2 }}
                   whileTap={{ scale: 0.95 }}
-                  className="btn-premium"
-                  onClick={startScouting}
+                  className={isStoreConfigured() ? "btn-premium" : "btn-premium border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.2)]"}
+                  onClick={() => isStoreConfigured() ? startScouting() : setStep('bio')}
                 >
-                  INICIAR OPERAÇÃO <Search size={20} />
+                  {isStoreConfigured() ? (
+                    <>INICIAR OPERAÇÃO <Search size={20} /></>
+                  ) : (
+                    <>CONFIGURAR MINHA LOJA <ShoppingBag size={20} /></>
+                  )}
                 </motion.button>
               </div>
             </motion.div>
@@ -2289,29 +2144,51 @@ const App: React.FC = () => {
 
       <nav className="bottom-nav">
         {[
-          { id: 'home', label: 'Início', icon: Home, active: step === 'home' },
-          { id: 'list', label: 'Garimpo', icon: Search, active: ['list','scouting','ready','treating','automation'].includes(step) },
-          { id: 'history', label: 'Cloud', icon: Database, active: step === 'history' },
-          { id: 'bio', label: 'Loja', icon: ShoppingBag, active: step === 'bio' }
-        ].map(tab => (
-          <motion.button 
-            key={tab.id}
-            whileTap={{ scale: 0.85 }}
-            onClick={() => tab.id === 'list' && !productList.length ? startScouting() : setStep(tab.id as any)}
-            className={`nav-item ${tab.active ? 'active' : ''}`}
-          >
-            <div className="relative">
-              {tab.active && (
-                <motion.div 
-                  layoutId="nav-glow"
-                  className="absolute -inset-4 bg-accent/20 rounded-full blur-xl"
-                />
-              )}
-              <tab.icon size={22} className={tab.active ? 'text-accent shadow-accent' : 'text-slate-500'} />
-            </div>
-            <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>
-          </motion.button>
-        ))}
+          { id: 'bio', label: '1. LOJA', icon: ShoppingBag, active: step === 'bio' },
+          { id: 'home', label: '2. INÍCIO', icon: Home, active: step === 'home' },
+          { id: 'list', label: '3. POSTAR', icon: Search, active: ['list','scouting','ready','treating','automation'].includes(step) },
+          { id: 'history', label: '4. CLOUD', icon: Database, active: step === 'history' }
+        ].map(tab => {
+          const isConfigured = isStoreConfigured();
+          const isLocked = tab.id !== 'bio' && !isConfigured;
+
+          return (
+            <motion.button 
+              key={tab.id}
+              whileTap={{ scale: 0.85 }}
+              onClick={() => {
+                if (isLocked) {
+                  showToast("⚠️ CONFIGURE SUA LOJA PRIMEIRO!");
+                  setStep('bio');
+                  return;
+                }
+                if (tab.id === 'list' && !productList.length) {
+                  startScouting();
+                } else {
+                  setStep(tab.id as any);
+                }
+              }}
+              className={`nav-item ${tab.active ? 'active' : ''} ${isLocked ? 'opacity-30 grayscale' : ''}`}
+            >
+              <div className="relative">
+                {tab.active && (
+                  <motion.div 
+                    layoutId="nav-glow"
+                    className="absolute -inset-4 bg-accent/20 rounded-full blur-xl"
+                  />
+                )}
+                {isLocked ? (
+                  <Shield size={18} className="text-yellow-500/50" />
+                ) : (
+                  <tab.icon size={22} className={tab.active ? 'text-accent' : 'text-slate-500'} />
+                )}
+              </div>
+              <span className={`text-[9px] font-black uppercase tracking-widest ${tab.active ? 'text-accent' : 'text-slate-500'}`}>
+                {tab.label}
+              </span>
+            </motion.button>
+          );
+        })}
       </nav>
 
       <AnimatePresence>
@@ -2327,6 +2204,60 @@ const App: React.FC = () => {
                 <span className="text-[11px] font-black italic uppercase tracking-[0.2em]">{toast}</span>
                 <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
              </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <a ref={downloadLinkRef} style={{ display: 'none' }} />
+
+      <AnimatePresence>
+        {showDownloadModal && previewBlob && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-slate-900/50 border border-white/10 rounded-[40px] w-full max-w-md overflow-hidden relative"
+            >
+              <div className="p-8 flex flex-col items-center gap-6">
+                <div className="w-full aspect-[9/16] bg-black rounded-3xl overflow-hidden border border-white/5 shadow-2xl relative group">
+                  <video 
+                    src={URL.createObjectURL(previewBlob)} 
+                    className="w-full h-full object-cover"
+                    controls
+                    autoPlay
+                    loop
+                  />
+                  <div className="absolute inset-0 pointer-events-none border-2 border-accent/20 rounded-3xl" />
+                </div>
+
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-black italic tracking-tighter uppercase">VÍDEO PRONTO! 🔥</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Sua máquina de vendas foi gerada</p>
+                </div>
+
+                <div className="flex flex-col w-full gap-3">
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={triggerDownload}
+                    className="w-full py-5 bg-accent text-black font-black uppercase italic tracking-widest rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.4)] flex items-center justify-center gap-3"
+                  >
+                    <span>BAIXAR AGORA</span>
+                  </motion.button>
+                  
+                  <button 
+                    onClick={closePreview}
+                    className="w-full py-4 text-slate-500 font-bold uppercase text-[10px] tracking-widest hover:text-white transition-colors"
+                  >
+                    VOLTAR AO EDITOR
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

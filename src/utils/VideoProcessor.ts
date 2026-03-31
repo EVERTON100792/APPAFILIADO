@@ -21,7 +21,6 @@ export class VideoProcessor {
   private auxCtx: CanvasRenderingContext2D;
   private ownedVideo: HTMLVideoElement;
   private stream: MediaStream | null = null;
-  private readonly UPSCALE = 2;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -41,6 +40,7 @@ export class VideoProcessor {
       case 'bw':        return 'grayscale(1) contrast(1.5) brightness(1.05)';
       case 'bloom':     return 'brightness(1.2) saturate(1.3)';
       case 'glitch':    return 'hue-rotate(90deg) brightness(1.2) contrast(1.25)';
+      case 'ultra8k':   return 'contrast(1.25) saturate(1.4) brightness(1.1) drop-shadow(0 0 10px rgba(6, 182, 212, 0.2))';
       default:          return 'contrast(1.08) saturate(1.08)';
     }
   }
@@ -124,14 +124,22 @@ export class VideoProcessor {
         const vH = video.videoHeight;
         if (!vW || !vH) { reject(new Error('Dimensões inválidas')); return; }
 
-        // H.264 exige dimensões pares
-        const W = Math.floor((vW * this.UPSCALE) / 2) * 2;
-        const H = Math.floor((vH * this.UPSCALE) / 2) * 2;
+        // MODO 8K / ESTABILIDADE MOBILE
+        // Se ultra8k, miramos em 1080p (Full HD de cinema). Se normal, 720p (Segurança Mobile).
+        const isUltra = options.filter === 'ultra8k';
+        const targetH = isUltra ? 1920 : 1280;
+        
+        let scale = targetH / vH;
+        // Impedir upscale exagerado que trava o Chrome Mobile
+        if (scale > 2.5) scale = 2.5; 
+
+        const W = Math.floor((vW * scale) / 2) * 2;
+        const H = Math.floor((vH * scale) / 2) * 2;
         
         this.canvas.width = W;
         this.canvas.height = H;
         this.ctx.imageSmoothingEnabled = true;
-        this.ctx.imageSmoothingQuality = 'low';
+        this.ctx.imageSmoothingQuality = 'high';
         this.auxCanvas.width = W;
         this.auxCanvas.height = H;
         this.auxCtx.imageSmoothingEnabled = true;
@@ -204,11 +212,11 @@ export class VideoProcessor {
         });
 
         videoEncoder.configure({
-          codec: 'avc1.4d0033', // High Profile, Level 5.1 (Suporta resoluções profissionais e 4K)
+          codec: 'avc1.4d0033', // High Profile, Level 5.1
           width: W,
           height: H,
-          bitrate: 8_000_000,
-          avc: { format: 'avc' } // MP4 exige formato 'avc' (avcC)
+          bitrate: isUltra ? 12_000_000 : 6_000_000,
+          avc: { format: 'avc' }
         });
 
         const audioEncoder = new AudioEncoder({
@@ -246,7 +254,7 @@ export class VideoProcessor {
         const renderFrame = () => {
           const ct = video.currentTime;
           if ((options.trimEnd && ct >= options.trimEnd) || video.paused || video.ended) { 
-             this.finishEncoding(videoEncoder, audioEncoder, muxer, options, wasMuted, wasVolume, blobUrl, resolve);
+             this.finishEncoding(videoEncoder, audioEncoder, muxer, options, wasMuted, wasVolume, blobUrl, resolve, reject);
              return; 
           }
 
@@ -416,7 +424,8 @@ export class VideoProcessor {
     wasMuted: boolean,
     wasVolume: number,
     blobUrl: string | null,
-    resolve: (blob: Blob) => void
+    resolve: (blob: Blob) => void,
+    reject: (err: any) => void
   ) {
     if (videoEncoder.state === 'closed') return;
     
@@ -438,12 +447,20 @@ export class VideoProcessor {
         options.existingVideoEl.play().catch(() => {});
       }
 
-      console.log("[ENCODER] Renderização MP4 finalizada!");
+      // IMPORTANTE: Liberar memória para evitar que o Chrome feche no celular
       videoEncoder.close();
-      audioEncoder.close();
+      if (audioEncoder.state !== 'closed') audioEncoder.close();
+
+      console.log("[ENCODER] Renderização MP4 finalizada!");
       resolve(blob);
-    } catch (e) {
-      console.error("[ENCODER] Erro ao finalizar:", e);
+    } catch (err) {
+      console.error("Erro ao finalizar muxer:", err);
+      // Garantir cleanup em caso de erro
+      try { 
+        videoEncoder.close(); 
+        if (audioEncoder.state !== 'closed') audioEncoder.close(); 
+      } catch {}
+      reject(err);
     }
   }
 }

@@ -27,7 +27,7 @@ const PRO_TIPS = [
   "🔥 O link personalizado 'meusachadinhos' é o que mais converte no TikTok."
 ];
 
-export const BioManager: React.FC = () => {
+export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -316,6 +316,26 @@ export const BioManager: React.FC = () => {
             </div>
           </motion.div>
         </AnimatePresence>
+
+        {/* Botão de Prosseguir para o Garimpo */}
+        {storeSlug && storeSlug !== 'meu-link' && onProceed && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pt-4"
+          >
+            <motion.button
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onProceed}
+              className="w-full py-6 bg-gradient-to-r from-emerald-500 to-emerald-400 text-black font-black uppercase italic tracking-[0.2em] rounded-3xl shadow-[0_20px_50px_rgba(16,185,129,0.3)] flex items-center justify-center gap-4 group"
+            >
+              <Zap size={24} fill="currentColor" className="group-hover:animate-pulse" />
+              <span>PÁGINA CONFIGURADA! IR PARA O GARIMPO</span>
+              <ExternalLink size={24} />
+            </motion.button>
+          </motion.div>
+        )}
       </motion.div>
 
       {/* Grid: Form + List */}
