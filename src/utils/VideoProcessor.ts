@@ -124,8 +124,10 @@ export class VideoProcessor {
         const vH = video.videoHeight;
         if (!vW || !vH) { reject(new Error('Dimensões inválidas')); return; }
 
-        const W = vW * this.UPSCALE;
-        const H = vH * this.UPSCALE;
+        // H.264 exige dimensões pares
+        const W = Math.floor((vW * this.UPSCALE) / 2) * 2;
+        const H = Math.floor((vH * this.UPSCALE) / 2) * 2;
+        
         this.canvas.width = W;
         this.canvas.height = H;
         this.ctx.imageSmoothingEnabled = true;
@@ -202,11 +204,11 @@ export class VideoProcessor {
         });
 
         videoEncoder.configure({
-          codec: 'avc1.4d0033', // High Profile, Level 5.1 (Suporta até 4K)
+          codec: 'avc1.4d002a', // High Profile, Level 4.2 (Máxima compatibilidade 1080p/2K)
           width: W,
           height: H,
           bitrate: 8_000_000,
-          avc: { format: 'annexb' }
+          avc: { format: 'avc' } // MP4 exige formato 'avc' (avcC), não 'annexb'
         });
 
         const audioEncoder = new AudioEncoder({
