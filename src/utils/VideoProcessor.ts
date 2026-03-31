@@ -142,7 +142,9 @@ export class VideoProcessor {
 
         if (!options.isMuted) {
           try {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
+              sampleRate: 44100
+            });
             const destination = audioCtx.createMediaStreamDestination();
             
             const originalSource = audioCtx.createMediaElementSource(video);
@@ -200,10 +202,10 @@ export class VideoProcessor {
         });
 
         videoEncoder.configure({
-          codec: 'avc1.424028', 
+          codec: 'avc1.4d0033', // High Profile, Level 5.1 (Suporta até 4K)
           width: W,
           height: H,
-          bitrate: 6_000_000,
+          bitrate: 8_000_000,
           avc: { format: 'annexb' }
         });
 
@@ -259,10 +261,18 @@ export class VideoProcessor {
 
           const timestamp = (ct - startTime) * 1_000_000;
           const frame = new VideoFrame(this.canvas, { timestamp });
-          videoEncoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
-          frame.close();
+          
+          try {
+            if (videoEncoder.state === 'configured') {
+              videoEncoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
+            }
+          } catch (e) {
+            console.error("[VIDEO ENCODER] Erro ao codificar frame:", e);
+          } finally {
+            frame.close();
+          }
+          
           frameCount++;
-
           if (video.readyState >= 2) requestAnimationFrame(renderFrame);
         };
 
