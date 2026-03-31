@@ -804,16 +804,20 @@ const App: React.FC = () => {
 
   const addToBio = async (p: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    const { error } = await supabase.from('bio_store').insert({
-      user_id: getUserId(),
-      title: p.title,
-      image_url: p.image || p.thumbnail || 'https://placehold.co/200x200/0a0a0a/ff6b6b?text=🛒',
-      affiliate_link: p.link || p.url || `https://shopee.com.br/search?keyword=${encodeURIComponent(p.title)}`
-    });
-    if (!error) {
-      showToast('✅ Produto publicado na sua Bio!');
-    } else {
-      showToast('❌ Erro ao publicar na Bio');
+    try {
+      const { error } = await supabase.from('bio_store').insert({
+        user_id: getUserId(),
+        title: p.title,
+        image_url: p.image || p.thumbnail || '',
+        price: p.price,
+        link: p.link || p.url,
+        category: activeNiche
+      });
+      if (error) throw error;
+      showToast("PRODUTO ADICIONADO À BIO! 🛒");
+    } catch (err) {
+      console.error(err);
+      showToast("ERRO AO SALVAR NA BIO");
     }
   };
 
@@ -825,26 +829,30 @@ const App: React.FC = () => {
       let baseTerm = product.query || product.title || '';
       baseTerm = baseTerm
         .replace(/[^a-zA-ZÀ-ÿ0-9 ]/g, ' ')
-        .replace(/\b(oferta|promoção|queima|estoque|barato|shopee|link|bio|brasil|br|kit|conjunto|pacote|unidade|und|pcs|peças|peça)\b/gi, '')
+        // Remove termos genéricos que inflam as buscas com lixo
+        .replace(/\b(oferta|promoção|queima|estoque|barato|shopee|link|bio|brasil|br|kit|conjunto|pacote|unidade|und|pcs|peças|peça|novo|nova|original|oficial|compre|aqui|clique|veja|olha)\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
 
-      const stopWords = new Set(['de','do','da','dos','das','para','com','em','no','na','um','uma','os','as','o','a','e']);
-      const coreWords = baseTerm.split(' ').filter((w: string) => w.length > 2 && !stopWords.has(w.toLowerCase())).slice(0, 4);
+      const stopWords = new Set(['de','do','da','dos','das','para','com','em','no','na','um','uma','os','as','o','a','e','por','seu','sua']);
+      const coreWords = baseTerm.split(' ').filter((w: string) => w.length > 2 && !stopWords.has(w.toLowerCase())).slice(0, 3);
       
       if (coreWords.length === 0) throw new Error('Nome do produto muito curto para busca precisa');
       
       const coreQuery = coreWords.join(' ');
 
-      // ── ETAPA 2: Estratégias de busca cirúrgicas
+      // ── ETAPA 2: Estratégias de busca cirúrgicas (Forçando Brasil)
       const strategies = [
-        { query: `${coreQuery} review brasil`, extraParams: '&region=BR' },
-        { query: `achadinho ${coreQuery}`, extraParams: '&region=BR' },
-        { query: `${coreQuery} teste`, extraParams: '&region=BR' },
+        { query: `${coreQuery} shopee brasil`, extraParams: '&region=BR' },
+        { query: `${coreQuery} achadinhos brasil`, extraParams: '&region=BR' },
+        { query: `${coreQuery} unboxing brasil`, extraParams: '&region=BR' },
       ];
 
-      const ptBrPattern = /[àáâãéêíóôõúüçÀÁÂÃÉÊÍÓÔÕÚÜÇ]|achei|comprei|chegou|resenha|unbox|barato|produto/i;
-      const englishPattern = /\b(the|this|my|is|are|was|were|that|with|from|have|you|for|and|but|review|unboxing|test|wow|omg|cool)\b/i;
+      // Padrões de Idioma Reforçados
+      const ptBrPattern = /[àáâãéêíóôõúüçÀÁÂÃÉÊÍÓÔÕÚÜÇ]|achei|comprei|chegou|resenha|unbox|barato|produto|dica|comprinhas|testando|provador|recomendo/i;
+      const englishPattern = /\b(the|this|my|is|are|was|were|that|with|from|have|you|for|and|but|it|an|at|by|on)\b/i;
+      const spanishPattern = /\b(el|la|los|las|con|para|este|esta|un|una|pero|por|del|al)\b/i;
+      const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; // Detecta Chinês, Árabe, etc.
 
       let allVideos: any[] = [];
       for (const strategy of strategies) {
@@ -859,34 +867,50 @@ const App: React.FC = () => {
             allVideos = [...allVideos, ...json.data.videos];
           }
         } catch {}
-        if (allVideos.length >= 15) break;
+        if (allVideos.length >= 10) break;
       }
 
       if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado para este produto');
 
-      // ── ETAPA 3: Filtragem RADICAL de relevância
+      // ── ETAPA 3: Filtragem RADICAL de relevância (100% Match)
       const scored = allVideos
         .filter((v: any) => (v.play || v.wmplay) && v.duration > 5) // Mínimo 5 seg
         .map((v: any) => {
-          const text = `${v.title || ''} ${v.author?.nickname || ''} ${v.music_info?.title || ''}`.toLowerCase();
+          const title = (v.title || '').toLowerCase();
+          const author = (v.author?.nickname || '').toLowerCase();
+          const music = (v.music_info?.title || '').toLowerCase();
+          const text = `${title} ${author} ${music}`;
           
-          // 1. Match de Palavras-Chave (Obrigatório)
+          // 1. Match de Palavras-Chave (MODO 100% ESTRITO)
           let matches = 0;
-          coreWords.forEach((w: string) => { if (text.includes(w.toLowerCase())) matches++; });
+          coreWords.forEach((w: string) => { 
+            if (text.includes(w.toLowerCase())) matches++; 
+          });
           
           const matchRatio = matches / coreWords.length;
           
-          // 2. Penalidade de Idioma
-          const ptScore = ptBrPattern.test(text) ? 20 : 0;
-          const enPenalty = englishPattern.test(text) ? -30 : 0;
+          // 2. Análise de Idioma e Scripts
+          const isBrazilian = ptBrPattern.test(text);
+          const isEnglish = englishPattern.test(text);
+          const isSpanish = spanishPattern.test(text);
+          const hasForeignScript = nonLatinPattern.test(text);
           
-          // 3. Blacklist de Lixo Aguda
-          const blackList = ['dance', 'funny', 'cat', 'dog', 'pubg', 'freefire', 'roblox', 'edit', 'anime', 'meme'];
-          const garbagePenalty = blackList.some(w => text.includes(w)) ? -100 : 0;
+          let langScore = 0;
+          if (hasForeignScript) langScore = -2000; // REJEIÇÃO TOTAL (Ásia/Árabe)
+          else if (isBrazilian) langScore = 100;    // ALTO BÔNUS BR
+          
+          let langPenalty = 0;
+          if (isEnglish) langPenalty = -1000;  // REJEIÇÃO (EUA/Global)
+          if (isSpanish) langPenalty = -1000;  // REJEIÇÃO (LATAM)
 
-          // Score final: Prioridade TOTAL para o match de palavras
-          // Se não tiver ao menos 1 match, o score despenca
-          const finalScore = (matches === 0 ? -100 : (matchRatio * 100) + ptScore + enPenalty + garbagePenalty);
+          // 3. Blacklist de Lixo Aguda
+          const blackList = ['dance', 'funny', 'cat', 'dog', 'pubg', 'freefire', 'roblox', 'edit', 'anime', 'meme', 'gameplay'];
+          const garbagePenalty = blackList.some(w => text.includes(w)) ? -500 : 0;
+
+          // 4. RELEVÂNCIA 100% EXIGIDA (Todas as 3 palavras-chave core devem bater)
+          const relevancePass = matches >= coreWords.length;
+          
+          const finalScore = (!relevancePass ? -1000 : (matchRatio * 100) + langScore + langPenalty + garbagePenalty);
 
           return {
             id: v.video_id,
@@ -898,7 +922,7 @@ const App: React.FC = () => {
             _score: finalScore
           };
         })
-        .filter((v: any) => v._score > 40) // Só aceita vídeos com alta confiança
+        .filter((v: any) => v._score > 80) // Só aceita o crème de la crème
         .sort((a: any, b: any) => b._score - a._score);
 
       if (scored.length === 0) throw new Error('Vídeos encontrados não são precisos o suficiente');
@@ -937,6 +961,7 @@ const App: React.FC = () => {
       setIsScanning(false);
     }
   };
+
 
 
   const swapVideo = () => {
