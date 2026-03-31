@@ -1,3 +1,4 @@
+import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 
 export interface ProcessingOptions {
   filter: string;
@@ -16,13 +17,11 @@ export interface ProcessingOptions {
 export class VideoProcessor {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  // Canvas auxiliar: recebe frame bruto; ctx.filter é aplicado ao copiar para o canvas principal
   private auxCanvas: HTMLCanvasElement;
   private auxCtx: CanvasRenderingContext2D;
   private ownedVideo: HTMLVideoElement;
+  private activeAudioDestination: MediaStreamAudioDestinationNode | null = null;
   private stream: MediaStream | null = null;
-  private recorder: MediaRecorder | null = null;
-  private chunks: Blob[] = [];
   private readonly UPSCALE = 2;
 
   constructor() {
@@ -57,7 +56,7 @@ export class VideoProcessor {
     for (const proxy of proxies) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos max por proxy
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         const res = await fetch(proxy(url), { cache: 'no-cache', signal: controller.signal });
         clearTimeout(timeoutId);
         
@@ -69,7 +68,7 @@ export class VideoProcessor {
         console.warn('Proxy falhou: ', proxy('...'));
       }
     }
-    return url; // fallback: URL original
+    return url;
   }
 
   public async processAndDownload(videoUrl: string, options: ProcessingOptions): Promise<void> {
@@ -77,16 +76,15 @@ export class VideoProcessor {
       try {
         let video: HTMLVideoElement;
         let blobUrl: string | null = null;
-
         let useExisting = false;
+
         if (options.existingVideoEl && options.existingVideoEl.readyState >= 2) {
           try {
-            // Verifica se o vídeo irá corromper/taintar o Canvas (CORS)
             const testC = document.createElement('canvas');
             testC.width = 1; testC.height = 1;
             const testCtx = testC.getContext('2d')!;
             testCtx.drawImage(options.existingVideoEl, 0, 0, 1, 1);
-            testCtx.getImageData(0, 0, 1, 1); // Dispara erro se cruzou origem indevidamente
+            testCtx.getImageData(0, 0, 1, 1);
             useExisting = true;
           } catch (e) {
             console.warn("⚠️ Vídeo UI bloqueado por CORS. Usando fallback via Proxy...");
@@ -98,28 +96,22 @@ export class VideoProcessor {
         let wasVolume = 1;
 
         if (useExisting && options.existingVideoEl) {
-          // ✅ Usar o elemento que já está carregado na UI (limpo e sem CORS block)
           video = options.existingVideoEl;
-          video.loop = false; // Força para não repetir, garantindo o onended
+          video.loop = false;
           const wasPaused = video.paused;
-          
           wasMuted = video.muted;
           wasVolume = video.volume;
-          // Unmute hardware output temporarily to inject stream correctly 
           video.muted = false;
           video.volume = 1;
-
           video.currentTime = options.trimStart || 0;
           await new Promise<void>(r => { video.onseeked = () => r(); setTimeout(r, 1500); });
           if (wasPaused) video.pause();
         } else {
-          // Fallback: tentar baixar via proxy
           video = this.ownedVideo;
           const sourceUrl = await this.fetchVideoAsBlob(videoUrl);
           blobUrl = sourceUrl.startsWith('blob:') ? sourceUrl : null;
           video.crossOrigin = blobUrl ? '' : 'anonymous';
           video.src = sourceUrl;
-
           const timeout = setTimeout(() => reject(new Error('Timeout')), 25000);
           await new Promise<void>((res, rej) => {
             video.onloadedmetadata = () => { clearTimeout(timeout); res(); };
@@ -135,11 +127,10 @@ export class VideoProcessor {
 
         const W = vW * this.UPSCALE;
         const H = vH * this.UPSCALE;
-
         this.canvas.width = W;
         this.canvas.height = H;
         this.ctx.imageSmoothingEnabled = true;
-        this.ctx.imageSmoothingQuality = 'low'; // Ganho de performance mantendo upscale
+        this.ctx.imageSmoothingQuality = 'low';
         this.auxCanvas.width = W;
         this.auxCanvas.height = H;
         this.auxCtx.imageSmoothingEnabled = true;
@@ -147,180 +138,143 @@ export class VideoProcessor {
 
         await video.play();
         
-        // ── NOVO SISTEMA DE ÁUDIO (AudioContext) ──
-        this.stream = this.canvas.captureStream(30); // 30 FPS é suficiente e mais leve que 60
+        this.stream = this.canvas.captureStream(30); 
+        let audioTrackToEncode: MediaStreamTrack | null = null;
 
         if (!options.isMuted) {
           try {
             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
             const destination = audioCtx.createMediaStreamDestination();
+            this.activeAudioDestination = destination;
             
             const originalSource = audioCtx.createMediaElementSource(video);
             const originalGain = audioCtx.createGain();
-            
-            // Lógica de mixagem baseada na opção do usuário
             const mode = options.audioMixMode || 'original';
             
-            // Configurar Volumes Base
-            if (mode === 'original') {
-              originalGain.gain.value = 1;
-            } else if (mode === 'mix') {
-              originalGain.gain.value = 0.4; // Voz original ao fundo
-            } else {
-              originalGain.gain.value = 0; // Silenciado
-            }
+            if (mode === 'original') originalGain.gain.value = 1;
+            else if (mode === 'mix') originalGain.gain.value = 0.4;
+            else originalGain.gain.value = 0;
 
             originalSource.connect(originalGain);
             originalGain.connect(destination);
             originalGain.connect(audioCtx.destination);
 
-            // Carregar e Mixar Música se houver
             if (options.musicUrl && mode !== 'original') {
-               const musicAudio = new Audio();
-               musicAudio.crossOrigin = "anonymous";
-               
-               // Tenta carregar normalmente, se falhar usa proxy
-               musicAudio.onerror = () => {
-                 if (musicAudio.src === options.musicUrl) {
-                   console.warn("⚠️ Som bloqueado por CORS. Fallback via Proxy...");
-                   musicAudio.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(options.musicUrl!)}`;
-                 }
-               };
-               
-               musicAudio.src = options.musicUrl;
-               musicAudio.loop = true;
-               
-               const musicSource = audioCtx.createMediaElementSource(musicAudio);
-               const musicGain = audioCtx.createGain();
-               
-               if (mode === 'mix') {
-                 musicGain.gain.value = 0.8; // Música de fundo firme
-               } else {
-                 musicGain.gain.value = 1; // Somente música
-               }
-               
-               musicSource.connect(musicGain);
-               musicGain.connect(destination);
-               
-               // Sincronizar play da música
-               musicAudio.currentTime = Math.random() * 20; // Começa em ponto aleatório para 'tempero'
-               musicAudio.play().catch(e => console.warn("[MUSIC] Play falhou:", e));
-               
-               // Cleanup no stop
-               const oldOnStop = this.recorder?.onstop;
-               if (this.recorder) {
-                 this.recorder.onstop = (e) => {
-                   musicAudio.pause();
-                   if (oldOnStop) (oldOnStop as any)(e);
-                 };
-               }
+                const musicAudio = new Audio();
+                musicAudio.crossOrigin = "anonymous";
+                musicAudio.onerror = () => {
+                  if (musicAudio.src === options.musicUrl) {
+                    musicAudio.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(options.musicUrl!)}`;
+                  }
+                };
+                musicAudio.src = options.musicUrl;
+                musicAudio.loop = true;
+                
+                const musicSource = audioCtx.createMediaElementSource(musicAudio);
+                const musicGain = audioCtx.createGain();
+                musicGain.gain.value = mode === 'mix' ? 0.8 : 1;
+                
+                musicSource.connect(musicGain);
+                musicGain.connect(destination);
+                musicAudio.currentTime = Math.random() * 20;
+                musicAudio.play().catch(() => {});
+                video.addEventListener('pause', () => musicAudio.pause(), { once: true });
             }
             
-            const audioTrack = destination.stream.getAudioTracks()[0];
-            if (audioTrack) {
-              this.stream.addTrack(audioTrack);
-              console.log(`[AUDIO] Mix [${mode}] pronto.`);
-            }
+            audioTrackToEncode = destination.stream.getAudioTracks()[0];
+            if (audioTrackToEncode) this.stream.addTrack(audioTrackToEncode);
           } catch (audioErr) {
-            console.warn("[AUDIO] Falha ao capturar via AudioContext (CORS provável):", audioErr);
-            try {
-               const vs = (video as any).captureStream?.() || (video as any).mozCaptureStream?.();
-               if (vs?.getAudioTracks().length > 0) this.stream.addTrack(vs.getAudioTracks()[0]);
-            } catch {}
+            console.warn("[AUDIO] AudioContext fail:", audioErr);
           }
         }
 
-        const mimeType =
-          MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2') ? 'video/mp4;codecs=avc1,mp4a.40.2' :
-          MediaRecorder.isTypeSupported('video/mp4;codecs=avc1') ? 'video/mp4;codecs=avc1' :
-          MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
-          MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
-          MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
-
-        console.log(`[RECORDER] Iniciando com MimeType: ${mimeType}`);
-
-        this.recorder = new MediaRecorder(this.stream, {
-          mimeType,
-          videoBitsPerSecond: 8_000_000, // 8Mbps é balanceado para mobile (era 25Mbps!)
+        const muxer = new Muxer({
+          target: new ArrayBufferTarget(),
+          video: { codec: 'avc', width: W, height: H },
+          audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 },
+          fastStart: 'in-memory',
+          firstTimestampBehavior: 'offset'
         });
 
-        this.chunks = [];
-        this.recorder.ondataavailable = e => { if (e.data.size > 0) this.chunks.push(e.data); };
+        const videoEncoder = new VideoEncoder({
+          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+          error: (e) => console.error("[VIDEO ENCODER] Erro:", e)
+        });
 
-        this.recorder.onstop = () => {
-          const blob = new Blob(this.chunks, { type: mimeType });
-          const outUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-          const ext = 'mp4'; // Força mp4 sempre
-          a.href = outUrl;
-          a.download = `VIRAL_8K_${ts}.${ext}`;
-          a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(outUrl); }, 500);
-          if (blobUrl) URL.revokeObjectURL(blobUrl);
+        videoEncoder.configure({
+          codec: 'avc1.424028', 
+          width: W,
+          height: H,
+          bitrate: 6_000_000,
+          avc: { format: 'annexb' }
+        });
 
-          // Restaura o video original caso esteja rodando na UI
-          if (options.existingVideoEl) {
-            options.existingVideoEl.muted = wasMuted;
-            options.existingVideoEl.volume = wasVolume;
-            options.existingVideoEl.loop = true;
-            options.existingVideoEl.play().catch(() => {});
-          }
+        const audioEncoder = new AudioEncoder({
+          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+          error: (e) => console.error("[AUDIO ENCODER] Erro:", e)
+        });
 
-          resolve();
-        };
+        audioEncoder.configure({
+          codec: 'mp4a.40.2', 
+          numberOfChannels: 2,
+          sampleRate: 44100,
+          bitrate: 128_000
+        });
 
-        // Primeiro frame (evita preto)
-        this.ctx.drawImage(video, 0, 0, W, H);
-        this.recorder.start(100);
+        if (audioTrackToEncode) {
+          const processor = new (window as any).MediaStreamTrackProcessor({ track: audioTrackToEncode });
+          const reader = processor.readable.getReader();
+          const readAudio = async () => {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (audioEncoder.state === 'configured') audioEncoder.encode(value);
+              value.close();
+            }
+          };
+          readAudio();
+        }
 
+        let frameCount = 0;
+        const startTime = video.currentTime;
         const filterCSS = this.getFilterCSS(options.filter || 'none');
         const transition = options.transition || 'none';
         const transitionTs = options.transitionTimestamps || [];
 
         const renderFrame = () => {
-          if (video.paused || video.ended) return;
           const ct = video.currentTime;
-          if (options.trimEnd && ct >= options.trimEnd) { this.recorder?.stop(); return; }
+          if ((options.trimEnd && ct >= options.trimEnd) || video.paused || video.ended) { 
+             this.finishEncoding(videoEncoder, audioEncoder, muxer, options, wasMuted, wasVolume, blobUrl, resolve);
+             return; 
+          }
 
-          // 1. Frame bruto no canvas auxiliar
           this.auxCtx.clearRect(0, 0, W, H);
           this.auxCtx.drawImage(video, 0, 0, W, H);
-
-          // 2. Limpa canvas principal
           this.ctx.clearRect(0, 0, W, H);
-
-          // 3. Aplica filtro ANTES do drawImage (único método correto no Canvas API)
           this.ctx.filter = filterCSS;
           this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
           this.ctx.filter = 'none';
 
-          // 4. Transições
           const isTransition = transitionTs.some(t => ct >= t && ct < t + 1.5);
           if (isTransition) this.applyTransitionEffect(transition, ct, transitionTs, W, H);
-
-          // 5. Legenda
           if (options.legend) this.drawLegend(options.legend, W, H);
+
+          const timestamp = (ct - startTime) * 1_000_000;
+          const frame = new VideoFrame(this.canvas, { timestamp });
+          videoEncoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
+          frame.close();
+          frameCount++;
 
           if (video.readyState >= 2) requestAnimationFrame(renderFrame);
         };
 
         renderFrame();
-
-        // Auto-stop ao fim do vídeo
-        video.onended = () => { setTimeout(() => this.recorder?.stop(), 300); };
       } catch (err) {
-        if (options.existingVideoEl) {
-          options.existingVideoEl.loop = true; // Restaura no caso de falha
-        }
+        if (options.existingVideoEl) options.existingVideoEl.loop = true;
         reject(err);
       }
     });
   }
-
-
 
   private applyTransitionEffect(type: string, ct: number, timestamps: number[], W: number, H: number) {
     const ts = timestamps.find(t => ct >= t && ct < t + 1.5) || 0;
@@ -393,9 +347,8 @@ export class VideoProcessor {
         break;
       }
       case 'rotate': {
-        // Simulação de Giro 3D avançada (rotateY + zoom dinâmico)
-        const scaleX = Math.cos(progress * Math.PI * 2); // Vai de 1 -> -1 -> 1 (efeito de moeda/giro)
-        const scaleY = 1 + Math.sin(progress * Math.PI) * 0.15; // Suave aproximação do vídeo
+        const scaleX = Math.cos(progress * Math.PI * 2); 
+        const scaleY = 1 + Math.sin(progress * Math.PI) * 0.15; 
         this.ctx.save();
         this.ctx.translate(W / 2, H / 2);
         this.ctx.scale(scaleX * scaleY, scaleY);
@@ -439,10 +392,62 @@ export class VideoProcessor {
     this.ctx.arcTo(bx, startY - 8, bx + bw, startY - 8, r);
     this.ctx.closePath();
     this.ctx.fill();
-
     this.ctx.fillStyle = '#FFFFFF';
     lines.forEach((line, i) => {
       this.ctx.fillText(line, W / 2, startY + (i + 1) * lh - 4);
     });
+  }
+
+  private async finishEncoding(
+    videoEncoder: VideoEncoder, 
+    audioEncoder: AudioEncoder, 
+    muxer: Muxer<ArrayBufferTarget>,
+    options: ProcessingOptions,
+    wasMuted: boolean,
+    wasVolume: number,
+    blobUrl: string | null,
+    resolve: () => void
+  ) {
+    if (videoEncoder.state === 'closed') return;
+    
+    console.log("[ENCODER] Finalizando Muxer...");
+    try {
+      await videoEncoder.flush();
+      if (audioEncoder.state === 'configured') await audioEncoder.flush();
+      muxer.finalize();
+
+      const { buffer } = muxer.target;
+      const blob = new Blob([buffer], { type: 'video/mp4' });
+      const outUrl = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.href = outUrl;
+      a.download = `VIRAL_PRO_${ts}.mp4`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => { 
+        document.body.removeChild(a); 
+        URL.revokeObjectURL(outUrl); 
+      }, 500);
+
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+
+      if (options.existingVideoEl) {
+        options.existingVideoEl.muted = wasMuted;
+        options.existingVideoEl.volume = wasVolume;
+        options.existingVideoEl.loop = true;
+        options.existingVideoEl.play().catch(() => {});
+      }
+
+      console.log("[ENCODER] Exportação MP4 Real finalizada!");
+      videoEncoder.close();
+      audioEncoder.close();
+      resolve();
+    } catch (e) {
+      console.error("[ENCODER] Erro ao finalizar:", e);
+    }
   }
 }
