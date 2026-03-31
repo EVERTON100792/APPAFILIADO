@@ -964,6 +964,207 @@ const App: React.FC = () => {
     }
   };
 
+  const openVideoPreview = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
+      showToast("⚠️ BLOQUEADOR DE POPUPS ATIVO! LIBERE PARA VER O VÍDEO.");
+      return;
+    }
+
+    const title = selectedProduct?.title || "Seu Vídeo Viral";
+    
+    previewWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Preview Viral Squad - ${title}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+        <style>
+          :root {
+            --accent: #06b6d4;
+            --bg: #050505;
+            --card: #0a0a0a;
+            --text: #f8fafc;
+          }
+          * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+          body { 
+            background-color: var(--bg); 
+            color: var(--text); 
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+          }
+          .cyber-grid {
+            position: fixed;
+            inset: 0;
+            background-image: 
+              linear-gradient(to right, rgba(6, 182, 212, 0.05) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(6, 182, 212, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: -1;
+          }
+          .container {
+            max-width: 500px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            animation: fadeIn 0.6s ease-out;
+          }
+          @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 8px;
+          }
+          .header h1 {
+            font-weight: 900;
+            font-style: italic;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+            font-size: 24px;
+            line-height: 1;
+          }
+          .header h1 span { color: var(--accent); }
+          .header p {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: rgba(255,255,255,0.3);
+            margin-top: 8px;
+          }
+          .video-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 9/16;
+            background: #000;
+            border-radius: 32px;
+            overflow: hidden;
+            border: 2px solid rgba(255,255,255,0.05);
+            box-shadow: 0 40px 100px rgba(0,0,0,0.8), 0 0 30px rgba(6, 182, 212, 0.1);
+          }
+          video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+          }
+          .btn-download {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 18px;
+            border-radius: 20px;
+            font-weight: 900;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 10px 30px rgba(6, 182, 212, 0.3);
+            width: 100%;
+            margin-top: 10px;
+          }
+          .btn-download:hover {
+            transform: scale(1.02);
+            filter: brightness(1.1);
+            box-shadow: 0 15px 40px rgba(6, 182, 212, 0.4);
+          }
+          .btn-download:active { transform: scale(0.98); }
+          
+          .info-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+          }
+          .info-card h3 {
+            font-size: 14px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            color: rgba(255,255,255,0.9);
+          }
+          .info-card p {
+            font-size: 12px;
+            color: rgba(255,255,255,0.4);
+            line-height: 1.5;
+          }
+          .footer-note {
+            text-align: center;
+            font-size: 10px;
+            color: rgba(255,255,255,0.2);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="cyber-grid"></div>
+        <div class="container">
+          <header class="header">
+            <h1>VIRAL<span>SQUAD</span></h1>
+            <p>Ready to Sync • High Performance</p>
+          </header>
+
+          <div class="video-wrapper">
+            <video src="${url}" controls autoplay loop playsinline></video>
+          </div>
+
+          <div class="info-card">
+            <h3>${title.length > 40 ? title.substring(0, 40) + '...' : title}</h3>
+            <p>O vídeo foi processado com sucesso. Clique no botão abaixo para salvar na sua galeria e começar a lucrar.</p>
+          </div>
+
+          <button class="btn-download" onclick="downloadVideo()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            SALVAR NO DISPOSITIVO
+          </button>
+
+          <p class="footer-note">Garantia de Qualidade SquadOS™ • 1080p Export</p>
+        </div>
+
+        <script>
+          function downloadVideo() {
+            const a = document.createElement('a');
+            a.href = '${url}';
+            a.download = 'video_viral_squad_${Date.now()}.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+
+          // Cleanup object URL when window is closed
+          window.onbeforeunload = () => {
+            // No need to manually revoke here as the window is closing, 
+            // but in a real SPA we would.
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    previewWindow.document.close();
+  };
+
   const handleDownload = async () => {
     if (!videoData?.url) return;
     setIsProcessing(true);
@@ -983,8 +1184,10 @@ const App: React.FC = () => {
         musicUrl: selectedMusic || undefined,
         audioMixMode: audioMixOption
       };
-      await processor.processAndDownload(videoData.url, options);
-      showToast("VÍDEO EXPORTADO COM SUCESSO! 🚀");
+      
+      const videoBlob = await processor.renderVideo(videoData.url, options);
+      openVideoPreview(videoBlob);
+      showToast("VÍDEO PRONTO PARA DOWNLOAD! 🚀");
     } catch (error: any) {
       console.error("Video Processing Error:", error);
       showToast("ERRO AO RENDERIZAR — TENTE NOVAMENTE 📲");

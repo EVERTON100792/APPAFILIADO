@@ -70,7 +70,7 @@ export class VideoProcessor {
     return url;
   }
 
-  public async processAndDownload(videoUrl: string, options: ProcessingOptions): Promise<void> {
+  public async renderVideo(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
         let video: HTMLVideoElement;
@@ -404,7 +404,7 @@ export class VideoProcessor {
     wasMuted: boolean,
     wasVolume: number,
     blobUrl: string | null,
-    resolve: () => void
+    resolve: (blob: Blob) => void
   ) {
     if (videoEncoder.state === 'closed') return;
     
@@ -416,20 +416,6 @@ export class VideoProcessor {
 
       const { buffer } = muxer.target;
       const blob = new Blob([buffer], { type: 'video/mp4' });
-      const outUrl = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      a.href = outUrl;
-      a.download = `VIRAL_PRO_${ts}.mp4`;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      
-      setTimeout(() => { 
-        document.body.removeChild(a); 
-        URL.revokeObjectURL(outUrl); 
-      }, 500);
 
       if (blobUrl) URL.revokeObjectURL(blobUrl);
 
@@ -440,10 +426,10 @@ export class VideoProcessor {
         options.existingVideoEl.play().catch(() => {});
       }
 
-      console.log("[ENCODER] Exportação MP4 Real finalizada!");
+      console.log("[ENCODER] Renderização MP4 finalizada!");
       videoEncoder.close();
       audioEncoder.close();
-      resolve();
+      resolve(blob);
     } catch (e) {
       console.error("[ENCODER] Erro ao finalizar:", e);
     }
