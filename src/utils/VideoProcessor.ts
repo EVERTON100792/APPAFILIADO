@@ -20,7 +20,6 @@ export class VideoProcessor {
   private auxCanvas: HTMLCanvasElement;
   private auxCtx: CanvasRenderingContext2D;
   private ownedVideo: HTMLVideoElement;
-  private activeAudioDestination: MediaStreamAudioDestinationNode | null = null;
   private stream: MediaStream | null = null;
   private readonly UPSCALE = 2;
 
@@ -145,7 +144,6 @@ export class VideoProcessor {
           try {
             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
             const destination = audioCtx.createMediaStreamDestination();
-            this.activeAudioDestination = destination;
             
             const originalSource = audioCtx.createMediaElementSource(video);
             const originalGain = audioCtx.createGain();
