@@ -907,8 +907,9 @@ const App: React.FC = () => {
           const blackList = ['dance', 'funny', 'cat', 'dog', 'pubg', 'freefire', 'roblox', 'edit', 'anime', 'meme', 'gameplay'];
           const garbagePenalty = blackList.some(w => text.includes(w)) ? -500 : 0;
 
-          // 4. RELEVÂNCIA 100% EXIGIDA (Todas as 3 palavras-chave core devem bater)
-          const relevancePass = matches >= coreWords.length;
+          // 4. RELEVÂNCIA INTELIGENTE (Core Match)
+          // Se tiver 2 palavras (ex: Fone Bluetooth), exige as 2. Se tiver 3, aceita 2.
+          const relevancePass = matches >= Math.min(coreWords.length, 2);
           
           const finalScore = (!relevancePass ? -1000 : (matchRatio * 100) + langScore + langPenalty + garbagePenalty);
 
