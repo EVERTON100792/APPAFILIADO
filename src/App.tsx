@@ -908,10 +908,10 @@ const App: React.FC = () => {
           const garbagePenalty = blackList.some(w => text.includes(w)) ? -500 : 0;
 
           // 4. RELEVÂNCIA INTELIGENTE (Core Match)
-          // Se tiver 2 palavras (ex: Fone Bluetooth), exige as 2. Se tiver 3, aceita 2.
           const relevancePass = matches >= Math.min(coreWords.length, 2);
           
-          const finalScore = (!relevancePass ? -1000 : (matchRatio * 100) + langScore + langPenalty + garbagePenalty);
+          // Pontuação final: Se falhar na relevância, penalizamos mas não eliminamos totalmente (se for BR)
+          const finalScore = (!relevancePass ? -200 : (matchRatio * 150)) + langScore + langPenalty + (garbagePenalty / 5);
 
           return {
             id: v.video_id,
@@ -923,10 +923,14 @@ const App: React.FC = () => {
             _score: finalScore
           };
         })
-        .filter((v: any) => v._score > 80) // Só aceita o crème de la crème
+        .filter((v: any) => v._score > -500) // Elimina apenas lixo total ou estrangeiro agressivo
         .sort((a: any, b: any) => b._score - a._score);
 
-      if (scored.length === 0) throw new Error('Vídeos encontrados não são precisos o suficiente');
+      if (scored.length === 0) {
+        showToast("NENHUM VÍDEO BRASILEIRO SEGURO ENCONTRADO");
+        setStep('list');
+        return;
+      }
 
       // Remover duplicatas por video_id
       const seen = new Set<string>();
