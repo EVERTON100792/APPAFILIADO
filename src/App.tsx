@@ -16,6 +16,7 @@ import { VideoProcessor } from './utils/VideoProcessor';
 import type { ProcessingOptions } from './utils/VideoProcessor';
 import { BioStore } from './components/BioStore';
 import { BioManager } from './components/BioManager';
+import { StripeService } from './services/StripeService';
 // import { productDB } from './data/productDB';
 
 function getSmartSearchName(title: string): string {
@@ -98,13 +99,16 @@ const App: React.FC = () => {
   // Forçar sempre 'home' como primeira aba ao abrir, se estiver configurado
   const [step, setStep] = useState<Step>('home');
   const [isPreparingDownload, setIsPreparingDownload] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [trialExpired, setTrialExpired] = useState(false);
+  const [trialRemaining, setTrialRemaining] = useState<number | null>(null);
 
   const [activeFilter, setActiveFilter] = useState('none');
   const [activeTransition, setActiveTransition] = useState('none');
   const [isMuted, setIsMuted] = useState(false);
   const [videoLegend, setVideoLegend] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [usedLegends, setUsedLegends] = useState<Set<string>>(new Set());
+
 
   // Advanced Editing State
   const [trimStart, setTrimStart] = useState(0);
@@ -118,12 +122,7 @@ const App: React.FC = () => {
   const timelineRef = useRef<HTMLDivElement>(null);
 
   // Sync isPlaying with video element
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isPlaying) videoRef.current.play().catch(() => {});
-      else videoRef.current.pause();
-    }
-  }, [isPlaying]);
+
 
 
 
@@ -185,21 +184,79 @@ const App: React.FC = () => {
   const [isSavingToBio, setIsSavingToBio] = useState(false);
 
   // ── MONETIZAÇÃO & ACESSO GATED ──
-  const [isPro, setIsPro] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
-  // Sync volume with isMuted strictly
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = isMuted;
-      videoRef.current.volume = isMuted ? 0 : 1;
+  const checkAccess = async () => {
+    try {
+      const slug = (localStorage.getItem('bio_store_slug') || '').toLowerCase();
+      
+      // 1. Check if Admin (Hardcoded slugs for the owner)
+      const adminSlugs = ['admin', 'everto', 'everton', 'squad-pro', 'achadinhos_brasil_'];
+      if (adminSlugs.includes(slug)) {
+        setIsPro(true);
+        setIsLoadingAuth(false);
+        return;
+      }
+
+      // 2. Check Supabase Auth and Profile
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const status = await StripeService.checkSubscriptionStatus(supabase, user.id);
+        setIsPro(status.isPro);
+        setTrialExpired(status.trialExpired);
+        setTrialRemaining(status.trialRemainingMs ?? null);
+      } else {
+        // 3. Anonymous trial by localStorage (24h)
+        const trialStartStr = localStorage.getItem('v-trial-start');
+        if (!trialStartStr) {
+          localStorage.setItem('v-trial-start', Date.now().toString());
+          setIsPro(false);
+          setTrialExpired(false);
+          setTrialRemaining(24 * 60 * 60 * 1000);
+        } else {
+          const trialStart = parseInt(trialStartStr);
+          const elapsed = Date.now() - trialStart;
+          const limit = 24 * 60 * 60 * 1000;
+          const isExpired = elapsed > limit;
+          
+          setIsPro(false);
+          setTrialExpired(isExpired);
+          setTrialRemaining(Math.max(0, limit - elapsed));
+          
+          if (isExpired) {
+            console.log("Teste gratuito expirado para usuário anônimo");
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao verificar acesso:', err);
+    } finally {
+      setIsLoadingAuth(false);
     }
-  }, [isMuted, videoData]);
+  };
+
+  useEffect(() => {
+    checkAccess();
+  }, []);
 
   // ── PREVIEW & STABILITY ──
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
+
+  // Sincronização do vídeo com o estado da aplicação
+  useEffect(() => {
+    if (videoRef.current) {
+      const shouldPause = showDownloadModal || isPreparingDownload || step !== 'ready';
+      if (isPlaying && !shouldPause) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying, showDownloadModal, isPreparingDownload, step]);
 
   // Ultra-Premium Scanning HUD
   const ScanningHUD = ({ active }: { active: boolean }) => (
@@ -354,115 +411,80 @@ const App: React.FC = () => {
     if (data) setDatabaseProducts(data);
   };
 
-  // Verificação de Assinatura (Simulada para MVP, conectada ao Supabase)
-  const checkSubscription = async () => {
-    setIsLoadingAuth(true);
-    try {
-      const slug = localStorage.getItem('bio_store_slug');
-      const ADMIN_SLUGS = ['meu-link', 'admin', 'everton', 'achadinhos_brasil_'];
-      
-      // 1. Acesso Desenvolvedor (Admin Slugs)
-      if (slug && ADMIN_SLUGS.includes(slug.toLowerCase())) {
-        setIsPro(true);
-        setIsLoadingAuth(false);
-        return;
-      }
-
-      // 2. Lógica de Trial (24 horas)
-      const firstAccess = localStorage.getItem('first_access_date');
-      if (!firstAccess) {
-        localStorage.setItem('first_access_date', Date.now().toString());
-        setIsPro(true); // Primeiro acesso libera trial
-      } else {
-        const trialExpired = Date.now() - parseInt(firstAccess) > 24 * 60 * 60 * 1000;
-        if (!trialExpired) {
-          setIsPro(true);
-        } else {
-          // Se o trial expirou, verifica se é Pro real
-          const isProMember = localStorage.getItem('is_pro_member') === 'true';
-          setIsPro(isProMember);
-        }
-      }
-
-      // 3. Verificação Global (Supabase Config)
-      const { data } = await supabase
-        .from('config')
-        .select('value')
-        .eq('key', 'app_access_mode')
-        .single();
-      
-      if (data?.value === 'public') {
-        setIsPro(true);
-      }
-    } catch (e) {
-      console.error('Subscription check error:', e);
-    } finally {
-      setIsLoadingAuth(false);
-    }
-  };
-
-  useEffect(() => {
-    checkSubscription();
-  }, []);
-
-  const LockScreen = () => (
-    <div className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
-      <div className="absolute inset-0 cyber-grid opacity-20" />
-      <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-transparent" />
-      
+  // Componente de Bloqueio Premium (Paywall)
+  const LockScreen = () => {
+    return (
       <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="relative z-10 space-y-8 max-w-md"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="fixed inset-0 z-[600] bg-slate-950/95 backdrop-blur-3xl flex flex-col items-center justify-center p-8 text-center"
       >
-        <div className="w-24 h-24 bg-slate-900 border-2 border-accent/20 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(6,182,212,0.15)]">
-          <Shield size={48} className="text-accent animate-pulse" />
+        <div className="w-20 h-20 bg-accent/10 rounded-3xl flex items-center justify-center border border-accent/20 mb-8 shadow-[0_0_40px_rgba(16,185,129,0.2)]">
+          <Shield size={40} className="text-accent animate-pulse" />
         </div>
         
-        <div className="space-y-4">
-          <h2 className="text-4xl font-black italic uppercase italic tracking-tighter leading-tight">
-            ACESSO <span className="text-accent">BLOQUEADO</span>
-          </h2>
-          <p className="text-xs text-dim uppercase tracking-[0.2em] font-medium leading-relaxed">
-            Sua conta não possui uma licença <span className="text-white font-black">PRO</span> ativa para usar o Squad de Automação.
-          </p>
-        </div>
-
-        <div className="bg-slate-900/50 border border-white/5 rounded-3xl p-6 space-y-4 backdrop-blur-xl">
-          <div className="flex items-center gap-3 text-left">
-            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-              <Zap size={16} />
-            </div>
-            <p className="text-[10px] font-bold uppercase text-white/60">Vídeos Virais Ilimitados</p>
-          </div>
-          <div className="flex items-center gap-3 text-left">
-            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-              <ShoppingBag size={16} />
-            </div>
-            <p className="text-[10px] font-bold uppercase text-white/60">Sua Própria Loja Link-na-Bio</p>
-          </div>
-          <div className="flex items-center gap-3 text-left">
-            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-              <Database size={16} />
-            </div>
-            <p className="text-[10px] font-bold uppercase text-white/60">Automação Shopee & TikTok</p>
-          </div>
-        </div>
-
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          className="w-full h-16 bg-accent text-slate-950 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-accent/20"
-          onClick={() => window.location.href = 'https://pay.kiwify.com.br/seulink'} // Exemplo de link de checkout
-        >
-          DESBLOQUEAR AGORA
-        </motion.button>
+        <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-4">
+          Sua "Palhinha" <span className="text-accent underline decoration-accent/30 decoration-8 underline-offset-4">Acabou!</span>
+        </h2>
         
-        <p className="text-[9px] text-white/20 uppercase tracking-widest font-medium">
-          Já pagou? <button onClick={checkSubscription} className="text-accent underline">Clique aqui para atualizar</button>
+        <p className="text-slate-400 text-sm font-medium mb-8 max-w-xs uppercase tracking-tight leading-relaxed">
+          Você aproveitou suas 24h de teste gratuito. Agora, para continuar criando vídeos virais e lucrando com automação, desbloqueie o <span className="text-white font-black italic">SQUAD PRO</span>.
         </p>
+        
+        <div className="w-full max-w-sm space-y-4">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              supabase.auth.getUser().then(({ data }) => {
+                if (data.user) {
+                  // IMPORTANTE: O usuário deve trocar 'prod_placeholder' pelo ID real do Stripe no Stripe Dashboard
+                  StripeService.redirectToCheckout(supabase, 'prod_placeholder', data.user.id, data.user.email || '');
+                  showToast("Redirecionando para pagamento seguro...");
+                } else {
+                  showToast("⚠️ Faça login primeiro!");
+                }
+              });
+            }}
+            className="w-full py-5 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 font-black uppercase italic tracking-[0.2em] rounded-2xl shadow-[0_15px_40px_rgba(16,185,129,0.3)] flex items-center justify-center gap-3"
+          >
+            <Zap size={20} fill="currentColor" />
+            DESBLOQUEAR TUDO: R$ 19,90/mês
+          </motion.button>
+          
+          <div className="flex flex-col gap-2">
+            <button 
+              onClick={checkAccess}
+              className="text-[10px] font-black text-accent uppercase tracking-widest hover:brightness-125 transition-all"
+            >
+              Já é PRO? Clique para Atualizar
+            </button>
+            <button 
+              onClick={() => setStep('home')}
+              className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-white transition-colors"
+            >
+              Voltar ao Início
+            </button>
+          </div>
+        </div>
+
+        {trialRemaining !== null && trialRemaining > 0 && !isPro && (
+          <div className="mt-8 px-4 py-2 bg-white/5 border border-white/10 rounded-full inline-flex items-center gap-2">
+            <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse shadow-[0_0_8px_#06b6d4]" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              Tempo de Teste Restante: <span className="text-accent">{Math.floor(trialRemaining / (60 * 60 * 1000))}h {Math.floor((trialRemaining % (60 * 60 * 1000)) / (60 * 1000))}m</span>
+            </span>
+          </div>
+        )}
+
+        <div className="mt-12 flex items-center gap-6 opacity-20 grayscale">
+           <img src="https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" alt="Stripe" className="h-5" />
+           <div className="w-px h-4 bg-white/20" />
+           <span className="text-[10px] font-black uppercase tracking-widest italic">Pagamento 100% Criptografado</span>
+        </div>
       </motion.div>
-    </div>
-  );
+    );
+  };
 
   // Sync Supabase when entering history tab
   useEffect(() => {
@@ -586,120 +608,124 @@ const App: React.FC = () => {
   const generateCreativeLegend = (product: any) => {
     try {
       const title = (product?.title || "Achadinho Viral") as string;
-      const sales = (product?.sales || "Algumas") as string;
-      const t = title.toLowerCase();
-      const hooks: string[] = [];
+      const sales = (product?.sales || "Várias") as string;
 
-      if (/alho|legumes|cortador|processador|espremedor|batedeira|airfryer|afiador|escorredor|dispenser/.test(t))
-        hooks.push(
-          `Cozinhar ficou muito mais facil com o ${title.split(' ').slice(0,3).join(' ')}! Achei na Shopee! 🍳`,
-          `O item que TODA cozinha precisa: ${title.split(' ').slice(0,3).join(' ')} que achei!`,
-          `Chega de sofrer na cozinha! Esse ${title.split(' ')[0]} resolveu tudo 🔪`);
-      if (/smart|bluetooth|usb|hub|ssd|power|wireless|rgb|fone|projetor|mouse|teclado/.test(t))
-        hooks.push(
-          `Tecnologia de ponta! O ${title.split(' ').slice(0,3).join(' ')} chegou! ⚡`,
-          `Setup top comeca com o ${title.split(' ').slice(0,3).join(' ')} da Shopee! 💻`,
-          `${sales} pessoas ja mudaram o setup com esse ${title.split(' ')[0]}! Tu ta perdendo! 🤖`);
-      if (/maquiagem|mascara|sobrancelha|skin|gua sha|removedor|espelho|modelador|escova/.test(t))
-        hooks.push(
-          `Minha pele nunca foi tao bonita desde que descobri o ${title.split(' ').slice(0,3).join(' ')}! ✨`,
-          `${sales} mulheres ja amam esse ${title.split(' ')[0]}... voce ainda nao tem? 💄`,
-          `O segredo de pele perfeita ta na Shopee! 🧖`);
-      if (/pet|gato|cachorro|peixe|fonte|petisco|coleira|tapete|mochila/.test(t))
-        hooks.push(
-          `Meu pet ficou MALUCO com o ${title.split(' ').slice(0,3).join(' ')}! Olha isso 🐾`,
-          `${sales} tutores ja compraram o ${title.split(' ')[0]}... seu pet merece! ❤️`,
-          `A melhor compra para seu filho de 4 patas: ${title.split(' ').slice(0,3).join(' ')} 🐶`);
-      if (/luminaria|umidificador|quadro|vaso|relogio|fita led|espelho decorativo/.test(t))
-        hooks.push(
-          `Transformei meu quarto com o ${title.split(' ').slice(0,3).join(' ')}! 🏠`,
-          `${sales} casas ja tem essa vibe linda... a sua ainda nao? 🌿`,
-          `Decoracao de revista: ${title.split(' ').slice(0,4).join(' ')} na Shopee! ✨`);
-      if (/corda|garrafa|rolo|faixas|massageador|balanca|halteres|tapete yoga|hand grip|stepper/.test(t))
-        hooks.push(
-          `Nao tem desculpa! O ${title.split(' ').slice(0,3).join(' ')} cabe na bolsa! 💪`,
-          `${sales} pessoas treinando em casa com o ${title.split(' ')[0]}... e voce? 🏃`,
-          `Fitness em casa nunca foi tao pratico: ${title.split(' ').slice(0,3).join(' ')}! 🔥`);
-      if (/infantil|cacto|lousa|blocos|bolhas|controle|slime|tablet lcd/.test(t))
-        hooks.push(
-          `Meu filho nao larga o ${title.split(' ').slice(0,3).join(' ')} desde que chegou! 🧸`,
-          `${sales} criancas ja amam esse ${title.split(' ')[0]}... o seu vai amar tambem! ⭐`,
-          `O presente perfeito: ${title.split(' ').slice(0,3).join(' ')} da Shopee! 🎮`);
-
-      hooks.push(
-        `ENCONTREI! O ${title.split(' ').slice(0,4).join(' ')} na Shopee! 😱`,
-        `POV: Voce acaba de encontrar o ${title.split(' ').slice(0,3).join(' ')} e a vida muda 🔥`,
-        `${sales} pessoas nao podem estar erradas! O ${title.split(' ')[0]} e INCRIVEL! 🏆`,
-        `Inacreditavel! O ${title.split(' ').slice(0,3).join(' ')} e real demais! ⚡`
-      );
-
-      const bodies = [
-        `O ${title} chegou para resolver aquele problema do dia a dia! Com ${sales} vendas, e um dos melhores custo-beneficio da Shopee agora. Frete rapido e chega perfeito.`,
-        `Serio, ${sales} pessoas ja compraram o ${title} e aprovaram! É impossivel nao indicar. Testei e fiquei impressionada com a qualidade!`,
-        `Olha que achado! O ${title} ta fazendo sucesso: ${sales} vendas falam por si. A qualidade superou minhas expectativas e chegou mais rapido do que esperava!`,
-        `Se voce ainda nao conhece o ${title}, precisa ver isso! Sao ${sales} compradores satisfeitos por um motivo. Vem com tudo, vale a pena!`,
+      
+      const hooks = [
+        `ENCONTREI! 😱 O ${title} que todo mundo tava procurando!`,
+        `POV: Você acaba de achar o melhor item da Shopee hoje. ✨`,
+        `Gente, olha esse achadinho! É o ${title} e eu tô chocada!`,
+        `Não acredito que vivi tanto tempo sem esse ${title}! 😍`,
+        `UTILIDADE PÚBLICA: Esse ${title} na Shopee é vida! 🏆`,
+        `Para de rolar o feed e olha essa maravilha! 🛑`,
+        `Meu Deus, a Shopee não para de me surpreender! Olha isso:`,
+        `Sério, ${sales} pessoas já compraram... e eu entendi o porquê!`,
+        `O segredo para facilitar sua rotina tá nesse vídeo! 🔥`,
+        `Achado VIP! 💎 O ${title} com o melhor preço que já vi.`,
+        `Dica de amiga: Você PRECISA desse ${title} na sua casa!`,
+        `Eu não sabia que precisava disso até ver esse vídeo... 😳`,
+        `Preço de banana e qualidade de milhões! Shopee arrasou.`,
+        `Terapia de compras: Começando com esse ${title} incrível! 🛍️`,
+        `O item que faltava no seu dia a dia acabou de aparecer!`,
       ];
 
-      const nicheHashtags: Record<string, string> = {
-        'Cozinha':    '#cozinha #dicasdecozinha #organizacaodacasa #cozinheira #utensilioscozinha',
-        'Tecnologia': '#gadgets #techbrasil #setupgamer #tecnologiabarata #gadgetsviral',
-        'Beleza':     '#skincare #makeupbrasil #belezanatural #rotinadebeleza #dicasdebeleza',
-        'Pet':        '#petlovers #cachorros #gatos #petshopbr #animaisfofos',
-        'Decoração':  '#decorcasa #homedecor #casaorganizada #decoracaobr #decoracaomoderna',
-        'Fitness':    '#fitness #gym #emagrecimento #saudeebemestar #exerciciosemcasa',
-        'Gamer':      '#gamer #setupgamer #gaming #gamesbrasil #rgbsetup',
-        'Kids':       '#criancas #brinquedos #maesdebrasil #maternidade #kids',
-        'Todos':      '#achadinhos #shopee #viral #achadosshopee #ofertasdodia',
-      };
-      const hashtags = (nicheHashtags[activeNiche] || nicheHashtags['Todos']) + ' #shopeebrasil';
+      const benefits = [
+        `Facilita demais a vida e tem uma qualidade surreal pelo preço!`,
+        `O custo-benefício é imbatível, chegou super rápido e bem embalado.`,
+        `Já é tendência lá fora e agora chegou com tudo no Brasil!`,
+        `Todo mundo que vê pergunta de onde é. É simplesmente perfeito!`,
+        `É aquele tipo de achado que a gente guarda a sete chaves... mas eu compartilho!`,
+        `Prático, moderno e resolve aquele problema chato que a gente tem.`,
+        `Sério, as ${sales} vendas não mentem: é sucesso absoluto!`,
+        `Economiza tempo e ainda deixa tudo mais organizado e bonito.`,
+        `Gostei tanto que já quero comprar mais um de reserva! 😂`,
+        `Design premium com preço de achadinho. Shopee sendo Shopee!`,
+      ];
 
       const ctas = [
-        '🛒 LINK COM DESCONTO NA MINHA BIO! Corre! 🚀',
-        '✅ Link na Bio com frete gratis hoje! Nao perde! 📦',
-        '👇 Garanta o seu pelo link da Bio agora! 🛍️',
-        '⚠️ Link oficial na bio do perfil! Vale muito a pena! ⭐',
+        `🛒 O LINK COM DESCONTO tá fixado na minha BIO! Corre! 🚀`,
+        `✅ Quer o link? Ele tá lá na minha BIO do perfil! 🛍️`,
+        `👇 Garanta o seu pelo link oficial na minha Bio agora!`,
+        `⚠️ Aproveite a promoção no link que deixei na Bio! Vale muito!`,
+        `📦 Frete grátis hoje? Confere no link da minha Bio! ⭐`,
+        `Aperte no link da Bio e já garanta o seu antes que acabe!`,
       ];
 
-      const safeId = product && typeof product.id === 'number' ? product.id : 1;
-      const seed = safeId * 31 + usedLegends.size * 7 + Math.floor(Date.now() / 5000);
-      const hook = hooks[seed % hooks.length];
-      const body = bodies[(seed + 3) % bodies.length];
-      const cta  = ctas[(seed + 7) % ctas.length];
-
-      const structures = [
-        `${hook}\n\n${body}\n\n${cta}\n\n${hashtags}`,
-        `${hook}\n\n🔥 ${title}\n${body}\n\n🛍️ COMPRE: Link na Bio!\n\n${hashtags}`,
-        `Voce achou isso?! 😍\n\n${body}\n\n${hook}\n\n👉 LINK NA BIO\n\n${hashtags}`,
-        `Parece mentira mas e real! 😱\n\n${body}\n\n${cta}\n\n${hashtags}`,
+      const growth = [
+        `👉 Siga meu perfil para mais achadinhos virais todos os dias! ✨`,
+        `💡 Me siga para transformar sua casa com as melhores dicas!`,
+        `Eu posto achados assim todo dia, me segue pra não perder! 🔥`,
+        `Quer mais dicas assim? Já me segue aqui! 💖`,
+        `Não esquece de seguir para receber as melhores ofertas em primeira mão!`,
       ];
 
-      let legend = structures[(seed + 11) % structures.length];
+      const hashtags = [
+        '#shopee #achadinhos #shopeebrasil #viral #compras #dicas #casa #utilidades #promoção #oferta',
+        '#achadosshopee #shopeebr #comprinhas #organização #tecnologia #beleza #achadinhosshopee',
+        '#shopeefinds #viralvideos #dicasdecasa #utilidadedomestica #achadosdasemana',
+      ];
 
-      if (usedLegends.has(legend)) {
-        legend = `${hook} (ACHADO!)\n\n${body}\n\n${cta}\n\n${hashtags}`;
-      }
-      setUsedLegends(prev => new Set([...prev, legend]));
-      return legend;
+      const seed = Math.floor(Math.random() * 1000);
+      const h = hooks[seed % hooks.length];
+      const b = benefits[(seed + 7) % benefits.length];
+      const c = ctas[(seed + 13) % ctas.length];
+      const g = growth[(seed + 19) % growth.length];
+      const hash = hashtags[seed % hashtags.length];
+
+      const variations = [
+        `${h}\n\n${b}\n\n${c}\n\n${g}\n\n${hash}`,
+        `✨ ${title} ✨\n\n${h}\n${b}\n\n👉 LINK NA BIO!\n\n${g}\n\n${hash}`,
+        `Você não vai acreditar nesse achado! 😍\n\n${h}\n\n${c}\n\n${g}\n\n${hash}`,
+        `${h} 🔥\n\n${b}\n\n🛍️ COMPRE NO LINK DA BIO!\n\n${g}\n\n${hash}`,
+      ];
+
+      return variations[seed % variations.length];
     } catch (error) {
-      return "Compre o seu na Shopee pelo link da bio! ✅";
+      return "Encontrei o link perfeito na Shopee! ✅ Confira na minha bio agora e aproveite o desconto!";
     }
   };
 
   const generateOverlayLegend = (product: any) => {
-    const title = (product?.title || "Este Produto").split(' ').slice(0,4).join(' ').toUpperCase();
-    const hooks = [
-      `🚨 ACHEI BEM MAIS BARATO!\n👉 LINK NA BIO`,
-      `🔥 O SEGREDO QUE NINGUÉM CONTA: ${title}\n👉 LINK NA BIO`,
-      `😱 PARE DE GASTAR ATOA! OLHA ISSO\n🔗 LINK NA MINHA BIO`,
-      `😍 TESTEI O FAMOSO ${title} DA SHOPEE!\n👉 LINK NA BIO`,
-      `🛍️ COMPREI O ${title} E OLHA NO QUE DEU!\n🔗 LINK NA BIO`,
-      `✨ O ITEM QUE DEIXOU A INTERNET MALUCA!\n👉 LINK NA BIO`,
-      `🏆 ACHADINHO VIP COM DESCONTO!\n🔗 LINK DO ITEM NA BIO`,
-      `💰 ECONOMIZEI MUITO COMPRANDO ESSE ${title}!\n👉 LINK NA BIO`
+    const title = (product?.title || "ESSE ITEM").split(' ').slice(0,3).join(' ').toUpperCase();
+    
+    const parts1 = [
+        "🚨 ACHEI NA SHOPEE!",
+        "🔥 O MAIS VENDIDO!",
+        "😱 NÃO ACREDITO!",
+        "😍 EU PRECISO DISSO!",
+        "✨ OLHA ESSE ACHADO!",
+        "🎁 PRESENTE PERFEITO!",
+        "🏆 QUALIDADE PREMIUM!",
+        "💎 EDIÇÃO LIMITADA!",
+        "💸 PREÇO DE BANANA!",
+        "📦 FRETE GRÁTIS!"
     ];
-    const safeId = product && typeof product.id === 'number' ? product.id : Math.floor(Math.random() * 100);
-    return hooks[safeId % hooks.length];
+    
+    const parts2 = [
+        `ESTE ${title}`,
+        "É UM MILAGRE!",
+        "MUDOU MINHA VIDA!",
+        "TODO MUNDO QUER!",
+        "VENDI MEU RIM!",
+        "MELHOR COMPRA!",
+        "SUCESSO TOTAL!",
+        "ACHADO VIP!"
+    ];
+    
+    const parts3 = [
+        "LINK NA MINHA BIO 🔗",
+        "LINK COM DESCONTO 🛒",
+        "PEGA NA BIO 👉",
+        "CONFIRA NA BIO ✨",
+        "SÓ NO LINK DA BIO 🚀",
+        "SITE NA BIO 👇",
+        "LINK OFICIAL NA BIO 🔗"
+    ];
+
+    const seed = Math.floor(Math.random() * 100);
+    return `${parts1[seed % parts1.length]}\n${parts2[(seed + 5) % parts2.length]}\n${parts3[(seed + 10) % parts3.length]}`;
   };
+
 
 
 
@@ -958,15 +984,15 @@ const App: React.FC = () => {
 
       const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
 
-      // ── ETAPA 3: Estratégias de busca (Query Diversification)
+      // ── ETAPA 3: Estratégias de busca (Reforço PT-BR)
       const strategies = [
-        { query: `${coreQuery} shopee brasil`, weight: 1.2 },
-        { query: `${coreQuery} achadinhos`, weight: 1.0 },
-        { query: `${coreQuery} unboxing`, weight: 0.8 },
+        { query: `${coreQuery} brasil achadinhos`, weight: 1.5 },
+        { query: `shopee brasil ${coreQuery} review`, weight: 1.3 },
+        { query: `${coreQuery} unboxing portugues`, weight: 1.0 },
       ];
 
-      // Padrões de Idioma e Scripts
-      const ptBrKeywords = ['achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 'testando', 'recomendo', 'unboxing', 'review'];
+      // Padrões de Idioma e Scripts (Reforçados)
+      const ptBrKeywords = ['achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 'promo', 'loja'];
       const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; 
 
       let allVideos: any[] = [];
@@ -1006,21 +1032,51 @@ const App: React.FC = () => {
             }
           });
 
-          // 2. Pontuação de Idioma (PT-BR)
+          // 2. Pontuação de Idioma (PT-BR) - RIGOROSA
           const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
-          if (hasPtBrKeywords) score += 50;
-          if (nonLatinPattern.test(text)) score -= 1000;
+          if (hasPtBrKeywords) score += 80;
+          if (text.includes('brasil') || text.includes(' shopee')) score += 40;
+          
+          // Penalizar pesadamente se não houver palavras em PT-BR no título/descrição
+          const ptWordsCount = text.split(' ').filter(word => ptBrKeywords.includes(word)).length;
+          if (ptWordsCount === 0 && !hasPtBrKeywords) score -= 150;
+
+          if (nonLatinPattern.test(text)) score -= 2000;
 
           // 3. Match de Nicho
           currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 15; });
-          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 40; });
+          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 60; });
 
-          // 4. Blacklist Global de Descarte
-          const globalBlacklist = ['dance', 'reflexão', 'gato', 'dog', 'pubg', 'freefire', 'edit', 'anime', 'meme', 'gameplay', 'humor', 'comédia'];
-          globalBlacklist.forEach(w => { if (text.includes(w)) score -= 60; });
+          // 4. Blacklist Global de Descarte (Lixo de engajamento baixo)
+          const globalBlacklist = ['dance', 'reflexão', 'gato', 'dog', 'pubg', 'freefire', 'edit', 'anime', 'meme', 'gameplay', 'humor', 'comédia', 'fnaf', 'roblox'];
+          globalBlacklist.forEach(w => { if (text.includes(w)) score -= 100; });
 
-          // 5. Bônus de Qualidade (Duração ideal entre 7 e 25 segundos)
-          if (v.duration >= 7 && v.duration <= 25) score += 10;
+          // 5. INTELIGÊNCIA VIRAL (Engagement & High Quality)
+          const views = v.play_count || v.play || 0;
+          const diggs = v.digg_count || 0;
+          const comments = v.comment_count || 0;
+          const shares = v.share_count || 0;
+          
+          // Ratio de engajamento real (Corrigido para ser mais rigoroso)
+          const engagementRatio = views > 0 ? ((diggs + (comments * 2) + (shares * 3)) / views) * 100 : 0;
+
+          // Bônus por popularidade massiva (Viral certo)
+          if (views > 100000) score += 60;
+          else if (views > 30000) score += 30;
+          
+          // Filtro de Engajamento Mínimo (Qualidade Super Alta)
+          if (engagementRatio > 8) score += 90; // Video muito amado
+          else if (engagementRatio > 5) score += 40;
+          else if (engagementRatio < 1.5) score -= 150; // Descarta vídeos 'fantasmas' (muita view, pouco like)
+
+          if (engagementRatio > 15) score += 40; // Muito engajado
+          else if (engagementRatio > 8) score += 20;
+
+          // Bônus de Resolução (Se disponível na API)
+          if (v.width && v.width >= 720) score += 20;
+
+          // 6. Bônus de Qualidade (Duração ideal entre 8 e 25 segundos)
+          if (v.duration >= 8 && v.duration <= 25) score += 15;
           score *= (v._queryWeight || 1.0);
 
           const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
@@ -1137,8 +1193,20 @@ const App: React.FC = () => {
     downloadLinkRef.current.href = url;
     downloadLinkRef.current.download = `viral-squad-${Date.now()}.mp4`;
     downloadLinkRef.current.click();
+    // Silencia o vídeo do modal após o download para evitar som duplicado se o navegador abrir o vídeo
+    if (downloadPreviewUrl) {
+      const modalVideo = document.querySelector('video[src^="blob:"]') as HTMLVideoElement;
+      if (modalVideo) modalVideo.pause();
+    }
+    
     URL.revokeObjectURL(url);
-    showToast("DOWNLOAD INICIADO! 🚀");
+    setShowSuccessOverlay(true);
+    showToast("VÍDEO BAIXADO COM SUCESSO! ✅");
+    
+    setTimeout(() => {
+      setShowSuccessOverlay(false);
+      setShowDownloadModal(false);
+    }, 4000);
   };
 
   const handleDownload = async () => {
@@ -1173,6 +1241,10 @@ const App: React.FC = () => {
     } finally {
       setIsProcessing(false);
       setIsPreparingDownload(false);
+      // Feedback visual adicional ao concluir
+      setTimeout(() => {
+        showToast("VÍDEO PRONTO PARA O SUCESSO! 🔥");
+      }, 500);
     }
   };
 
@@ -1405,39 +1477,42 @@ const App: React.FC = () => {
       {(!isPro && !isLoadingAuth) && <LockScreen />}
       <ScanningHUD active={isScanning} />
       
-      <header className="h-20 border-b border-white/5 flex items-center justify-between px-6 bg-slate-950/50 backdrop-blur-xl sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="absolute inset-0 bg-accent/20 blur-lg rounded-full animate-pulse" />
-            <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center relative">
-              <Activity size={20} className="text-accent" />
+      {/* Hide header in editor modes to save mobile space */}
+      {(!['ready', 'treating', 'automation'].includes(step)) && (
+        <header className="h-20 border-b border-white/5 flex items-center justify-between px-6 bg-slate-950/50 backdrop-blur-xl sticky top-0 z-40">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-accent/20 blur-lg rounded-full animate-pulse" />
+              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center relative">
+                <Activity size={20} className="text-accent" />
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <h1 className="text-xl font-black tracking-tighter uppercase leading-none italic">
+                VIRAL<span className="text-accent">SQUAD</span> <span className="text-[10px] text-accent/50 ml-1">v1.6.0</span>
+              </h1>
+              <span className="text-[8px] font-black tracking-[0.3em] uppercase opacity-40">Stealth Engine v4.0</span>
             </div>
           </div>
-          <div className="flex flex-col">
-            <h1 className="text-xl font-black tracking-tighter uppercase leading-none italic">
-              VIRAL<span className="text-accent">SQUAD</span> <span className="text-[10px] text-accent/50 ml-1">v1.6.0</span>
-            </h1>
-            <span className="text-[8px] font-black tracking-[0.3em] uppercase opacity-40">Stealth Engine v4.0</span>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {isPro && (
-            <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                {['meu-link', 'admin', 'everton', 'achadinhos_brasil_'].includes((localStorage.getItem('bio_store_slug') || '').toLowerCase()) ? 'SQUAD ADMIN' : 'SQUAD PRO'}
-              </span>
+          
+          <div className="flex items-center gap-2">
+            {isPro && (
+              <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                  {['meu-link', 'admin', 'everton', 'achadinhos_brasil_'].includes((localStorage.getItem('bio_store_slug') || '').toLowerCase()) ? 'SQUAD ADMIN' : 'SQUAD PRO'}
+                </span>
+              </div>
+            )}
+            <div className="px-3 py-1.5 rounded-full bg-accent/5 border border-accent/20 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Status: Link Online</span>
             </div>
-          )}
-          <div className="px-3 py-1.5 rounded-full bg-accent/5 border border-accent/20 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Status: Link Online</span>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
-      {(!isStoreConfigured()) && (
+      {(!isStoreConfigured() && step !== 'bio') && (
         <div className="bg-amber-500 text-black text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center animate-pulse z-[40] sticky top-20">
           ⚠️ ALERTA SQUAD: CONFIGURE SEU LINK NA ABA LOJA PARA DESBLOQUEAR A PLATAFORMA!
         </div>
@@ -1689,8 +1764,8 @@ const App: React.FC = () => {
               className="flex flex-col h-[calc(100vh-5rem)]"
             >
               {/* VÍDEO STICKY — sempre visível no topo ao rolar */}
-              <div className="sticky top-0 z-30 bg-slate-950 px-4 pt-3 pb-2 shrink-0">
-                <div className="flex items-center justify-between mb-2">
+              <div className="sticky top-0 z-30 bg-slate-950 px-4 pt-safe shrink-0">
+                <div className="flex items-center justify-between mb-2 mt-4">
                   <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={goBackToList}
@@ -1711,7 +1786,7 @@ const App: React.FC = () => {
                     <video 
                       key={videoData?.id || 'main-player'}
                       ref={videoRef}
-                      src={videoData?.url || ''}
+                      src={videoData?.url || undefined}
                       crossOrigin="anonymous"
                       onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                       onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
@@ -1758,19 +1833,27 @@ const App: React.FC = () => {
                   className="absolute bottom-20 right-4 z-30 w-10 h-10 bg-black/60 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 text-white"
                 >
                   {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                </motion.button>
+                </motion.button>                {/* Editor Header with Notch Support */}
+                <div 
+                  className="absolute inset-x-0 top-0 z-30 px-4 flex justify-between items-center pointer-events-none"
+                  style={{ paddingTop: 'calc(var(--safe-top) + 0.5rem)' }}
+                >
+                  <motion.button
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    onClick={() => setStep('list')}
+                    className="w-10 h-10 bg-slate-950/80 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10 text-white pointer-events-auto shadow-xl"
+                  >
+                    <ArrowLeft size={18} />
+                  </motion.button>
 
-
-                <div className="absolute inset-x-4 top-4 flex justify-between items-start z-20 pointer-events-none">
-                  <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                    <span className="text-[10px] font-black text-white italic tracking-widest">HD_STEALTH_CORE</span>
-                  </div>
-                  <div className="bg-accent px-4 py-2 rounded-2xl shadow-[0_10px_20px_rgba(16,185,129,0.3)] border-2 border-white/20">
-                    <div className="text-[8px] font-black text-slate-950 uppercase leading-none opacity-60 text-center mb-0.5">ROI</div>
-                    <div className="text-xl font-black text-slate-950 italic leading-none">{selectedProduct?.commission_pct || 0}%</div>
+                  <div className="bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_#ef4444]" />
+                    <span className="text-[8px] font-black text-white italic tracking-[0.2em]">LIVE_PREVIEW_V4</span>
                   </div>
                 </div>
+
+                {(!isPro && !isLoadingAuth && trialExpired) && <LockScreen />}
 
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/20 pointer-events-none opacity-60" />
               </div>
@@ -2254,6 +2337,11 @@ const App: React.FC = () => {
         </AnimatePresence>
       </main>
 
+      {/* Bloqueio de Acesso Se o Trial Expirou e Não é PRO */}
+      {trialExpired && !isPro && ['list', 'scouting', 'ready', 'treating', 'automation'].includes(step) && (
+        <LockScreen />
+      )}
+
       <nav className="bottom-nav">
         {[
           { id: 'bio', label: '1. LOJA', icon: ShoppingBag, active: step === 'bio' },
@@ -2309,12 +2397,14 @@ const App: React.FC = () => {
             initial={{ opacity: 0, y: 50, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 50, x: '-50%' }}
-            className="fixed bottom-36 left-1/2 px-8 py-5 bg-slate-900/90 backdrop-blur-2xl text-accent rounded-3xl min-w-[300px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[200] border border-accent/30"
+            className="fixed bottom-24 left-1/2 px-8 py-4 bg-slate-900/95 backdrop-blur-3xl text-accent rounded-[2rem] min-w-[320px] shadow-[0_20px_60px_rgba(0,0,0,0.8)] z-[500] border border-white/10"
           >
-             <div className="flex items-center gap-4 justify-center">
-                <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
-                <span className="text-[11px] font-black italic uppercase tracking-[0.2em]">{toast}</span>
-                <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
+             <div className="flex items-center gap-4 justify-between">
+                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center border border-accent/20">
+                  <div className="w-2 h-2 bg-accent rounded-full animate-ping" />
+                </div>
+                <span className="text-[10px] font-black italic uppercase tracking-[0.25em] text-white flex-1">{toast}</span>
+                <div className="w-2 h-2 bg-white/10 rounded-full" />
              </div>
           </motion.div>
         )}
@@ -2335,11 +2425,19 @@ const App: React.FC = () => {
               animate={{ scale: 1, y: 0 }}
               className="bg-slate-900 border border-white/10 rounded-[40px] w-full max-w-md max-h-[90vh] overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.8)]"
             >
-              <div className="h-full flex flex-col overflow-y-auto custom-scrollbar">
-                <div className="p-8 flex flex-col items-center gap-6">
+              <div className="h-full flex flex-col overflow-y-auto custom-scrollbar relative">
+                {/* Botão de Fechar Rápido para Mobile */}
+                <button 
+                  onClick={closePreview}
+                  className="absolute top-6 right-6 z-[320] w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-lg rounded-full flex items-center justify-center text-white/50 hover:text-white transition-all active:scale-95 border border-white/5"
+                >
+                  <X size={20} />
+                </button>
+
+                <div className="p-8 pb-12 flex flex-col items-center gap-6">
                   <div className="w-full aspect-[9/16] bg-black rounded-3xl overflow-hidden border border-white/5 shadow-2xl relative group">
                     <video 
-                      src={downloadPreviewUrl || ''} 
+                      src={downloadPreviewUrl || undefined} 
                       className="w-full h-full object-cover"
                       controls
                       autoPlay
@@ -2388,6 +2486,77 @@ const App: React.FC = () => {
                 </div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isProcessing && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-2xl px-8 text-center"
+          >
+            <div className="relative mb-12">
+               <motion.div 
+                 animate={{ rotate: 360, scale: [1, 1.1, 1] }}
+                 transition={{ repeat: Infinity, duration: 4 }}
+                 className="w-32 h-32 rounded-full border-2 border-accent/20 border-t-accent shadow-[0_0_50px_rgba(6,182,212,0.3)]"
+               />
+               <div className="absolute inset-0 flex items-center justify-center">
+                 <Terminal size={32} className="text-accent animate-pulse" />
+               </div>
+            </div>
+            
+            <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-2 italic">
+              PROCESSANDO <span className="text-accent underline decoration-accent/30 decoration-8 underline-offset-4">VÍDEO VIRAL</span>
+            </h2>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mb-12">Renderizando Sincronização de Transições</p>
+            
+            <div className="w-full max-w-[200px] h-1.5 bg-white/5 rounded-full overflow-hidden mb-4 pr-[1px]">
+               <motion.div 
+                 initial={{ x: '-100%' }}
+                 animate={{ x: '0%' }}
+                 transition={{ duration: 15, ease: "linear" }}
+                 className="h-full bg-gradient-to-r from-accent to-emerald-400 rounded-full"
+               />
+            </div>
+            
+            <div className="space-y-2 opacity-30 font-mono text-[8px] uppercase tracking-widest text-center">
+               <p>Mapeando Batidas de Áudio...</p>
+               <p>Aplicando Filtro Cinematic...</p>
+               <p>Otimizando Compressão 4K...</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showSuccessOverlay && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed inset-0 z-[1100] flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-2xl p-8 text-center"
+          >
+            <motion.div 
+              initial={{ y: 20 }}
+              animate={{ y: 0 }}
+              className="w-24 h-24 bg-accent rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(6,182,212,0.5)] mb-6"
+            >
+              <CheckCircle2 size={48} className="text-slate-950" />
+            </motion.div>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-2">VÍDEO BAIXADO!</h2>
+            <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-8">Agora é só subir no TikTok/Shopee e lucrar! 🚀</p>
+            <button 
+              onClick={() => {
+                setShowSuccessOverlay(false);
+                setShowDownloadModal(false);
+              }}
+              className="px-10 py-5 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-xl"
+            >
+              CONCLUÍDO
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
