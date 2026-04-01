@@ -2119,14 +2119,14 @@ const App: React.FC = () => {
                     <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="grid grid-cols-2 gap-4">
                       <motion.button 
                         whileTap={{ scale: 0.95 }}
-                        className="h-16 bg-slate-900 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white"
+                        className="h-16 bg-slate-900 border border-white/20 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:border-white/40 transition-all"
                         onClick={() => { setStep('ready'); setAutomationFinished(false); }}
                       >
                         RE-POSTAR
                       </motion.button>
                       <motion.button 
                         whileTap={{ scale: 0.95 }}
-                        className="h-16 bg-accent text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-accent/20"
+                        className="h-16 bg-gradient-to-r from-accent to-emerald-400 text-black rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center"
                         onClick={() => { setStep('list'); setAutomationFinished(false); }}
                       >
                         CONCLUÍDO
