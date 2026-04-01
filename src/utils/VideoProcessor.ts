@@ -46,17 +46,23 @@ export class VideoProcessor {
   }
 
   private async fetchVideoAsBlob(url: string): Promise<string> {
+    const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
+    
+    // Lista de proxies para tentar em ordem
     const proxies = [
-      (u: string) => `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=${encodeURIComponent(u)}`,
+      (u: string) => u.includes(PROXY_BASE) ? u : `${PROXY_BASE}?url=${encodeURIComponent(u)}`,
       (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
       (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
       (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     ];
-    for (const proxy of proxies) {
+
+    for (const proxyFn of proxies) {
       try {
+        const targetUrl = proxyFn(url);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
-        const res = await fetch(proxy(url), { cache: 'no-cache', signal: controller.signal });
+        
+        const res = await fetch(targetUrl, { cache: 'no-cache', signal: controller.signal });
         clearTimeout(timeoutId);
         
         if (res.ok) {
@@ -64,11 +70,12 @@ export class VideoProcessor {
           if (blob.size > 50000) return URL.createObjectURL(blob);
         }
       } catch (e) {
-        console.warn('Proxy falhou: ', proxy('...'));
+        console.warn('Proxy falhou ou timeout:', url.substring(0, 50));
       }
     }
     return url;
   }
+
 
   public async renderVideo(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     return new Promise(async (resolve, reject) => {

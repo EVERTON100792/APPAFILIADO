@@ -4,7 +4,7 @@ import {
   Home, Database, Copy, RefreshCcw,
   Shield, Video, Zap, ArrowRight, Activity, Search, RotateCcw,
   Download, Terminal, LayoutGrid, Unlock, ArrowLeft, Volume2, VolumeX, Sparkles, Type,
-  Maximize2, MoveRight, X, Scissors, ShoppingBag, Upload
+  Maximize2, MoveRight, X, Scissors, ShoppingBag, Upload, CheckCircle2
 } from 'lucide-react';
 
 
@@ -21,35 +21,41 @@ import { BioManager } from './components/BioManager';
 function getSmartSearchName(title: string): string {
   if (!title) return '';
   
-  // 1. Limpar caracteres especiais e lixo de marketplace
+  // 1. Limpar caracteres especiais e lixo de marketplace agressivo
   let cleanTitle = title.split(/[-,\(\)\[\]|]/)[0]; // Pega a primeira parte antes de separadores comuns
   
-  // 2. Remover termos genéricos de promoção e marketplace
+  // 2. Remover termos genéricos de promoção e marketplace que poluem a busca
   const marketJunk = [
     'promoção', 'oferta', 'queima', 'estoque', 'barato', 'shopee', 'link', 'bio', 
     'brasil', 'br', 'kit', 'conjunto', 'pacote', 'unidade', 'und', 'pcs', 'peças', 
     'peça', 'novo', 'nova', 'original', 'oficial', 'compre', 'aqui', 'clique', 
     'veja', 'olha', 'frete', 'grátis', 'pronta', 'entrega', 'envio', 'imediato',
-    'atocado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio'
+    'atacado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio', 'envio em 24h',
+    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu'
   ];
   
   const regexJunk = new RegExp(`\\b(${marketJunk.join('|')})\\b`, 'gi');
   cleanTitle = cleanTitle.replace(regexJunk, '').trim();
 
-  // 3. Remover emojis e caracteres estranhos
+  // 3. Remover emojis e caracteres não alfanuméricos (mantendo acentos)
   cleanTitle = cleanTitle.replace(/[^\w\sÀ-ú0-9]/gi, ' ');
   
   // 4. Filtrar palavras curtas e stop words (para focar no objeto real)
-  const stopWords = new Set(['a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 'na', 'no', 'que', 'dos', 'das', 'seu', 'sua']);
+  const stopWords = new Set([
+    'a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 
+    'na', 'no', 'que', 'dos', 'das', 'seu', 'sua', 'pelo', 'pela', 'como', 'mais'
+  ]);
+  
   let words = cleanTitle.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()));
   
-  // Se não sobrou nada, tenta usar o título original limpado
+  // Se não sobrou nada, tenta usar o título original com uma limpeza básica de emergência
   if (words.length === 0) {
-    return title.substring(0, 30).trim();
+    return title.replace(/[^\w\s]/g, '').substring(0, 30).trim();
   }
 
-  // 5. Pegar as palavras-chave principais (geralmente as primeiras 2 ou 3)
-  // Para busca no TikTok, menos é mais (ex: "Mini Projetor" em vez de "Mini Projetor Portátil 4K")
+  // 5. Inteligência de Busca: Priorizar os termos mais "descritivos"
+  // Para TikTok, termos compostos (2-3 palavras) funcionam melhor que frases longas.
+  // Ex: "Mini Projetor Portátil" -> "Mini Projetor"
   return words.slice(0, 3).join(' ').trim();
 }
 
@@ -58,22 +64,25 @@ function generateViralProductName(baseName: string): string {
   if (!clean) return baseName;
 
   const prefixes = [
-    'O Famoso', 'A Incrível', 'Diga Adeus ao Problema com:', 'O Queridinho do TikTok:', 
-    'VOCÊ PRECISA DISSO:', 'Achei o Melhor:', 'GENTE! Olha este', 'REVELADO:', 
-    'O Segredo do Lar:', 'PROMO:', 'O Viral do Momento:'
+    'O FAMOSO', 'A INCRÍVEL', 'CHEGOU:', 'MAIS VENDIDO:', 'ACHADINHO:', 
+    'REVELADO:', 'VOCÊ PRECISA DISSO:', 'GENTE! OLHA ESTE', 'O SEGREDO DO LAR:', 
+    'O QUERIDINHO:', 'PRODUTO VIRAL:', 'A MELHOR COMPRA:', 'JÁ QUERIA UM:',
+    'ESSE É DIFERENTE:', 'VIROU FEBRE:', 'O MELHOR ACHADO:'
   ];
   
   const suffixes = [
-    '🔥', '✨', ' (OFERTA HOJE)', '!!! 😱', ' (Últimas Unidades)', ' (Viral)', 
-    ' - Você vai amar!', ' [CONFIRA]', ' ✨ Melhor Achadinho'
+    '🔥', '✨', ' (DÁ UMA OLHADA! 😱)', ' (O PRIMEIRO É MELHOR)', ' (OFERTA RELÂMPAGO ⚡)', 
+    ' (VOCÊ VAI AMAR!)', ' [RECOMENDO MUITO]', ' ✨ MELHOR ACHADO DO DIA', ' 💎 QUALIDADE PREMIUM',
+    ' - SÉRIO, É PERFEITO!', ' (MELHOR QUE O ORIGINAL)', ' (ACHADO DE OURO)'
   ];
 
   const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
   const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
 
-  return `${prefix} ${clean}${suffix}`;
+  return `${prefix} ${clean.toUpperCase()}${suffix}`;
 }
 
+// Step types for the main application navigation
 type Step = 'home' | 'scouting' | 'list' | 'ready' | 'treating' | 'automation' | 'history' | 'bio' | 'plans';
 
 const App: React.FC = () => {
@@ -131,8 +140,8 @@ const App: React.FC = () => {
 
   const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
     if (type === 'shopee') {
-      // Link oficial para evitar redirecionamentos problemáticos
-      return 'https://shopee.com.br/';
+      // Link oficial para o painel de ofertas de afiliados (Busca Central)
+      return 'https://affiliate.shopee.com.br/offer/product_offer';
     } else {
       // Link que abre a página de upload/publicação no TikTok
       return 'https://www.tiktok.com/upload?lang=pt-BR';
@@ -885,125 +894,158 @@ const App: React.FC = () => {
     e.stopPropagation();
     setIsSavingToBio(true);
     try {
-      const userId = getUserId();
+      const email = localStorage.getItem('user_email');
+      const { data: user } = await supabase.from('users_profiles').select('id').eq('email', email).single();
+      const userId = user?.id;
+
+      if (!userId) {
+        showToast('FAÇA LOGIN PARA ADICIONAR À BIO');
+        return;
+      }
+
       const { error } = await supabase.from('bio_store').insert({
         user_id: userId,
         product_id: p.id,
-        title: generateViralProductName(p.title),
-        image_url: p.image || p.thumbnail,
-        affiliate_link: p.link || p.url,
-        price: p.price
+        title: generateViralProductName(p.title || p.query),
+        link: p.affiliate_link || p.url || '',
+        image_url: p.image || p.cover || ''
       });
+
       if (error) throw error;
-      showToast("ADICIONADO À VITRINE! 🛍️");
-    } catch (err: any) {
-      console.error("Erro ao salvar na Bio:", err);
-      showToast("ERRO AO SALVAR NA BIO ❌");
+      showToast('PRODUTO ADICIONADO À BIO! 🔗');
+    } catch (err) {
+      console.error(err);
+      showToast('ERRO AO ADICIONAR À BIO');
     } finally {
       setIsSavingToBio(false);
     }
   };
+
   const researchTikTok = async (product: any) => {
     resetVideoEditor();
     setIsScanning(true);
     try {
-      // ── ETAPA 1: Extrair o núcleo semântico do produto (Alta Precisão)
+      // ── ETAPA 1: Extrair o núcleo semântico e definir o nicho
       const coreQuery = getSmartSearchName(product.query || product.title || '');
       const coreWords = coreQuery.split(' ').filter(w => w.length > 2);
+      const productNiche = product.niche || activeNiche;
       
-      if (coreWords.length === 0) throw new Error('Nome do produto muito curto para busca precisa');
+      if (coreWords.length === 0) throw new Error('Nome do produto incompleto');
 
-      // ── ETAPA 2: Estratégias de busca cirúrgicas (Forçando Brasil)
+      // ── ETAPA 2: Mapeamento de Nichos para Refinamento Heurístico
+      const nicheKeywords: Record<string, { positive: string[], negative: string[] }> = {
+        'Cozinha': { 
+          positive: ['cozinha', 'comida', 'chef', 'receita', 'utilidade', 'casa', 'lar', 'limpeza'],
+          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids'] 
+        },
+        'Tecnologia': { 
+          positive: ['tech', 'gadget', 'unboxing', 'setup', 'pc', 'smartphone', 'eletronico', 'gamer'],
+          negative: ['cozinha', 'panela', 'maquiagem', 'bebe', 'infantil', 'pet'] 
+        },
+        'Beleza': { 
+          positive: ['make', 'maquiagem', 'skin', 'cabelo', 'beleza', 'beauty', 'tutorial', 'testando'],
+          negative: ['ferramenta', 'carro', 'moto', 'gamer', 'tecnologia', 'comida'] 
+        },
+        'Decoração': { 
+          positive: ['casa', 'decor', 'quarto', 'sala', 'iluminação', 'led', 'reforma'],
+          negative: ['maquiagem', 'carro', 'pet', 'comida'] 
+        },
+        'Pet': { 
+          positive: ['pet', 'gato', 'cachorro', 'dog', 'cat', 'animal', 'fofo'],
+          negative: ['maquiagem', 'cozinha', 'gamer'] 
+        }
+      };
+
+      const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
+
+      // ── ETAPA 3: Estratégias de busca (Query Diversification)
       const strategies = [
-        { query: `${coreQuery} shopee brasil`, extraParams: '&region=BR' },
-        { query: `${coreQuery} achadinhos brasil`, extraParams: '&region=BR' },
-        { query: `${coreQuery} unboxing brasil`, extraParams: '&region=BR' },
+        { query: `${coreQuery} shopee brasil`, weight: 1.2 },
+        { query: `${coreQuery} achadinhos`, weight: 1.0 },
+        { query: `${coreQuery} unboxing`, weight: 0.8 },
       ];
 
-      // Padrões de Idioma Reforçados
-      const ptBrPattern = /[àáâãéêíóôõúüçÀÁÂÃÉÊÍÓÔÕÚÜÇ]|achei|comprei|chegou|resenha|unbox|barato|produto|dica|comprinhas|testando|provador|recomendo/i;
-      const englishPattern = /\b(the|this|my|is|are|was|were|that|with|from|have|you|for|and|but|it|an|at|by|on)\b/i;
-      const spanishPattern = /\b(el|la|los|las|con|para|este|esta|un|una|pero|por|del|al)\b/i;
-      const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; // Detecta Chinês, Árabe, etc.
+      // Padrões de Idioma e Scripts
+      const ptBrKeywords = ['achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 'testando', 'recomendo', 'unboxing', 'review'];
+      const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; 
 
       let allVideos: any[] = [];
       for (const strategy of strategies) {
         const q = encodeURIComponent(strategy.query);
         try {
           const resp = await fetch(
-            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=15&cursor=0${strategy.extraParams}`,
-            { signal: AbortSignal.timeout(6000) }
+            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=15&cursor=0&region=BR`,
+            { signal: AbortSignal.timeout(7000) }
           );
           const json = await resp.json();
           if (json.data?.videos?.length > 0) {
-            allVideos = [...allVideos, ...json.data.videos];
+            allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: strategy.weight }))];
           }
         } catch {}
       }
 
-      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado para este produto');
+      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
 
-      // ── ETAPA 3: Filtragem RADICAL de relevância (100% Match)
+      // ── ETAPA 4: MOTOR DE SCORING HEURÍSTICO (O Coração da Inteligência)
       const scored = allVideos
-        .filter((v: any) => (v.play || v.wmplay) && v.duration > 5) // Mínimo 5 seg
+        .filter((v: any) => (v.play || v.wmplay) && v.duration > 4)
         .map((v: any) => {
           const title = (v.title || '').toLowerCase();
           const author = (v.author?.nickname || '').toLowerCase();
           const music = (v.music_info?.title || '').toLowerCase();
           const text = `${title} ${author} ${music}`;
           
-          // 1. Match de Palavras-Chave (MODO 100% ESTRITO)
-          let matches = 0;
-          coreWords.forEach((w: string) => { 
-            if (text.includes(w.toLowerCase())) matches++; 
+          let score = 0;
+
+          // 1. Match de Palavras-Chave do Produto (PESO MÁXIMO)
+          if (text.includes(coreWords[0].split(' ')[0].toLowerCase())) score += 60;
+          
+          coreWords.forEach((w: string, idx: number) => { 
+            if (text.includes(w.toLowerCase())) {
+              score += (idx === 0 ? 40 : 25); 
+            }
           });
-          
-          const matchRatio = matches / coreWords.length;
-          
-          // 2. Análise de Idioma e Scripts
-          const isBrazilian = ptBrPattern.test(text);
-          const isEnglish = englishPattern.test(text);
-          const isSpanish = spanishPattern.test(text);
-          const hasForeignScript = nonLatinPattern.test(text);
-          
-          let langScore = 0;
-          if (hasForeignScript) langScore = -2000; // REJEIÇÃO TOTAL (Ásia/Árabe)
-          else if (isBrazilian) langScore = 100;    // ALTO BÔNUS BR
-          
-          let langPenalty = 0;
-          if (isEnglish) langPenalty = -1000;  // REJEIÇÃO (EUA/Global)
-          if (isSpanish) langPenalty = -1000;  // REJEIÇÃO (LATAM)
 
-          // 3. Blacklist de Lixo Aguda
-          const blackList = ['dance', 'funny', 'cat', 'dog', 'pubg', 'freefire', 'roblox', 'edit', 'anime', 'meme', 'gameplay'];
-          const garbagePenalty = blackList.some(w => text.includes(w)) ? -500 : 0;
+          // 2. Pontuação de Idioma (PT-BR)
+          const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
+          if (hasPtBrKeywords) score += 50;
+          if (nonLatinPattern.test(text)) score -= 1000;
 
-          // 4. RELEVÂNCIA INTELIGENTE (Core Match)
-          const relevancePass = matches >= Math.min(coreWords.length, 2);
-          
-          // Pontuação final: Se falhar na relevância, penalizamos mas não eliminamos totalmente (se for BR)
-          const finalScore = (!relevancePass ? -200 : (matchRatio * 150)) + langScore + langPenalty + (garbagePenalty / 5);
+          // 3. Match de Nicho
+          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 15; });
+          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 40; });
+
+          // 4. Blacklist Global de Descarte
+          const globalBlacklist = ['dance', 'reflexão', 'gato', 'dog', 'pubg', 'freefire', 'edit', 'anime', 'meme', 'gameplay', 'humor', 'comédia'];
+          globalBlacklist.forEach(w => { if (text.includes(w)) score -= 60; });
+
+          // 5. Bônus de Qualidade (Duração ideal entre 7 e 25 segundos)
+          if (v.duration >= 7 && v.duration <= 25) score += 10;
+          score *= (v._queryWeight || 1.0);
+
+          const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
+          const finalUrl = v.play || v.wmplay;
+          const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(finalUrl)}`;
 
           return {
             id: v.video_id,
-            url: v.play || v.wmplay,
+            url: proxiedUrl,
             cover: v.cover,
             title: v.title,
             duration: v.duration,
             author: v.author?.nickname || 'Criador',
-            _score: finalScore
+            _score: score
           };
         })
-        .filter((v: any) => v._score > -500) // Elimina apenas lixo total ou estrangeiro agressivo
+        .filter((v: any) => v._score > 40)
         .sort((a: any, b: any) => b._score - a._score);
 
       if (scored.length === 0) {
-        showToast("NENHUM VÍDEO BRASILEIRO SEGURO ENCONTRADO");
+        showToast("DIFICULDADE EM ACHAR VÍDEOS 100% RELEVANTES");
         setStep('list');
         return;
       }
 
-      // Remover duplicatas por video_id
       const seen = new Set<string>();
       const unique = scored.filter((v: any) => {
         if (seen.has(v.id)) return false;
@@ -1015,28 +1057,26 @@ const App: React.FC = () => {
       setCurrentVideoIndex(0);
       setVideoData({ cover: unique[0].cover, url: unique[0].url, id: unique[0].id });
       
-      // Auto-preenchimento da Vitrine com Copywriting Viral
       setBioTitle(generateViralProductName(product.title));
       setBioLink(product.affiliate_link || product.link || '');
       setBioImageUrl(unique[0].cover);
 
-      const viralLegend = generateCreativeLegend(product);
-      setCustomCopy(viralLegend);
+      setCustomCopy(generateCreativeLegend(product));
       setVideoLegend(generateOverlayLegend(product));
 
-      showToast(`🇧🇷 ${unique.length} VÍDEOS BR LOCALIZADOS! 🔥`);
+      showToast(`🇧🇷 ${unique.length} VÍDEOS FILTRADOS COM SUCESSO!`);
 
       setTimeout(() => {
         setStep('treating');
         setTimeout(() => {
           setStep('ready');
           showToast("VÍDEO PRONTO PARA POSTAR! 🚀");
-        }, 3000);
-      }, 1500);
+        }, 2500);
+      }, 1000);
 
     } catch (error) {
       console.error("TikTok Research Error:", error);
-      showToast("MOTOR DE BUSCA TEMPORARIAMENTE OFFLINE");
+      showToast("ERRO NA BUSCA INTELIGENTE");
       setStep('list');
     } finally {
       setIsScanning(false);
@@ -1758,7 +1798,7 @@ const App: React.FC = () => {
                             navigator.clipboard.writeText(smartName);
                             showToast("BUSCA INTELIGENTE COPIADA! 📋");
                           }
-                          window.open("https://shopee.com.br/", "_blank");
+                          window.open("https://affiliate.shopee.com.br/offer/product_offer", "_blank");
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#EE4D2D]/10 text-[#EE4D2D] border border-[#EE4D2D]/20 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[#EE4D2D] hover:text-white transition-all w-fit text-left leading-tight"
                       >
@@ -2064,16 +2104,20 @@ const App: React.FC = () => {
               <motion.button 
                 whileTap={{ scale: 0.98 }}
                 disabled={isProcessing}
-                className={`w-full h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center gap-3 text-white/40 hover:text-white hover:bg-white/10 transition-all ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                className={`w-full h-14 rounded-2xl flex items-center justify-center gap-3 transition-all ${
+                  isProcessing 
+                    ? 'bg-slate-900/50 border border-white/5 text-slate-500 cursor-not-allowed' 
+                    : 'bg-white/10 border border-white/20 text-white shadow-lg shadow-white/5 hover:bg-white/20 hover:border-white/30'
+                }`} 
                 onClick={handleDownload}
               >
                 {isProcessing ? (
                   <RefreshCcw size={18} className="animate-spin text-accent" />
                 ) : (
-                  <Download size={18} />
+                  <Download size={18} className="text-accent" />
                 )}
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  {isProcessing ? 'PROCESSANDO EFEITOS...' : "Download MP4 (Com Efeitos Pro)"}
+                <span className="text-[11px] font-black uppercase tracking-[0.2em]">
+                  {isProcessing ? 'Sincronizando Efeitos...' : "Baixar Vídeo Produzido"}
                 </span>
               </motion.button>
               </div> {/* fim dos controles scrolláveis */}
@@ -2119,16 +2163,18 @@ const App: React.FC = () => {
                     <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="grid grid-cols-2 gap-4">
                       <motion.button 
                         whileTap={{ scale: 0.95 }}
-                        className="h-16 bg-slate-900 border border-white/20 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:border-white/40 transition-all"
+                        className="h-16 bg-slate-900 border-2 border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/90 hover:border-white/30 transition-all flex items-center justify-center gap-2"
                         onClick={() => { setStep('ready'); setAutomationFinished(false); }}
                       >
+                        <RotateCcw size={16} />
                         RE-POSTAR
                       </motion.button>
                       <motion.button 
                         whileTap={{ scale: 0.95 }}
-                        className="h-16 bg-gradient-to-r from-accent to-emerald-400 text-black rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center"
+                        className="h-16 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 border-2 border-white/20"
                         onClick={() => { setStep('list'); setAutomationFinished(false); }}
                       >
+                        <CheckCircle2 size={18} />
                         CONCLUÍDO
                       </motion.button>
                     </motion.div>
@@ -2319,7 +2365,7 @@ const App: React.FC = () => {
                           : 'bg-gradient-to-r from-accent to-emerald-400 text-slate-950 shadow-[0_10px_40px_rgba(6,182,212,0.4)] hover:shadow-[0_15px_60px_#06b6d4] active:scale-[0.98] animate-pulse'
                       }`}
                     >
-                      {isPreparingDownload ? (
+                       {isPreparingDownload ? (
                         <>
                           <RefreshCcw className="w-5 h-5 animate-spin" />
                           <span>RENDERIZANDO...</span>
@@ -2327,7 +2373,7 @@ const App: React.FC = () => {
                       ) : (
                         <>
                           <Download size={24} strokeWidth={3} />
-                          <span className="text-sm">BAIXAR AGORA</span>
+                          <span className="text-base">BAIXAR AGORA</span>
                         </>
                       )}
                     </motion.button>
