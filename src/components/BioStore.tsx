@@ -15,8 +15,11 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Garantir que o userId esteja limpo e em minúsculas para a busca
+    const cleanId = userId.trim().toLowerCase();
+    
     supabase.from('bio_store').select('*')
-      .eq('user_id', userId)
+      .eq('user_id', cleanId)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
          if (data) setItems(data);
@@ -37,7 +40,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-slate-200 font-sans selection:bg-emerald-500/30 selection:text-emerald-400 pb-32 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-slate-200 font-sans selection:bg-emerald-500/30 selection:text-emerald-400 pb-32 relative overflow-y-auto overflow-x-hidden">
       <div className="noise-overlay" />
       
       {/* Background Decor (Watermark) */}
