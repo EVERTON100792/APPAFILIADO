@@ -20,17 +20,58 @@ import { BioManager } from './components/BioManager';
 
 function getSmartSearchName(title: string): string {
   if (!title) return '';
-  // Remover qualquer coisa após hífen ou vírgula
-  let cleanTitle = title.split('-')[0].split(',')[0];
-  // Remover caracteres especiais
-  cleanTitle = cleanTitle.replace(/[^\w\sÀ-ú]/gi, ' ');
-  // Dividir em palavras
-  let words = cleanTitle.split(/\s+/).filter(w => w.length > 0);
-  // Lista de palavras menos genéricas
-  const stopWords = new Set(['a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 'na', 'no', 'que']);
-  words = words.filter(w => !stopWords.has(w.toLowerCase()));
-  // Pegar até 3 palavras principais
-  return words.slice(0, 3).join(' ');
+  
+  // 1. Limpar caracteres especiais e lixo de marketplace
+  let cleanTitle = title.split(/[-,\(\)\[\]|]/)[0]; // Pega a primeira parte antes de separadores comuns
+  
+  // 2. Remover termos genéricos de promoção e marketplace
+  const marketJunk = [
+    'promoção', 'oferta', 'queima', 'estoque', 'barato', 'shopee', 'link', 'bio', 
+    'brasil', 'br', 'kit', 'conjunto', 'pacote', 'unidade', 'und', 'pcs', 'peças', 
+    'peça', 'novo', 'nova', 'original', 'oficial', 'compre', 'aqui', 'clique', 
+    'veja', 'olha', 'frete', 'grátis', 'pronta', 'entrega', 'envio', 'imediato',
+    'atocado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio'
+  ];
+  
+  const regexJunk = new RegExp(`\\b(${marketJunk.join('|')})\\b`, 'gi');
+  cleanTitle = cleanTitle.replace(regexJunk, '').trim();
+
+  // 3. Remover emojis e caracteres estranhos
+  cleanTitle = cleanTitle.replace(/[^\w\sÀ-ú0-9]/gi, ' ');
+  
+  // 4. Filtrar palavras curtas e stop words (para focar no objeto real)
+  const stopWords = new Set(['a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 'na', 'no', 'que', 'dos', 'das', 'seu', 'sua']);
+  let words = cleanTitle.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()));
+  
+  // Se não sobrou nada, tenta usar o título original limpado
+  if (words.length === 0) {
+    return title.substring(0, 30).trim();
+  }
+
+  // 5. Pegar as palavras-chave principais (geralmente as primeiras 2 ou 3)
+  // Para busca no TikTok, menos é mais (ex: "Mini Projetor" em vez de "Mini Projetor Portátil 4K")
+  return words.slice(0, 3).join(' ').trim();
+}
+
+function generateViralProductName(baseName: string): string {
+  const clean = getSmartSearchName(baseName);
+  if (!clean) return baseName;
+
+  const prefixes = [
+    'O Famoso', 'A Incrível', 'Diga Adeus ao Problema com:', 'O Queridinho do TikTok:', 
+    'VOCÊ PRECISA DISSO:', 'Achei o Melhor:', 'GENTE! Olha este', 'REVELADO:', 
+    'O Segredo do Lar:', 'PROMO:', 'O Viral do Momento:'
+  ];
+  
+  const suffixes = [
+    '🔥', '✨', ' (OFERTA HOJE)', '!!! 😱', ' (Últimas Unidades)', ' (Viral)', 
+    ' - Você vai amar!', ' [CONFIRA]', ' ✨ Melhor Achadinho'
+  ];
+
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+
+  return `${prefix} ${clean}${suffix}`;
 }
 
 type Step = 'home' | 'scouting' | 'list' | 'ready' | 'treating' | 'automation' | 'history' | 'bio' | 'plans';
@@ -47,6 +88,7 @@ const App: React.FC = () => {
 
   // Forçar sempre 'home' como primeira aba ao abrir, se estiver configurado
   const [step, setStep] = useState<Step>('home');
+  const [isPreparingDownload, setIsPreparingDownload] = useState(false);
 
   const [activeFilter, setActiveFilter] = useState('none');
   const [activeTransition, setActiveTransition] = useState('none');
@@ -89,8 +131,8 @@ const App: React.FC = () => {
 
   const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
     if (type === 'shopee') {
-      // Link que abre o app na página de vídeos (Shopee Vídeo BR)
-      return 'https://shopee.com.br/m/shopee-video';
+      // Link oficial para evitar redirecionamentos problemáticos
+      return 'https://shopee.com.br/';
     } else {
       // Link que abre a página de upload/publicação no TikTok
       return 'https://www.tiktok.com/upload?lang=pt-BR';
@@ -490,22 +532,33 @@ const App: React.FC = () => {
   };
 
   const saveToSupabase = async (product: any, platform: string) => {
+    if (!product) return;
     const userId = getUserId();
+    
+    // Garantir que os dados são strings e nunca nulas/undefined para evitar Erro 400
+    const payload = { 
+      user_id: String(userId || 'default-user'),
+      product_id: String(product.id || product.product_id || 'sem-id'), 
+      title: String(product.title || 'Produto sem título'), 
+      platform: String(platform || 'Shopee') 
+    };
+
+    console.log('Enviando para Supabase...', payload);
+
     const { data, error } = await supabase
       .from('publication_history')
-      .insert([
-        { 
-          user_id: userId,
-          product_id: product.id, 
-          title: product.title, 
-          platform: platform 
-        }
-      ])
+      .insert([payload])
       .select();
 
-    if (!error && data) {
+    if (error) {
+      console.error('ERRO CRÍTICO SUPABASE (RESTAURAÇÃO):', error.message);
+      showToast("ERRO AO SALVAR NO BANCO");
+      return;
+    }
+
+    if (data && data.length > 0) {
       setPublicationHistory(prev => [data[0], ...prev]);
-      showToast("REGISTRADO NO SUPABASE! ☁️");
+      showToast("PUBLICAÇÃO REGISTRADA! ☁️");
     }
   };
 
@@ -830,42 +883,35 @@ const App: React.FC = () => {
 
   const addToBio = async (p: any, e: React.MouseEvent) => {
     e.stopPropagation();
+    setIsSavingToBio(true);
     try {
+      const userId = getUserId();
       const { error } = await supabase.from('bio_store').insert({
-        user_id: getUserId(),
-        title: p.title,
-        image_url: p.image || p.thumbnail || '',
-        price: p.price,
-        link: p.link || p.url,
-        category: activeNiche
+        user_id: userId,
+        product_id: p.id,
+        title: generateViralProductName(p.title),
+        image_url: p.image || p.thumbnail,
+        affiliate_link: p.link || p.url,
+        price: p.price
       });
       if (error) throw error;
-      showToast("PRODUTO ADICIONADO À BIO! 🛒");
-    } catch (err) {
-      console.error(err);
-      showToast("ERRO AO SALVAR NA BIO");
+      showToast("ADICIONADO À VITRINE! 🛍️");
+    } catch (err: any) {
+      console.error("Erro ao salvar na Bio:", err);
+      showToast("ERRO AO SALVAR NA BIO ❌");
+    } finally {
+      setIsSavingToBio(false);
     }
   };
-
   const researchTikTok = async (product: any) => {
     resetVideoEditor();
     setIsScanning(true);
     try {
       // ── ETAPA 1: Extrair o núcleo semântico do produto (Alta Precisão)
-      let baseTerm = product.query || product.title || '';
-      baseTerm = baseTerm
-        .replace(/[^a-zA-ZÀ-ÿ0-9 ]/g, ' ')
-        // Remove termos genéricos que inflam as buscas com lixo
-        .replace(/\b(oferta|promoção|queima|estoque|barato|shopee|link|bio|brasil|br|kit|conjunto|pacote|unidade|und|pcs|peças|peça|novo|nova|original|oficial|compre|aqui|clique|veja|olha)\b/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      const stopWords = new Set(['de','do','da','dos','das','para','com','em','no','na','um','uma','os','as','o','a','e','por','seu','sua']);
-      const coreWords = baseTerm.split(' ').filter((w: string) => w.length > 2 && !stopWords.has(w.toLowerCase())).slice(0, 3);
+      const coreQuery = getSmartSearchName(product.query || product.title || '');
+      const coreWords = coreQuery.split(' ').filter(w => w.length > 2);
       
       if (coreWords.length === 0) throw new Error('Nome do produto muito curto para busca precisa');
-      
-      const coreQuery = coreWords.join(' ');
 
       // ── ETAPA 2: Estratégias de busca cirúrgicas (Forçando Brasil)
       const strategies = [
@@ -893,7 +939,6 @@ const App: React.FC = () => {
             allVideos = [...allVideos, ...json.data.videos];
           }
         } catch {}
-        if (allVideos.length >= 10) break;
       }
 
       if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado para este produto');
@@ -969,6 +1014,11 @@ const App: React.FC = () => {
       setVideoResults(unique);
       setCurrentVideoIndex(0);
       setVideoData({ cover: unique[0].cover, url: unique[0].url, id: unique[0].id });
+      
+      // Auto-preenchimento da Vitrine com Copywriting Viral
+      setBioTitle(generateViralProductName(product.title));
+      setBioLink(product.affiliate_link || product.link || '');
+      setBioImageUrl(unique[0].cover);
 
       const viralLegend = generateCreativeLegend(product);
       setCustomCopy(viralLegend);
@@ -1012,6 +1062,10 @@ const App: React.FC = () => {
         setCustomCopy(newLegend); 
         // Recupera legenda visual no SWAP de vídeo
         setVideoLegend(generateOverlayLegend(selectedProduct));
+        
+        // Atualiza preenchimento também ao mudar de vídeo (mantendo imagem da capa sincronizada)
+        setBioTitle(generateViralProductName(selectedProduct.title));
+        setBioImageUrl(nextVideo.cover);
       }
 
       showToast("VÍDEO ALTERNATIVO CARREGADO");
@@ -1020,12 +1074,21 @@ const App: React.FC = () => {
     }
   };
 
+  const [downloadPreviewUrl, setDownloadPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (previewBlob) {
+      const url = URL.createObjectURL(previewBlob);
+      setDownloadPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setDownloadPreviewUrl(null);
+    }
+  }, [previewBlob]);
+
   const closePreview = () => {
     setShowDownloadModal(false);
-    if (previewBlob) {
-      URL.revokeObjectURL(URL.createObjectURL(previewBlob));
-      setPreviewBlob(null);
-    }
+    setPreviewBlob(null);
   };
 
   const triggerDownload = () => {
@@ -1040,6 +1103,7 @@ const App: React.FC = () => {
 
   const handleDownload = async () => {
     if (!videoData || isProcessing) return;
+    setIsPreparingDownload(true);
     setIsPlaying(false);
     setIsProcessing(true);
     
@@ -1068,6 +1132,7 @@ const App: React.FC = () => {
       showToast("ERRO AO RENDERIZAR — TENTE NOVAMENTE 📲");
     } finally {
       setIsProcessing(false);
+      setIsPreparingDownload(false);
     }
   };
 
@@ -1604,6 +1669,7 @@ const App: React.FC = () => {
                 {videoData?.url ? (
                   <>
                     <video 
+                      key={videoData?.id || 'main-player'}
                       ref={videoRef}
                       src={videoData?.url || ''}
                       crossOrigin="anonymous"
@@ -1612,7 +1678,7 @@ const App: React.FC = () => {
                       playsInline
                       loop
                       muted={isMuted}
-                      className={`w-full h-full object-cover transition-all duration-300 filter-preview-${activeFilter} ${isTransitionActive ? `transition-preview-${activeTransition}` : ''}`}
+                      className={`w-full h-full object-cover filter-preview-${activeFilter} ${isTransitionActive ? `transition-preview-${activeTransition}` : ''}`}
                     />
                     
                     <button 
@@ -1692,7 +1758,7 @@ const App: React.FC = () => {
                             navigator.clipboard.writeText(smartName);
                             showToast("BUSCA INTELIGENTE COPIADA! 📋");
                           }
-                          window.open("https://affiliate.shopee.com.br/offer/product_offer", "_blank");
+                          window.open("https://shopee.com.br/", "_blank");
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#EE4D2D]/10 text-[#EE4D2D] border border-[#EE4D2D]/20 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[#EE4D2D] hover:text-white transition-all w-fit text-left leading-tight"
                       >
@@ -1796,9 +1862,9 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[9px] uppercase font-black tracking-widest text-accent/70 ml-1">Título de Vendas</label>
+                      <label className="text-[9px] uppercase font-black tracking-widest text-accent/70 ml-1">Nome do Produto</label>
                       <textarea 
-                        placeholder="Ex: Oferta exclusiva! 🔥" 
+                        placeholder="Ex: Nome do Produto... 🔥" 
                         value={bioTitle} 
                         onChange={e => setBioTitle(e.target.value)}
                         className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all h-20 resize-none font-medium"
@@ -2221,40 +2287,58 @@ const App: React.FC = () => {
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className="bg-slate-900/50 border border-white/10 rounded-[40px] w-full max-w-md overflow-hidden relative"
+              className="bg-slate-900 border border-white/10 rounded-[40px] w-full max-w-md max-h-[90vh] overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.8)]"
             >
-              <div className="p-8 flex flex-col items-center gap-6">
-                <div className="w-full aspect-[9/16] bg-black rounded-3xl overflow-hidden border border-white/5 shadow-2xl relative group">
-                  <video 
-                    src={URL.createObjectURL(previewBlob)} 
-                    className="w-full h-full object-cover"
-                    controls
-                    autoPlay
-                    loop
-                  />
-                  <div className="absolute inset-0 pointer-events-none border-2 border-accent/20 rounded-3xl" />
-                </div>
+              <div className="h-full flex flex-col overflow-y-auto custom-scrollbar">
+                <div className="p-8 flex flex-col items-center gap-6">
+                  <div className="w-full aspect-[9/16] bg-black rounded-3xl overflow-hidden border border-white/5 shadow-2xl relative group">
+                    <video 
+                      src={downloadPreviewUrl || ''} 
+                      className="w-full h-full object-cover"
+                      controls
+                      autoPlay
+                      loop
+                    />
+                    <div className="absolute inset-0 pointer-events-none border-2 border-accent/20 rounded-3xl" />
+                  </div>
 
-                <div className="text-center space-y-2">
-                  <h3 className="text-xl font-black italic tracking-tighter uppercase">VÍDEO PRONTO! 🔥</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Sua máquina de vendas foi gerada</p>
-                </div>
+                  <div className="text-center space-y-2">
+                    <h3 className="text-xl font-black italic tracking-tighter uppercase text-white">VÍDEO PRONTO! 🔥</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Sua máquina de vendas foi gerada</p>
+                  </div>
 
-                <div className="flex flex-col w-full gap-3">
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    onClick={triggerDownload}
-                    className="w-full py-5 bg-accent text-black font-black uppercase italic tracking-widest rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.4)] flex items-center justify-center gap-3"
-                  >
-                    <span>BAIXAR AGORA</span>
-                  </motion.button>
-                  
-                  <button 
-                    onClick={closePreview}
-                    className="w-full py-4 text-slate-500 font-bold uppercase text-[10px] tracking-widest hover:text-white transition-colors"
-                  >
-                    VOLTAR AO EDITOR
-                  </button>
+                  <div className="flex flex-col w-full gap-3 pb-4">
+                    <motion.button
+                      whileHover={{ scale: 1.02, filter: 'brightness(1.1)' }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={triggerDownload}
+                      disabled={isPreparingDownload}
+                      className={`w-full py-5 font-black uppercase italic tracking-[0.3em] rounded-2xl flex items-center justify-center gap-3 transition-all z-[310] ${
+                        isPreparingDownload 
+                          ? 'bg-slate-700 text-slate-400 cursor-wait' 
+                          : 'bg-gradient-to-r from-accent to-emerald-400 text-slate-950 shadow-[0_10px_40px_rgba(6,182,212,0.4)] hover:shadow-[0_15px_60px_#06b6d4] active:scale-[0.98] animate-pulse'
+                      }`}
+                    >
+                      {isPreparingDownload ? (
+                        <>
+                          <RefreshCcw className="w-5 h-5 animate-spin" />
+                          <span>RENDERIZANDO...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download size={24} strokeWidth={3} />
+                          <span className="text-sm">BAIXAR AGORA</span>
+                        </>
+                      )}
+                    </motion.button>
+                    
+                    <button 
+                      onClick={closePreview}
+                      className="w-full py-4 text-slate-500 font-bold uppercase text-[10px] tracking-widest hover:text-white transition-colors"
+                    >
+                      VOLTAR AO EDITOR
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
