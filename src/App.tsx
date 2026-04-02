@@ -23,25 +23,25 @@ function getSmartSearchName(title: string): string {
   if (!title) return '';
   
   // 1. Limpar caracteres especiais e lixo de marketplace agressivo
-  let cleanTitle = title.split(/[-,\(\)\[\]|]/)[0]; // Pega a primeira parte antes de separadores comuns
+  let cleanTitle = title.split(/[-,\(\)\[\]|]/)[0]; 
   
-  // 2. Remover termos genéricos de promoção e marketplace que poluem a busca
+  // 2. Remover termos que poluem a busca e trazem resultados de baixa qualidade
   const marketJunk = [
     'promoção', 'oferta', 'queima', 'estoque', 'barato', 'shopee', 'link', 'bio', 
     'brasil', 'br', 'kit', 'conjunto', 'pacote', 'unidade', 'und', 'pcs', 'peças', 
     'peça', 'novo', 'nova', 'original', 'oficial', 'compre', 'aqui', 'clique', 
     'veja', 'olha', 'frete', 'grátis', 'pronta', 'entrega', 'envio', 'imediato',
-    'atacado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio', 'envio em 24h',
-    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu'
+    'atacado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio em 24h',
+    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu', 'casa', 'cozinha'
   ];
   
   const regexJunk = new RegExp(`\\b(${marketJunk.join('|')})\\b`, 'gi');
-  cleanTitle = cleanTitle.replace(regexJunk, '').trim();
+  cleanTitle = cleanTitle.replace(regexJunk, ' ').trim();
 
-  // 3. Remover emojis e caracteres não alfanuméricos (mantendo acentos)
+  // 3. Remover emojis e caracteres não alfanuméricos
   cleanTitle = cleanTitle.replace(/[^\w\sÀ-ú0-9]/gi, ' ');
   
-  // 4. Filtrar palavras curtas e stop words (para focar no objeto real)
+  // 4. Filtrar palavras curtas e stop words
   const stopWords = new Set([
     'a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 
     'na', 'no', 'que', 'dos', 'das', 'seu', 'sua', 'pelo', 'pela', 'como', 'mais'
@@ -49,14 +49,9 @@ function getSmartSearchName(title: string): string {
   
   let words = cleanTitle.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()));
   
-  // Se não sobrou nada, tenta usar o título original com uma limpeza básica de emergência
-  if (words.length === 0) {
-    return title.replace(/[^\w\s]/g, '').substring(0, 30).trim();
-  }
+  if (words.length === 0) return title.substring(0, 30).trim();
 
-  // 5. Inteligência de Busca: Priorizar os termos mais "descritivos"
-  // Para TikTok, termos compostos (2-3 palavras) funcionam melhor que frases longas.
-  // Ex: "Mini Projetor Portátil" -> "Mini Projetor"
+  // 5. Prioridade: Objeto Principal + Características (2 a 3 palavras)
   return words.slice(0, 3).join(' ').trim();
 }
 
@@ -108,6 +103,7 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoLegend, setVideoLegend] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activePlatform, setActivePlatform] = useState<'tiktok' | 'shopee'>('tiktok');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
@@ -264,17 +260,26 @@ const App: React.FC = () => {
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
-  // Sincronização do vídeo com o estado da aplicação
+  // Sincronização do vídeo com o estado da aplicação — Correção Definitiva de Áudio Duplicado
   useEffect(() => {
     if (videoRef.current) {
-      const shouldPause = showDownloadModal || isPreparingDownload || step !== 'ready';
+      // O vídeo DEVE pausar se: modal de download aberto, preparando download, processando ou fora da aba 'ready'
+      const shouldPause = showDownloadModal || isPreparingDownload || isProcessing || step !== 'ready';
+      
       if (isPlaying && !shouldPause) {
-        videoRef.current.play().catch(() => {});
+        // Tenta dar play apenas se as condições de exibição forem seguras
+        videoRef.current.play().catch(() => {
+          console.log("Autoplay bloqueado pelo navegador ou elemento não pronto");
+          setIsPlaying(false);
+        });
       } else {
         videoRef.current.pause();
+        // Garantir que o volume do vídeo principal seja zero durante o processamento para evitar vazamento de áudio
+        if (shouldPause) videoRef.current.muted = true;
+        else videoRef.current.muted = isMuted;
       }
     }
-  }, [isPlaying, showDownloadModal, isPreparingDownload, step]);
+  }, [isPlaying, showDownloadModal, isPreparingDownload, isProcessing, step, isMuted]);
 
   // Ultra-Premium Scanning HUD
   const ScanningHUD = ({ active }: { active: boolean }) => (
@@ -748,6 +753,18 @@ const App: React.FC = () => {
 
 
 
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      const isLargeScreen = window.innerWidth > 1024;
+      setIsMobile((/iPhone|iPad|iPod|Android/i.test(userAgent) || isTouch) && !isLargeScreen);
+    };
+    checkMobile();
+  }, []);
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
@@ -756,7 +773,6 @@ const App: React.FC = () => {
   const resetVideoEditor = () => {
     setActiveFilter('none');
     setActiveTransition('none');
-    setVideoLegend('');
     setVideoLegend('');
   };
 
@@ -1002,15 +1018,33 @@ const App: React.FC = () => {
 
       const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
 
-      // ── ETAPA 3: Estratégias de busca (Reforço PT-BR)
+      // ── ETAPA 3: Estratégias de busca (Ultra Rigor Brasil)
       const strategies = [
-        { query: `${coreQuery} brasil achadinhos`, weight: 1.5 },
-        { query: `shopee brasil ${coreQuery} review`, weight: 1.3 },
-        { query: `${coreQuery} unboxing portugues`, weight: 1.0 },
+        { query: `${coreQuery} brasil achadinhos`, weight: 2.0 },
+        { query: `shopee brasil ${coreQuery} review`, weight: 1.5 },
+        { query: `${coreQuery} testando achadinhos`, weight: 1.2 },
       ];
 
-      // Padrões de Idioma e Scripts (Reforçados)
-      const ptBrKeywords = ['achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 'promo', 'loja'];
+      // Dicionário de Idioma e Qualidade V6
+      const ptBrKeywords = [
+        'achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 
+        'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 
+        'promo', 'loja', 'casa', 'cozinha', 'comprinhas', 'melhor', 'perfeito',
+        'utilidades', 'organização', 'organizando', 'lar', 'enxoval', 'reforma',
+        'paguei', 'vale', 'muito', 'pena', 'gentee', 'olham'
+      ];
+      
+      const foreignIndicators = [
+        'amazon', 'restock', 'organizedhome', 'cleaningday', 'satisfying', 'asmr',
+        'haul', 'cleanwithme', 'amazonfinds', 'gadgets', 'hacks', 'tips', 'usa',
+        'trending', 'foryou', 'viral', 'fyp', 'gadget', 'product', 'items'
+      ];
+      
+      const ptBrMustHave = [
+        'shopee', 'brasil', 'achadinho', 'comprinha', 'link', 'bio', 'utilidade',
+        'loja', 'br', 'achei', 'achado', 'comprinha'
+      ];
+
       const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; 
 
       let allVideos: any[] = [];
@@ -1018,8 +1052,8 @@ const App: React.FC = () => {
         const q = encodeURIComponent(strategy.query);
         try {
           const resp = await fetch(
-            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=15&cursor=0&region=BR`,
-            { signal: AbortSignal.timeout(7000) }
+            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
+            { signal: AbortSignal.timeout(8000) }
           );
           const json = await resp.json();
           if (json.data?.videos?.length > 0) {
@@ -1030,9 +1064,9 @@ const App: React.FC = () => {
 
       if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
 
-      // ── ETAPA 4: MOTOR DE SCORING HEURÍSTICO (O Coração da Inteligência)
+      // ── ETAPA 4: MOTOR DE SCORING V6 (Elite Brasil Quality)
       const scored = allVideos
-        .filter((v: any) => (v.play || v.wmplay) && v.duration > 4)
+        .filter((v: any) => (v.play || v.wmplay) && v.duration > 5)
         .map((v: any) => {
           const title = (v.title || '').toLowerCase();
           const author = (v.author?.nickname || '').toLowerCase();
@@ -1041,62 +1075,54 @@ const App: React.FC = () => {
           
           let score = 0;
 
-          // 1. Match de Palavras-Chave do Produto (PESO MÁXIMO)
-          if (text.includes(coreWords[0].split(' ')[0].toLowerCase())) score += 60;
-          
-          coreWords.forEach((w: string, idx: number) => { 
-            if (text.includes(w.toLowerCase())) {
-              score += (idx === 0 ? 40 : 25); 
-            }
+          // 1. Match de Palavras-Chave do Produto (Requer match duplo para alta confiança)
+          let matchCount = 0;
+          coreWords.forEach((word) => {
+            if (text.includes(word.toLowerCase())) matchCount++;
           });
 
-          // 2. Pontuação de Idioma (PT-BR) - RIGOROSA
+          if (matchCount >= 2) score += 400; 
+          else if (matchCount === 1) score += 60;
+
+          // 2. Filtro de Idioma PT-BR Inflexível
           const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
-          if (hasPtBrKeywords) score += 80;
-          if (text.includes('brasil') || text.includes(' shopee')) score += 40;
+          const hasMustHave = ptBrMustHave.some(w => text.includes(w));
+          const hasForeignIndicator = foreignIndicators.some(w => text.includes(w));
+
+          if (hasMustHave) score += 600;
+          if (hasPtBrKeywords) score += 200;
           
-          // Penalizar pesadamente se não houver palavras em PT-BR no título/descrição
-          const ptWordsCount = text.split(' ').filter(word => ptBrKeywords.includes(word)).length;
-          if (ptWordsCount === 0 && !hasPtBrKeywords) score -= 150;
+          // PENALIDADE RADICAL: Se não tem nada de português ou é gringo claro
+          if (!hasPtBrKeywords && !hasMustHave) score -= 5000;
+          if (hasForeignIndicator && !hasMustHave) score -= 5000;
+          if (nonLatinPattern.test(text)) score -= 8000;
 
-          if (nonLatinPattern.test(text)) score -= 2000;
+          // 3. Qualidade Técnica (Elite HD)
+          if (v.width && v.width >= 1080) score += 400;
+          else if (v.width && v.width >= 720) score += 150;
+          else score -= 500; // Penaliza forte baixa res
 
-          // 3. Match de Nicho
-          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 15; });
-          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 60; });
-
-          // 4. Blacklist Global de Descarte (Lixo de engajamento baixo)
-          const globalBlacklist = ['dance', 'reflexão', 'gato', 'dog', 'pubg', 'freefire', 'edit', 'anime', 'meme', 'gameplay', 'humor', 'comédia', 'fnaf', 'roblox'];
-          globalBlacklist.forEach(w => { if (text.includes(w)) score -= 100; });
-
-          // 5. INTELIGÊNCIA VIRAL (Engagement & High Quality)
+          // 4. Inteligência de Engajamento V6 (Rigor Máximo)
           const views = v.play_count || v.play || 0;
           const diggs = v.digg_count || 0;
           const comments = v.comment_count || 0;
           const shares = v.share_count || 0;
           
-          // Ratio de engajamento real (Corrigido para ser mais rigoroso)
-          const engagementRatio = views > 0 ? ((diggs + (comments * 2) + (shares * 3)) / views) * 100 : 0;
+          const engagementRatio = views > 0 ? ((diggs + (comments * 4) + (shares * 6)) / views) * 100 : 0;
 
-          // Bônus por popularidade massiva (Viral certo)
-          if (views > 100000) score += 60;
-          else if (views > 30000) score += 30;
-          
-          // Filtro de Engajamento Mínimo (Qualidade Super Alta)
-          if (engagementRatio > 8) score += 90; // Video muito amado
-          else if (engagementRatio > 5) score += 40;
-          else if (engagementRatio < 1.5) score -= 150; // Descarta vídeos 'fantasmas' (muita view, pouco like)
+          if (engagementRatio > 18) score += 800; 
+          else if (engagementRatio > 12) score += 500;
+          else if (engagementRatio < 4) score -= 1000; // Descarte de "espelhamento" de bot gringo
 
-          if (engagementRatio > 15) score += 40; // Muito engajado
-          else if (engagementRatio > 8) score += 20;
+          if (views > 100000) score += 100;
 
-          // Bônus de Resolução (Se disponível na API)
-          if (v.width && v.width >= 720) score += 20;
+          // 5. Match de Nicho
+          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 25; });
+          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 150; });
 
-          // 6. Bônus de Qualidade (Duração ideal entre 8 e 25 segundos)
-          if (v.duration >= 8 && v.duration <= 25) score += 15;
+          // Multiplicador da Estratégia
           score *= (v._queryWeight || 1.0);
-
+          
           const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
           const finalUrl = v.play || v.wmplay;
           const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(finalUrl)}`;
@@ -1111,7 +1137,7 @@ const App: React.FC = () => {
             _score: score
           };
         })
-        .filter((v: any) => v._score > 40)
+        .filter((v: any) => v._score > 500) // Nota de corte aumentada para garantir ELITE REAL
         .sort((a: any, b: any) => b._score - a._score);
 
       if (scored.length === 0) {
@@ -1138,7 +1164,7 @@ const App: React.FC = () => {
       setCustomCopy(generateCreativeLegend(product));
       setVideoLegend(generateOverlayLegend(product));
 
-      showToast(`🇧🇷 ${unique.length} VÍDEOS FILTRADOS COM SUCESSO!`);
+      showToast(`💎 ${unique.length} VÍDEOS ELITE FILTRADOS!`);
 
       setTimeout(() => {
         setStep('treating');
@@ -1227,8 +1253,9 @@ const App: React.FC = () => {
     }, 4000);
   };
 
-  const handleDownload = async () => {
-    if (!videoData || isProcessing) return;
+  const handleDownload = async (isAutoOrEvent?: boolean | React.MouseEvent) => {
+    const isAuto = typeof isAutoOrEvent === 'boolean' ? isAutoOrEvent : false;
+    if (!videoData || isProcessing) return null;
     setIsPreparingDownload(true);
     setIsPlaying(false);
     setIsProcessing(true);
@@ -1248,21 +1275,22 @@ const App: React.FC = () => {
         audioMixMode: audioMixOption
       };
       
-      showToast("INICIANDO RENDERIZAÇÃO ULTRA HD... ⚙️");
+      showToast("RENDERIZANDO VÍDEO... ⚙️");
       const blob = await processor.renderVideo(videoData.url, options);
       setPreviewBlob(blob);
-      setShowDownloadModal(true);
-      showToast("VÍDEO PRONTO PARA O SUCESSO! 🔥");
+      
+      if (!isAuto) {
+        setShowDownloadModal(true);
+      }
+      
+      return blob;
     } catch (error: any) {
       console.error("Video Processing Error:", error);
       showToast("ERRO AO RENDERIZAR — TENTE NOVAMENTE 📲");
+      return null;
     } finally {
       setIsProcessing(false);
       setIsPreparingDownload(false);
-      // Feedback visual adicional ao concluir
-      setTimeout(() => {
-        showToast("VÍDEO PRONTO PARA O SUCESSO! 🔥");
-      }, 500);
     }
   };
 
@@ -1455,71 +1483,114 @@ const App: React.FC = () => {
   };
 
   const runAutomation = async (selectedPlatform: 'tiktok' | 'shopee') => {
+    setStep('automation');
+    setActivePlatform(selectedPlatform);
+    setConsoleLogs([]);
+    setAutomationFinished(false);
+
+    const addLog = (msg: string, type: string = 'info') => {
+      setConsoleLogs(prev => [...prev, { msg, type }]);
+    };
+
+    addLog(`INICIANDO PROTOCOLO [${selectedPlatform.toUpperCase()}]`, 'success');
+    addLog('Analisando arquitetura do dispositivo...', 'info');
+    addLog(`Ambiente detectado: ${isMobile ? 'MOBILE/PWA' : 'DESKTOP/PC'}`, 'info');
+    
     // 1. Copy caption to clipboard (Universal)
     try {
       await navigator.clipboard.writeText(customCopy);
-      showToast("LEGENDA COPIADA! 📋");
+      addLog('Bypass de Clipboard: LEGENDA COPIADA ✅', 'success');
     } catch (e) {
-      console.error("Clipboard error", e);
+      addLog('Erro ao acessar área de transferência.', 'error');
     }
 
-    // 2. Intensive Mobile Sharing Engine (PWA Pro)
-    const canShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
-    if (canShare && previewBlob) {
+    if (selectedProduct) {
+      saveToSupabase(selectedProduct, selectedPlatform);
+      addLog('Histórico sincronizado com nuvem.', 'info');
+    }
+
+    // 2. Render and Process Video
+    addLog('Renderizando vídeo ultra-HD para postagem...', 'info');
+    const finalBlob = await handleDownload(true);
+    
+    if (!finalBlob) {
+      addLog('FALHA NA RENDERIZAÇÃO. Retornando ao editor...', 'error');
+      setStep('ready');
+      return;
+    }
+    
+    addLog('VÍDEO RENDERIZADO COM SUCESSO! ✅', 'success');
+
+    if (isMobile && navigator.share) {
+      addLog('Disparando Menu de Compartilhamento...', 'info');
+      
+      const triggerManualDownload = () => {
+        addLog('Bypass: Download Manual Forçado...', 'warn');
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(finalBlob);
+        a.href = url;
+        a.download = `video_viral_${Date.now()}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      };
+
       try {
-        const file = new File([previewBlob], `viral-squad-${Date.now()}.mp4`, { type: 'video/mp4' });
-        if (navigator.canShare({ files: [file] })) {
+        const fileToShare = new File([finalBlob], `viral_video_${Date.now()}.mp4`, { type: 'video/mp4' });
+
+        if (navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
           await navigator.share({
-            files: [file],
-            title: 'Viral Squad - Postagem',
+            files: [fileToShare],
+            title: 'Bot de Postagem Viral Squad',
             text: customCopy
           });
-          showToast("ABRINDO APP DE DESTINO... 🚀");
+          addLog('Compartilhamento disparado! Poste agora no App.', 'success');
         } else {
+          triggerManualDownload();
           window.open(getPlatformUrl(selectedPlatform), '_blank');
         }
       } catch (err: any) {
         if (err.name !== 'AbortError') {
-          console.error('Share failed:', err);
-          window.open(getPlatformUrl(selectedPlatform), '_blank');
+          addLog('Erro no Share API. Tentando Download Forçado...', 'error');
+          triggerManualDownload();
+          setTimeout(() => {
+            window.open(getPlatformUrl(selectedPlatform), '_blank');
+          }, 1500);
+        } else {
+          addLog('Operação cancelada pelo usuário.', 'warn');
         }
       }
     } else {
-      // Fallback for Desktop or No-Share browsers
-      window.open(getPlatformUrl(selectedPlatform), '_blank');
-    }
-    
-    if (selectedProduct) {
-      saveToSupabase(selectedProduct, selectedPlatform);
-    }
-    
-    setStep('automation');
-    setConsoleLogs([]);
-
-
-    const logs = [
-      { msg: `> INICIANDO MOTOR DE AUTOMAÇÃO ${selectedPlatform.toUpperCase()}...`, type: 'info' },
-      { msg: "> Sincronizando banco de metadados...", type: 'info' },
-      { msg: "> Acessando painel de postagem via Bridge Protocol...", type: 'info' },
-      { msg: "> Carregando vídeo com Magic IA e gatilhos mentais...", type: 'info' },
-      { msg: "> Bypass de CAPTCHA concluído com sucesso.", type: 'info' },
-      { msg: "> POSTAGEM PROGRAMADA E SINCRONIZADA!", type: 'success' },
-      { msg: "> TUDO PRONTO! O SQUAD FINALIZOU O SERVIÇO.", type: 'success' }
-    ];
-
-    logs.forEach((log, i) => {
+      // 2. PC ONE-CLICK MACRO
+      addLog('EXECUTANDO MACRO DE UM CLIQUE [PC MODE]', 'success');
+      
+      // Step A: Trigger Download (Robust PCA Style)
+      const a = document.createElement('a');
+      const blobUrl = URL.createObjectURL(finalBlob);
+      a.href = blobUrl;
+      a.download = `viral_squad_${Date.now()}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      addLog('DOWNLOAD INICIADO AUTOMATICAMENTE! ✅', 'success');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      
+      // Step B: Wait slightly and Open
+      addLog(`Abrindo portal de upload do ${selectedPlatform.toUpperCase()}...`, 'info');
       setTimeout(() => {
-        setConsoleLogs((prev: any[]) => [...prev, log]);
-        if (i === logs.length - 1) {
-          setTimeout(() => {
-            setAutomationFinished(true);
-            showToast("CONCLUÍDO! VERIFIQUE A ABA ABERTA 🚀");
-            // Refill list after posting
-            refillProductList(activeNiche);
-          }, 2000);
-        }
-      }, i * 800);
-    });
+        window.open(getPlatformUrl(selectedPlatform), '_blank');
+        addLog('PIPELINE CONCLUÍDO. COLE A LEGENDA NO SITE!', 'success');
+      }, 1500);
+    }
+
+    setTimeout(() => {
+      addLog('PROTOCOLO DE POSTAGEM FINALIZADO.', 'success');
+      setAutomationFinished(true);
+      showToast("CONCLUÍDO! VERIFIQUE A ABA ABERTA 🚀");
+      refillProductList(activeNiche);
+    }, 2500);
   };
 
   return (
@@ -1529,7 +1600,11 @@ const App: React.FC = () => {
       
       {/* Hide header in editor modes to save mobile space */}
       {(!['ready', 'treating', 'automation'].includes(step)) && (
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-6 bg-slate-950/50 backdrop-blur-xl sticky top-0 z-40">
+        <header className="border-b border-white/5 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur-2xl sticky top-0 z-40 transition-all duration-500" 
+          style={{ 
+            paddingTop: 'calc(var(--safe-top) + 1rem)', 
+            height: 'calc(7rem + var(--safe-top))' 
+          }}>
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="absolute inset-0 bg-accent/20 blur-lg rounded-full animate-pulse" />
@@ -1550,12 +1625,14 @@ const App: React.FC = () => {
               <motion.button
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
+                whileHover={{ scale: 1.1, backgroundColor: '#00E676' }}
                 whileTap={{ scale: 0.9 }}
                 onClick={installApp}
-                className="h-8 px-4 bg-accent text-slate-950 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-accent/20"
+                className="h-9 px-4 bg-[#00C853] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-[0_0_20px_rgba(0,200,83,0.4)] border border-emerald-400/40 relative overflow-hidden"
               >
-                <Download size={12} strokeWidth={3} />
-                INSTALAR
+                <div className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none" />
+                <Download size={14} strokeWidth={3} className="relative z-10" />
+                <span className="relative z-10">INSTALAR APP</span>
               </motion.button>
             )}
             {isPro && (
@@ -1575,7 +1652,7 @@ const App: React.FC = () => {
       )}
 
       {(!isStoreConfigured() && step !== 'bio') && (
-        <div className="bg-amber-500 text-black text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center animate-pulse z-[40] sticky top-20">
+        <div className="bg-amber-500 text-black text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center animate-pulse z-[40] sticky" style={{ top: 'calc(5.5rem + var(--safe-top))' }}>
           ⚠️ ALERTA SQUAD: CONFIGURE SEU LINK NA ABA LOJA PARA DESBLOQUEAR A PLATAFORMA!
         </div>
       )}
@@ -2231,31 +2308,45 @@ const App: React.FC = () => {
                   <motion.button 
                     whileTap={{ scale: 0.95 }}
                     onClick={() => runAutomation('tiktok')}
-                    className="flex-1 h-20 bg-white text-black font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl"
+                    className="flex-1 h-24 bg-white text-black font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl relative overflow-hidden"
                   >
+                    <div className="absolute top-2 right-2 px-2 py-0.5 bg-black text-white text-[6px] rounded-full">
+                      {isMobile ? 'NATIVO' : 'AUTO-MACRO'}
+                    </div>
                     <Zap size={20} fill="currentColor" />
                     <span>TIKTOK</span>
-                    <span className="text-[7px] opacity-50 tracking-normal">ABRE APP + AUXÍLIO</span>
+                    <span className="text-[7px] opacity-50 tracking-normal px-2 text-center">
+                      {isMobile ? 'ABRE APP + ANEXO' : 'DOWNLOAD + UPLOAD'}
+                    </span>
                   </motion.button>
                   
                   <motion.button 
                     whileTap={{ scale: 0.95 }}
                     onClick={() => runAutomation('shopee')}
-                    className="flex-1 h-20 bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl shadow-orange-950/20"
+                    className="flex-1 h-24 bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl shadow-orange-950/20 relative overflow-hidden"
                   >
+                    <div className="absolute top-2 right-2 px-2 py-0.5 bg-white text-orange-600 text-[6px] rounded-full">
+                      {isMobile ? 'NATIVO' : 'AUTO-MACRO'}
+                    </div>
                     <ShoppingBag size={20} fill="currentColor" />
                     <span>SHOPEE VÍDEOS</span>
-                    <span className="text-[7px] opacity-70 tracking-normal">ABRE APP + AUXÍLIO</span>
+                    <span className="text-[7px] opacity-70 tracking-normal px-2 text-center">
+                      {isMobile ? 'ABRE APP + ANEXO' : 'DOWNLOAD + UPLOAD'}
+                    </span>
                   </motion.button>
                 </div>
                 
                 <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/5 space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
-                    <p className="text-[9px] font-black uppercase text-accent tracking-tighter">O QUE ACONTECERÁ:</p>
+                    <p className="text-[9px] font-black uppercase text-accent tracking-tighter">PROTOCOLO DE POSTAGEM:</p>
                   </div>
                   <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-                    Ao clicar em postar, seu celular abrirá o Compartilhamento Nativo. Selecione o app desejado. O vídeo será anexado e a legenda viral já foi <span className="text-white font-black italic">copiada para sua área de transferência!</span> Basta colar no destino.
+                    {isMobile ? (
+                      <>Ao clicar em postar, seu celular abrirá o Compartilhamento Nativo. O vídeo será anexado e a legenda viral já foi <span className="text-white font-black italic">copiada!</span></>
+                    ) : (
+                      <>No computador, iniciaremos o <span className="text-white font-black italic">Macro de Automação</span>: faremos o download do vídeo, copiaremos a legenda e abriremos a página de postagem para você.</>
+                    )}
                   </p>
                 </div>
               </div>
@@ -2320,23 +2411,79 @@ const App: React.FC = () => {
               <div className="pt-2">
                 <AnimatePresence>
                   {automationFinished && (
-                    <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="grid grid-cols-2 gap-4">
-                      <motion.button 
-                        whileTap={{ scale: 0.95 }}
-                        className="h-16 bg-slate-900 border-2 border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/90 hover:border-white/30 transition-all flex items-center justify-center gap-2"
-                        onClick={() => { setStep('ready'); setAutomationFinished(false); }}
-                      >
-                        <RotateCcw size={16} />
-                        RE-POSTAR
-                      </motion.button>
-                      <motion.button 
-                        whileTap={{ scale: 0.95 }}
-                        className="h-16 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 border-2 border-white/20"
-                        onClick={() => { setStep('list'); setAutomationFinished(false); }}
-                      >
-                        <CheckCircle2 size={18} />
-                        CONCLUÍDO
-                      </motion.button>
+                    <motion.div initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="space-y-4">
+                      {!isMobile && (
+                        <div className="bg-accent/10 border-2 border-accent/20 p-5 rounded-[2.5rem] space-y-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-accent text-slate-950 flex items-center justify-center shadow-lg shadow-accent/20">
+                              <Zap size={22} fill="currentColor" />
+                            </div>
+                            <h3 className="text-xs font-black italic uppercase tracking-tighter">PROTOCOLO FINALIZADO</h3>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 gap-3">
+                            <div className="bg-slate-900/50 p-5 rounded-3xl border border-white/5 space-y-3">
+                              <div className="flex items-center gap-2 text-accent">
+                                <Download size={16} className="animate-bounce" />
+                                <p className="text-[11px] font-black uppercase tracking-widest">COMO POSTAR NO PC:</p>
+                              </div>
+                              <div className="space-y-4">
+                                <div className="flex gap-4">
+                                  <span className="w-6 h-6 bg-white text-slate-950 rounded-full flex items-center justify-center text-xs font-black shrink-0">1</span>
+                                  <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
+                                    O vídeo já foi <span className="text-accent font-black">BAIXADO</span> para o seu computador.
+                                  </p>
+                                </div>
+                                <div className="flex gap-4">
+                                  <span className="w-6 h-6 bg-white text-slate-950 rounded-full flex items-center justify-center text-xs font-black shrink-0">2</span>
+                                  <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
+                                    Na aba do TikTok que abrimos, clique em <span className="text-white font-black italic">"SELECIONAR ARQUIVO"</span> e escolha o vídeo que acabou de baixar.
+                                  </p>
+                                </div>
+                                <div className="flex gap-4">
+                                  <span className="w-6 h-6 bg-white text-slate-950 rounded-full flex items-center justify-center text-xs font-black shrink-0">3</span>
+                                  <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
+                                    Clique no campo de legenda e aperte <span className="text-green-400 font-black">CTRL + V</span>. A legenda viral já está copiada!
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="pt-2 border-t border-white/5 mt-2">
+                                <p className="text-[9px] text-dim italic">
+                                  * Por segurança, nenhuma plataforma permite que sites externos anexem arquivos 100% sozinhos. Este é o fluxo mais rápido possível permitido.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <motion.button 
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="w-full h-12 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-accent hover:text-white transition-colors bg-accent/5"
+                            onClick={() => window.open(getPlatformUrl(activePlatform), '_blank')}
+                          >
+                            O PORTAL NÃO ABRIU? CLIQUE AQUI
+                          </motion.button>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <motion.button 
+                          whileTap={{ scale: 0.95 }}
+                          className="h-16 bg-slate-900 border-2 border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/90 hover:border-white/30 transition-all flex items-center justify-center gap-2"
+                          onClick={() => { setStep('ready'); setAutomationFinished(false); }}
+                        >
+                          <RotateCcw size={16} />
+                          RE-POSTAR
+                        </motion.button>
+                        <motion.button 
+                          whileTap={{ scale: 0.95 }}
+                          className="h-16 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 border-2 border-white/20"
+                          onClick={() => { setStep('list'); setAutomationFinished(false); }}
+                        >
+                          <CheckCircle2 size={18} />
+                          CONCLUÍDO
+                        </motion.button>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>

@@ -40,7 +40,7 @@ export class VideoProcessor {
       case 'bw':        return 'grayscale(1) contrast(1.5) brightness(1.05)';
       case 'bloom':     return 'brightness(1.2) saturate(1.3)';
       case 'glitch':    return 'hue-rotate(90deg) brightness(1.2) contrast(1.25)';
-      case 'ultra8k':   return 'contrast(1.25) saturate(1.4) brightness(1.1) drop-shadow(0 0 10px rgba(6, 182, 212, 0.2))';
+      case 'ultra8k':   return 'contrast(1.4) saturate(1.8) brightness(1.12) drop-shadow(0 0 12px rgba(6, 182, 212, 0.25))';
       default:          return 'contrast(1.08) saturate(1.08)';
     }
   }
