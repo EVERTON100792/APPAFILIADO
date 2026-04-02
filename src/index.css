@@ -14,8 +14,8 @@
   --border: rgba(255, 255, 255, 0.08);
   --font-inter: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --safe-top: env(safe-area-inset-top, 20px);
-  --safe-bottom: env(safe-area-inset-bottom, 20px);
+  --safe-top: env(safe-area-inset-top, 20px); /* Fallback de 20px para notches */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --radius: 12px;
   --noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
@@ -38,7 +38,7 @@ body {
 
 /* Components */
 .app-container {
-  height: 100vh;
+  height: 100dvh; /* Dynamic height for mobile browsers */
   width: 100%;
   max-width: 32rem; /* lg size */
   margin: 0 auto;
@@ -49,6 +49,7 @@ body {
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   background: radial-gradient(circle at top right, #1e293b 0%, #020617 100%);
+  padding-top: 0; /* Header já lida com Safe Area */
   padding-bottom: calc(85px + var(--safe-bottom));
 }
 
@@ -447,4 +448,32 @@ body {
   letter-spacing: -0.05em;
   line-height: 0.8;
   text-transform: uppercase;
+}
+
+/* --- Optimized Image Loading (Shimmer) --- */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.shimmer-effect {
+  position: relative;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.shimmer-effect::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
 }

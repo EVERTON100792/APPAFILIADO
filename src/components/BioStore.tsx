@@ -10,6 +10,39 @@ interface BioItem {
   affiliate_link: string;
 }
 
+const OptimizedImage: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  return (
+    <div className="relative w-full h-full bg-white/5 overflow-hidden">
+      {/* Skeleton / Shimmer */}
+      {!loaded && !error && (
+        <div className="absolute inset-0 shimmer-effect bg-slate-900/50" />
+      )}
+      
+      {/* Error State */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+          <Sparkles className="scale-150 text-slate-800" />
+        </div>
+      )}
+
+      <motion.img
+        src={src}
+        alt={alt}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: loaded ? 1 : 0 }}
+        transition={{ duration: 0.4 }}
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+        loading="lazy"
+      />
+    </div>
+  );
+};
+
 export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +81,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
         <h1 className="text-[40vw] text-display leading-none rotate-12">SHOPEE</h1>
       </div>
 
-      <div className="max-w-md mx-auto pt-20 px-6 relative z-10">
+      <div className="max-w-md mx-auto pt-16 px-6 relative z-10" style={{ paddingTop: 'calc(4rem + var(--safe-top))' }}>
         
         {/* Header da Loja - Assimetria Radical */}
         <motion.div 
@@ -89,7 +122,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
 
         {/* Fragment Grid Strategy */}
         <div className="fragment-grid">
-          <AnimatePresence>
+          <AnimatePresence mode="popLayout">
             {items.map((item, i) => {
               // Algoritmo de assimetria visual baseada no index
               const isLarge = i % 5 === 0; // O primeiro e a cada 5 são grandes (span 2)
@@ -107,7 +140,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
                     type: 'spring',
                     stiffness: 100,
                     damping: 15,
-                    delay: i * 0.1 
+                    delay: i * 0.05 // Reduzido delay para abrir mais rápido
                   }}
                   whileHover={{ 
                     scale: 1.05, 
@@ -117,14 +150,9 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
                   whileTap={{ scale: 0.95 }}
                   className={`group relative flex flex-col glass-acid rounded-3xl overflow-hidden transition-all duration-300 ${isLarge ? 'item-span-2' : ''}`}
                 >
-                  {/* Image Container */}
-                  <div className={`relative w-full ${isLarge ? 'aspect-[16/9]' : 'aspect-square'} overflow-hidden bg-[#080808]`}>
-                    <img 
-                      src={item.image_url} 
-                      alt={item.title} 
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out" 
-                      loading="lazy"
-                    />
+                  {/* Image Container with Skeleton */}
+                  <div className={`relative w-full ${isLarge ? 'aspect-[16/9]' : 'aspect-square'} overflow-hidden bg-white/5`}>
+                    <OptimizedImage src={item.image_url} alt={item.title} />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
                     
                     {/* Badge Viral */}
