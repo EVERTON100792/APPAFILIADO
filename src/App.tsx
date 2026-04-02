@@ -202,6 +202,17 @@ const App: React.FC = () => {
 
   const checkAccess = async () => {
     try {
+      // 0. Bypass de Desenvolvedor via URL (Facilita teste em Mobile/Netlify)
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('admin') === 'true') {
+        console.log("⚡ [MODO ADMIN] Ativando bypass de desenvolvedor...");
+        localStorage.setItem('bio_store_slug', 'everton');
+        // Remover o parâmetro da URL de forma elegante
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.location.replace(cleanUrl);
+        return;
+      }
+
       const slug = (localStorage.getItem('bio_store_slug') || '').toLowerCase();
       
       // 1. Check if Admin (Hardcoded slugs for the owner)
