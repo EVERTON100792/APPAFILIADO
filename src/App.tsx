@@ -108,6 +108,24 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoLegend, setVideoLegend] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const installApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setDeferredPrompt(null);
+  };
+
 
 
   // Advanced Editing State
@@ -1436,9 +1454,40 @@ const App: React.FC = () => {
     }
   };
 
-  const runAutomation = (selectedPlatform: 'tiktok' | 'shopee') => {
-    navigator.clipboard.writeText(customCopy);
-    window.open(getPlatformUrl(selectedPlatform), '_blank');
+  const runAutomation = async (selectedPlatform: 'tiktok' | 'shopee') => {
+    // 1. Copy caption to clipboard (Universal)
+    try {
+      await navigator.clipboard.writeText(customCopy);
+      showToast("LEGENDA COPIADA! 📋");
+    } catch (e) {
+      console.error("Clipboard error", e);
+    }
+
+    // 2. Intensive Mobile Sharing Engine (PWA Pro)
+    const canShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+    if (canShare && previewBlob) {
+      try {
+        const file = new File([previewBlob], `viral-squad-${Date.now()}.mp4`, { type: 'video/mp4' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Viral Squad - Postagem',
+            text: customCopy
+          });
+          showToast("ABRINDO APP DE DESTINO... 🚀");
+        } else {
+          window.open(getPlatformUrl(selectedPlatform), '_blank');
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Share failed:', err);
+          window.open(getPlatformUrl(selectedPlatform), '_blank');
+        }
+      }
+    } else {
+      // Fallback for Desktop or No-Share browsers
+      window.open(getPlatformUrl(selectedPlatform), '_blank');
+    }
     
     if (selectedProduct) {
       saveToSupabase(selectedProduct, selectedPlatform);
@@ -1446,6 +1495,7 @@ const App: React.FC = () => {
     
     setStep('automation');
     setConsoleLogs([]);
+
 
     const logs = [
       { msg: `> INICIANDO MOTOR DE AUTOMAÇÃO ${selectedPlatform.toUpperCase()}...`, type: 'info' },
@@ -1496,6 +1546,18 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
+            {deferredPrompt && (
+              <motion.button
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={installApp}
+                className="h-8 px-4 bg-accent text-slate-950 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-accent/20"
+              >
+                <Download size={12} strokeWidth={3} />
+                INSTALAR
+              </motion.button>
+            )}
             {isPro && (
               <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
                 <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
@@ -2162,27 +2224,42 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-              <div className="flex gap-4">
-                <motion.button 
-                  whileTap={{ scale: 0.95 }}
-                  className="flex-1 h-[90px] bg-slate-900 border border-white/10 rounded-3xl flex flex-col items-center justify-center gap-1 group hover:border-accent/40 transition-all p-2"
-                  onClick={() => runAutomation('tiktok')}
-                >
-                  <span className="text-xl grayscale group-hover:grayscale-0 transition-all text-white">🎬</span>
-                  <span className="text-[11px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">TikTok</span>
-                  <span className="text-[8px] text-white/30 uppercase text-center leading-tight">Copia legenda<br/>abre app</span>
-                </motion.button>
+              <div className="flex flex-col gap-4">
+                <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1 text-center italic">AÇÃO FINAL: POSTAGEM ASSISTIDA 🚀</p>
                 
-                <motion.button 
-                  whileTap={{ scale: 0.95 }}
-                  className="flex-1 h-[90px] bg-orange-600 rounded-3xl flex flex-col items-center justify-center gap-1 shadow-[0_15px_30px_rgba(234,88,12,0.3)] border border-orange-400/20 p-2"
-                  onClick={() => runAutomation('shopee')}
-                >
-                  <span className="text-xl">🟠</span>
-                  <span className="text-[11px] font-black uppercase tracking-widest text-white">Shopee</span>
-                  <span className="text-[8px] text-white/70 uppercase text-center leading-tight">Copia legenda<br/>abre app</span>
-                </motion.button>
+                <div className="flex gap-4">
+                  <motion.button 
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => runAutomation('tiktok')}
+                    className="flex-1 h-20 bg-white text-black font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl"
+                  >
+                    <Zap size={20} fill="currentColor" />
+                    <span>TIKTOK</span>
+                    <span className="text-[7px] opacity-50 tracking-normal">ABRE APP + AUXÍLIO</span>
+                  </motion.button>
+                  
+                  <motion.button 
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => runAutomation('shopee')}
+                    className="flex-1 h-20 bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl shadow-orange-950/20"
+                  >
+                    <ShoppingBag size={20} fill="currentColor" />
+                    <span>SHOPEE VÍDEOS</span>
+                    <span className="text-[7px] opacity-70 tracking-normal">ABRE APP + AUXÍLIO</span>
+                  </motion.button>
+                </div>
+                
+                <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
+                    <p className="text-[9px] font-black uppercase text-accent tracking-tighter">O QUE ACONTECERÁ:</p>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                    Ao clicar em postar, seu celular abrirá o Compartilhamento Nativo. Selecione o app desejado. O vídeo será anexado e a legenda viral já foi <span className="text-white font-black italic">copiada para sua área de transferência!</span> Basta colar no destino.
+                  </p>
+                </div>
               </div>
+
 
               <motion.button 
                 whileTap={{ scale: 0.98 }}
