@@ -27,7 +27,14 @@ const PRO_TIPS = [
   "🔥 O link personalizado 'meusachadinhos' é o que mais converte no TikTok."
 ];
 
-export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) => {
+const FALLBACK_THUMBNAIL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' rx='24' fill='%23070b16'/%3E%3Crect x='16' y='16' width='128' height='128' rx='22' fill='%2311172a' stroke='%2322c55e' stroke-opacity='.22'/%3E%3Cpath d='M54 102h52' stroke='%2322c55e' stroke-width='8' stroke-linecap='round'/%3E%3Cpath d='M80 52c-11 0-20 9-20 20v9h40v-9c0-11-9-20-20-20Z' fill='none' stroke='%23e5e7eb' stroke-width='8' stroke-linejoin='round'/%3E%3Ccircle cx='80' cy='81' r='6' fill='%2322c55e'/%3E%3C/svg%3E";
+
+export const BioManager: React.FC<{
+  onProceed?: () => void;
+  initialStoreSlug?: string;
+  initialStoreReady?: boolean;
+  onStoreConfigured?: (slug: string) => void;
+}> = ({ onProceed, initialStoreSlug = 'meu-link', initialStoreReady = false, onStoreConfigured }) => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +45,7 @@ export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) 
 
   // URL Slug personalizado
   const [storeSlug, setStoreSlug] = useState(() => {
-    return localStorage.getItem('bio_store_slug') || 'meu-link';
+    return initialStoreSlug || 'meu-link';
   });
   const [slugInput, setSlugInput] = useState(storeSlug);
   const [editingSlug, setEditingSlug] = useState(false);
@@ -79,15 +86,21 @@ export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) 
     fetchItems();
   }, [storeSlug]);
 
+  useEffect(() => {
+    setStoreSlug(initialStoreSlug || 'meu-link');
+    setSlugInput(initialStoreSlug || 'meu-link');
+  }, [initialStoreSlug]);
+
   const handleSaveSlug = () => {
     const clean = slugInput.toLowerCase().replace(/[^a-z0-9-_]/g, '').trim();
     if (!clean) {
       showToast('URL inválida! Use apenas letras, números ou hífens.', 'error');
       return;
     }
-    localStorage.setItem('bio_store_slug', clean);
     setStoreSlug(clean);
+    setSlugInput(clean);
     setEditingSlug(false);
+    onStoreConfigured?.(clean);
     showToast(`✅ Link atualizado para: /?loja=${clean}`, 'success');
   };
 
@@ -148,7 +161,7 @@ export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) 
       setImageUrl(publicUrl);
       showToast('📸 Imagem enviada com sucesso!', 'success');
     } catch (error: any) {
-      console.error('Erro no upload:', error);
+      console.error('Erro no upload');
       showToast('Erro ao enviar imagem. Verifique as permissões de Storage.', 'error');
     } finally {
       setUploading(false);
@@ -296,6 +309,26 @@ export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) 
           )}
         </div>
 
+        {/* Botão para iniciar as buscas virais */}
+        {storeSlug && storeSlug !== 'meu-link' && (initialStoreReady || onStoreConfigured) && onProceed && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pt-4"
+          >
+            <motion.button
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onProceed}
+              className="w-full py-6 bg-gradient-to-r from-emerald-500 to-emerald-400 text-black font-black uppercase italic tracking-[0.2em] rounded-3xl shadow-[0_20px_50px_rgba(16,185,129,0.3)] flex items-center justify-center gap-4 group"
+            >
+              <Zap size={24} fill="currentColor" className="group-hover:animate-pulse" />
+              <span className="text-sm">INICIAR BUSCAS DE PRODUTOS E VÍDEOS VIRAIS</span>
+              <ExternalLink size={24} />
+            </motion.button>
+          </motion.div>
+        )}
+
         {/* Pro-Tips Cycle */}
         <AnimatePresence mode="wait">
           <motion.div
@@ -317,25 +350,41 @@ export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) 
           </motion.div>
         </AnimatePresence>
 
-        {/* Botão de Prosseguir para o Garimpo */}
-        {storeSlug && storeSlug !== 'meu-link' && onProceed && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="pt-4"
-          >
-            <motion.button
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={onProceed}
-              className="w-full py-6 bg-gradient-to-r from-emerald-500 to-emerald-400 text-black font-black uppercase italic tracking-[0.2em] rounded-3xl shadow-[0_20px_50px_rgba(16,185,129,0.3)] flex items-center justify-center gap-4 group"
-            >
-              <Zap size={24} fill="currentColor" className="group-hover:animate-pulse" />
-              <span>PÁGINA CONFIGURADA! IR PARA O GARIMPO</span>
-              <ExternalLink size={24} />
-            </motion.button>
-          </motion.div>
-        )}
+        {/* Dicas de Divulgação - NOVO SECTION */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white/5 border border-white/5 rounded-[2rem] p-6 space-y-4">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500 flex items-center gap-2">
+              <Zap size={14} fill="currentColor" /> ONDE POSTAR SEU LINK?
+            </h4>
+            <div className="space-y-3">
+              {[
+                { n: 'Instagram Bio', d: 'O lugar clássico. Use um encurtador ou o link direto.' },
+                { n: 'TikTok Website', d: 'Essencial para converter as visualizações dos seus vídeos.' },
+                { n: 'Status do WhatsApp', d: 'Venda para seus contatos próximos todos os dias.' }
+              ].map((tip, i) => (
+                <div key={i} className="flex gap-3 items-start">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] shrink-0 font-bold text-emerald-400">{i+1}</div>
+                  <div>
+                    <p className="text-[11px] font-bold text-white leading-none">{tip.n}</p>
+                    <p className="text-[9px] text-slate-500 mt-1 uppercase tracking-wider">{tip.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-[2rem] p-6 flex flex-col justify-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                <Lightbulb className="text-emerald-400" size={20} />
+              </div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-emerald-400 italic">DICA DE OURO</p>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed italic">
+              "Poste pelo menos 3 vídeos por dia no TikTok/Reels e sempre direcione as pessoas para o link na sua Bio. A constância é o segredo do lucro!"
+            </p>
+          </div>
+        </div>
       </motion.div>
 
       {/* Grid: Form + List */}
@@ -455,7 +504,16 @@ export const BioManager: React.FC<{ onProceed?: () => void }> = ({ onProceed }) 
                     className="glass-acid p-4 flex items-center gap-5 group hover:border-emerald-500/30 transition-all duration-500 rounded-[2rem]">
                     
                     <div className="relative w-20 h-20 shrink-0">
-                      <img src={item.image_url} alt={item.title} className="w-full h-full rounded-2xl object-cover bg-black/50 border border-white/5" />
+                      <img
+                        src={item.image_url || FALLBACK_THUMBNAIL}
+                        alt={item.title}
+                        className="w-full h-full rounded-2xl object-cover bg-black/50 border border-white/5"
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if (img.src === FALLBACK_THUMBNAIL) return;
+                          img.src = FALLBACK_THUMBNAIL;
+                        }}
+                      />
                       <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
                     </div>
 

@@ -1,10 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './index.css';
 import { 
-  Home, Database, Copy, RefreshCcw,
-  Shield, Video, Zap, ArrowRight, Activity, Search, RotateCcw,
-  Download, Terminal, LayoutGrid, Unlock, ArrowLeft, Volume2, VolumeX, Sparkles, Type,
-  Maximize2, MoveRight, X, Scissors, ShoppingBag, Upload, CheckCircle2
+  ShoppingBag, 
+  Search, 
+  Video, 
+  CheckCircle2, 
+  LogOut,
+  Zap,
+  Activity,
+  Shield,
+  Download,
+  RefreshCcw,
+  Sparkles,
+  Maximize2,
+  X,
+  ArrowRight,
+  ArrowLeft,
+  Copy,
+  Upload,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Scissors,
+  MoveRight,
+  Terminal,
+  LayoutGrid,
+  Database,
+  Unlock,
+  Home,
+  Type
 } from 'lucide-react';
 
 
@@ -16,8 +40,14 @@ import { VideoProcessor } from './utils/VideoProcessor';
 import type { ProcessingOptions } from './utils/VideoProcessor';
 import { BioStore } from './components/BioStore';
 import { BioManager } from './components/BioManager';
+import { LoginScreen } from './components/LoginScreen';
 import { StripeService } from './services/StripeService';
+import { TrialCountdown } from './components/TrialCountdown';
+import { AgentScouting } from './components/AgentScouting';
 // import { productDB } from './data/productDB';
+
+const STRIPE_PRICE_ID = 'price_1THnUQKpVBNjrtujGP8Hmn4H';
+const STORE_PLACEHOLDER_SLUGS = ['', 'meu-link', 'admin', 'null', 'undefined', 'default', 'escolha-seu-link'];
 
 function getSmartSearchName(title: string): string {
   if (!title) return '';
@@ -79,16 +109,18 @@ function generateViralProductName(baseName: string): string {
 }
 
 // Step types for the main application navigation
-type Step = 'home' | 'scouting' | 'list' | 'ready' | 'treating' | 'automation' | 'history' | 'bio' | 'plans';
+type Step = 'home' | 'scouting' | 'list' | 'ready' | 'treating' | 'automation' | 'history' | 'bio' | 'plans' | 'agents_scouting' | 'onboarding_start' | 'onboarding_config' | 'onboarding_filtering';
 
 const App: React.FC = () => {
   const bioUserId = new URLSearchParams(window.location.search).get('loja');
   if (bioUserId) return <BioStore userId={bioUserId} />;
 
+  const [storeSlug, setStoreSlug] = useState('meu-link');
+  const [storeReady, setStoreReady] = useState(false);
+
   const isStoreConfigured = () => {
-    const slug = (localStorage.getItem('bio_store_slug') || '').toLowerCase();
-    const unconfiguredSlugs = ['', 'meu-link', 'admin', 'null', 'undefined', 'default', 'escolha-seu-link'];
-    return slug && !unconfiguredSlugs.includes(slug);
+    const normalizedSlug = (storeSlug || '').toLowerCase();
+    return Boolean(storeReady && normalizedSlug && !STORE_PLACEHOLDER_SLUGS.includes(normalizedSlug));
   };
 
   // Forçar sempre 'home' como primeira aba ao abrir, se estiver configurado
@@ -97,6 +129,9 @@ const App: React.FC = () => {
   const [isPro, setIsPro] = useState(false);
   const [trialExpired, setTrialExpired] = useState(false);
   const [trialRemaining, setTrialRemaining] = useState<number | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const hasActivePro = Boolean(isPro && (trialRemaining ?? 0) > 0);
+  const isProExpiringSoon = Boolean(hasActivePro && trialRemaining !== null && trialRemaining <= 3 * 24 * 60 * 60 * 1000);
 
   const [activeFilter, setActiveFilter] = useState('none');
   const [activeTransition, setActiveTransition] = useState('none');
@@ -104,25 +139,154 @@ const App: React.FC = () => {
   const [videoLegend, setVideoLegend] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activePlatform, setActivePlatform] = useState<'tiktok' | 'shopee'>('tiktok');
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const userMetadataRef = useRef<Record<string, any>>({});
+  const metadataUpdateInFlightRef = useRef(false);
+  const pendingMetadataRef = useRef<Record<string, any> | null>(null);
+  const lastPersistedStepRef = useRef<Step | null>(null);
 
-  useEffect(() => {
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+  const updateUserMetadata = async (patch: Record<string, any>) => {
+    if (!user) return null;
+
+    const currentMetadata = userMetadataRef.current || user.user_metadata || {};
+    const nextMetadata = {
+      ...currentMetadata,
+      ...patch,
     };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
 
-  const installApp = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') setDeferredPrompt(null);
+    if (JSON.stringify(currentMetadata) === JSON.stringify(nextMetadata)) {
+      return user;
+    }
+
+    userMetadataRef.current = nextMetadata;
+    pendingMetadataRef.current = nextMetadata;
+    setUser((prev: any) => (prev ? { ...prev, user_metadata: nextMetadata } : prev));
+
+    if (metadataUpdateInFlightRef.current) {
+      return user;
+    }
+
+    metadataUpdateInFlightRef.current = true;
+
+    try {
+      while (pendingMetadataRef.current) {
+        const payload = pendingMetadataRef.current;
+        pendingMetadataRef.current = null;
+
+        const { data, error } = await supabase.auth.updateUser({ data: payload });
+
+        if (error) {
+          return null;
+        }
+
+        if (data.user) {
+          userMetadataRef.current = data.user.user_metadata || payload;
+          lastPersistedStepRef.current = (data.user.user_metadata?.last_step as Step | undefined) || null;
+          setUser(data.user);
+        }
+      }
+    } finally {
+      metadataUpdateInFlightRef.current = false;
+    }
+
+    return user;
   };
 
+  const applyUserAppState = async (authUser: any) => {
+    if (!authUser) return;
 
+    const metadata = authUser.user_metadata || {};
+    const legacySlug = (localStorage.getItem('bio_store_slug') || '').toLowerCase();
+    const legacyReady = localStorage.getItem('bio_store_ready') === 'true';
+    const metadataSlug = typeof metadata.store_slug === 'string' ? metadata.store_slug.toLowerCase() : '';
+    const metadataReady = metadata.store_ready === true;
+    let inferredSlug = metadataSlug || legacySlug || '';
+    let inferredReady = Boolean(metadataReady || (legacyReady && inferredSlug && !STORE_PLACEHOLDER_SLUGS.includes(inferredSlug)));
+
+    if (!inferredReady && authUser.id) {
+      const { data: directStoreRows } = await supabase
+        .from('bio_store')
+        .select('id')
+        .eq('user_id', authUser.id)
+        .limit(1);
+
+      const { data: slugStoreRows } = metadataSlug
+        ? await supabase
+            .from('bio_store')
+            .select('id')
+            .eq('user_id', metadataSlug)
+            .limit(1)
+        : { data: null };
+
+      if (slugStoreRows && slugStoreRows.length > 0) {
+        inferredSlug = metadataSlug;
+        inferredReady = true;
+      } else if (directStoreRows && directStoreRows.length > 0) {
+        inferredSlug = authUser.id;
+        inferredReady = true;
+      }
+    }
+
+    const nextSlug = inferredSlug || 'meu-link';
+    const nextReady = inferredReady;
+
+    setStoreSlug(nextSlug || 'meu-link');
+    setStoreReady(nextReady);
+
+    if ((!metadataSlug && nextReady) || (!metadataReady && nextReady) || (!metadataSlug && legacySlug) || (!metadataReady && legacyReady)) {
+      await updateUserMetadata({
+        store_slug: nextSlug,
+        store_ready: nextReady,
+      });
+      localStorage.removeItem('bio_store_slug');
+      localStorage.removeItem('bio_store_ready');
+    }
+  };
+
+  const handleStoreConfigured = async (slug: string) => {
+    setStoreSlug(slug);
+    setStoreReady(true);
+    await updateUserMetadata({
+      store_slug: slug,
+      store_ready: true,
+      last_step: 'bio',
+    });
+  };
+
+  const handleUpgradeToPro = async () => {
+    if (!user) {
+      showToast('FAÇA LOGIN PARA ATIVAR O PRO');
+      return;
+    }
+
+    const ok = await StripeService.redirectToCheckout(supabase, STRIPE_PRICE_ID, user.id, user.email || '');
+    if (!ok) {
+      showToast('ERRO AO ABRIR O CHECKOUT STRIPE');
+      return;
+    }
+
+    showToast('REDIRECIONANDO PARA PAGAMENTO SEGURO...');
+  };
+
+  const handleManageSubscription = async () => {
+    if (!user) return;
+
+    const ok = await StripeService.openCustomerPortal(supabase, user.email || '');
+    if (!ok) {
+      showToast('ERRO AO ABRIR O PORTAL DE ASSINATURA');
+      return;
+    }
+
+    showToast('ABRINDO PORTAL DE ASSINATURA...');
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setStoreSlug('meu-link');
+    setStoreReady(false);
+    setStep('home');
+    window.location.reload();
+  };
 
   // Advanced Editing State
   const [trimStart, setTrimStart] = useState(0);
@@ -153,11 +317,9 @@ const App: React.FC = () => {
 
   const getPlatformUrl = (type: 'shopee' | 'tiktok') => {
     if (type === 'shopee') {
-      // Link oficial para o painel de ofertas de afiliados (Busca Central)
       return 'https://affiliate.shopee.com.br/offer/product_offer';
     } else {
-      // Link que abre a página de upload/publicação no TikTok
-      return 'https://www.tiktok.com/upload?lang=pt-BR';
+      return 'https://www.tiktok.com/tiktokstudio/upload?from=creator_center';
     }
   };
   const [productList, setProductList] = useState<any[]>([]); 
@@ -182,6 +344,9 @@ const App: React.FC = () => {
   // ── SISTEMA DE ÁUDIO VIRAL ──
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
   const [audioMixOption, setAudioMixOption] = useState<'original' | 'music' | 'mix'>('original');
+  const [treatingStatus, setTreatingStatus] = useState('Preparando pipeline viral...');
+  const [treatingProgress, setTreatingProgress] = useState(8);
+  const [treatingChecklist, setTreatingChecklist] = useState<string[]>([]);
 
   const viralTracks = [
     { id: 'phonk', name: 'Phonk Viral 🏎️', url: 'https://cdn.pixabay.com/download/audio/2022/11/22/audio_feb499f57d.mp3?filename=phonk-125039.mp3' },
@@ -199,70 +364,98 @@ const App: React.FC = () => {
 
   // ── MONETIZAÇÃO & ACESSO GATED ──
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isHydratingApp, setIsHydratingApp] = useState(true);
 
-  const checkAccess = async () => {
+  const checkAccess = async (currentUser?: any) => {
+    setIsHydratingApp(true);
     try {
-      // 0. Bypass de Desenvolvedor via URL (Facilita teste em Mobile/Netlify)
+      // 0. Bypass de Desenvolvedor via URL
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('admin') === 'true') {
-        console.log("⚡ [MODO ADMIN] Ativando bypass de desenvolvedor...");
-        localStorage.setItem('bio_store_slug', 'everton');
-        // Remover o parâmetro da URL de forma elegante
-        const cleanUrl = window.location.origin + window.location.pathname;
-        window.location.replace(cleanUrl);
+        await updateUserMetadata({ store_slug: 'everton', store_ready: true, last_step: 'home' });
+        window.location.replace(window.location.origin + window.location.pathname);
         return;
       }
 
-      const slug = (localStorage.getItem('bio_store_slug') || '').toLowerCase();
+      const slug = (currentUser?.user_metadata?.store_slug || user?.user_metadata?.store_slug || '').toLowerCase();
       
-      // 1. Check if Admin (Hardcoded slugs for the owner)
+      // 1. Check if Admin
       const adminSlugs = ['admin', 'everto', 'everton', 'squad-pro', 'achadinhos_brasil_'];
       if (adminSlugs.includes(slug)) {
         setIsPro(true);
         setIsLoadingAuth(false);
+        setIsHydratingApp(false);
         return;
       }
 
-      // 2. Check Supabase Auth and Profile
-      const { data: { user } } = await supabase.auth.getUser();
+      // 2. Check Use provided user or fallback to auth
+      const activeUser = currentUser || (await supabase.auth.getUser()).data.user;
       
-      if (user) {
-        const status = await StripeService.checkSubscriptionStatus(supabase, user.id);
+      if (activeUser) {
+        userMetadataRef.current = activeUser.user_metadata || {};
+        lastPersistedStepRef.current = (activeUser.user_metadata?.last_step as Step | undefined) || null;
+        setUser(activeUser);
+        await applyUserAppState(activeUser);
+        const status = await StripeService.checkSubscriptionStatus(supabase, activeUser.id);
         setIsPro(status.isPro);
         setTrialExpired(status.trialExpired);
         setTrialRemaining(status.trialRemainingMs ?? null);
       } else {
-        // 3. Anonymous trial by localStorage (24h)
-        const trialStartStr = localStorage.getItem('v-trial-start');
-        if (!trialStartStr) {
-          localStorage.setItem('v-trial-start', Date.now().toString());
-          setIsPro(false);
-          setTrialExpired(false);
-          setTrialRemaining(24 * 60 * 60 * 1000);
-        } else {
-          const trialStart = parseInt(trialStartStr);
-          const elapsed = Date.now() - trialStart;
-          const limit = 24 * 60 * 60 * 1000;
-          const isExpired = elapsed > limit;
-          
-          setIsPro(false);
-          setTrialExpired(isExpired);
-          setTrialRemaining(Math.max(0, limit - elapsed));
-          
-          if (isExpired) {
-            console.log("Teste gratuito expirado para usuário anônimo");
-          }
-        }
+        // No anonymous trial anymore, user must log in
+        setIsPro(false);
+        setTrialExpired(false);
+        setTrialRemaining(null);
+        setStoreSlug('meu-link');
+        setStoreReady(false);
       }
     } catch (err) {
-      console.error('Erro ao verificar acesso:', err);
+      console.error('Erro ao verificar acesso');
     } finally {
+      setIsHydratingApp(false);
       setIsLoadingAuth(false);
     }
   };
 
+  const startScouting = async () => {
+    setStep('agents_scouting');
+  };
+
+  // ── INTERVALO DE TRIAL EM TEMPO REAL ──
   useEffect(() => {
+    if (!user || isPro || !trialRemaining) return;
+
+    const interval = setInterval(() => {
+      setTrialRemaining(prev => {
+        if (prev === null || prev <= 0) {
+          setTrialExpired(true);
+          return 0;
+        }
+        return prev - 1000;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [user, isPro, trialRemaining]);
+
+  useEffect(() => {
+    // Initial check
     checkAccess();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        userMetadataRef.current = session.user.user_metadata || {};
+        void checkAccess(session.user);
+      } else {
+        setUser(null);
+        setIsPro(false);
+        void checkAccess(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // ── PREVIEW & STABILITY ──
@@ -280,7 +473,6 @@ const App: React.FC = () => {
       if (isPlaying && !shouldPause) {
         // Tenta dar play apenas se as condições de exibição forem seguras
         videoRef.current.play().catch(() => {
-          console.log("Autoplay bloqueado pelo navegador ou elemento não pronto");
           setIsPlaying(false);
         });
       } else {
@@ -297,54 +489,64 @@ const App: React.FC = () => {
     <AnimatePresence>
       {active && (
         <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+          animate={{ opacity: 1, backdropFilter: 'blur(8px)' }}
+          exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+          transition={{ duration: 0.55, ease: 'easeOut' }}
           className="scanning-hud"
         >
           <div className="cyber-grid" />
-          <motion.div 
-            animate={{ top: ['0%', '100%', '0%'] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-            className="scan-bar" 
-          />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(6,182,212,0.12),transparent_32%),linear-gradient(180deg,rgba(2,6,23,0.74)_0%,rgba(2,6,23,0.92)_100%)]" />
           
           <motion.div 
-            initial={{ scale: 0.8, opacity: 0, y: 20 }}
+            initial={{ scale: 0.94, opacity: 0, y: 18 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="flex flex-col items-center gap-10 relative z-20"
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+            className="flex flex-col items-center gap-8 relative z-20"
           >
             <div className="relative">
-              <div className="absolute inset-0 blur-[60px] bg-accent/40 rounded-full animate-pulse" />
-              <div className="w-28 h-28 rounded-[2rem] bg-slate-900 border-2 border-accent/30 flex items-center justify-center relative shadow-[0_0_80px_rgba(6,182,212,0.3)] overflow-hidden">
+              <div className="absolute inset-0 blur-[70px] bg-accent/20 rounded-full" />
+              <div className="absolute -inset-8 rounded-full border border-white/10 opacity-40" />
+              <div className="w-28 h-28 rounded-[2rem] bg-slate-900/95 border-2 border-white/70 flex items-center justify-center relative shadow-[0_0_80px_rgba(6,182,212,0.18)] overflow-hidden">
                 <motion.div 
                   animate={{ rotate: 360 }}
-                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                  className="absolute inset-0 opacity-10"
+                  transition={{ duration: 24, repeat: Infinity, ease: "linear" }}
+                  className="absolute inset-0 opacity-[0.06]"
                 >
                   <div className="w-full h-full border-4 border-dashed border-accent rounded-full" />
                 </motion.div>
-                <Activity size={56} className="text-accent animate-pulse" />
+                <motion.div
+                  animate={{ y: [0, -2, 0] }}
+                  transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <Activity size={52} className="text-slate-100" />
+                </motion.div>
+                <div className="absolute inset-x-4 top-1/2 h-px bg-gradient-to-r from-transparent via-accent/35 to-transparent" />
               </div>
             </div>
             
-            <div className="text-center space-y-4">
+            <div className="text-center space-y-4 max-w-[340px]">
               <motion.h2 
-                animate={{ opacity: [1, 0.5, 1] }}
-                transition={{ duration: 0.2, repeat: Infinity, repeatDelay: 3 }}
-                className="text-4xl font-black italic tracking-tighter uppercase leading-none bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.08 }}
+                className="text-[2.1rem] font-black italic tracking-[-0.05em] uppercase leading-[0.92] bg-gradient-to-br from-white via-slate-100 to-slate-400 bg-clip-text text-transparent"
               >
                 SQUAD_OS_INITIALIZING
               </motion.h2>
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-48 h-1 bg-white/5 rounded-full overflow-hidden">
+              <div className="mx-auto w-full max-w-[280px] rounded-2xl border border-white/8 bg-slate-900/45 px-5 py-4 backdrop-blur-xl">
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-[10px] text-slate-300/90 font-black tracking-[0.45em] uppercase">Security Level: Maximum</p>
+                  <div className="w-full h-[3px] bg-white/5 rounded-full overflow-hidden">
                   <motion.div 
-                    animate={{ width: ['0%', '100%'] }}
-                    transition={{ duration: 2.5, repeat: Infinity }}
-                    className="h-full bg-accent" 
+                    animate={{ x: ['-65%', '165%'] }}
+                    transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ width: '38%' }}
+                    className="h-full rounded-full bg-gradient-to-r from-transparent via-accent to-transparent" 
                   />
                 </div>
-                <p className="text-[10px] text-accent font-black tracking-[0.5em] uppercase">Security Level: Maximum</p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">Sincronizando sinais de demanda, criativos virais e produtos com maior potencial de conversao.</p>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -373,39 +575,32 @@ const App: React.FC = () => {
 
   // Persistence
   useEffect(() => {
-    const saved = {
-      step: localStorage.getItem('v-step'),
-      products: localStorage.getItem('v-products'),
-      active: localStorage.getItem('v-active')
-    };
-    // Garantir fluxo de onboarding
-    if (!isStoreConfigured()) {
-      setStep('bio');
-    } else {
-      // Restaurar passo anterior ou ir para home
-      const lastStep = localStorage.getItem('v-step') as Step;
+    if (isLoadingAuth || isHydratingApp) return;
+
+    fetchHistory();
+    fetchProductsDB();
+    loadScoutedProducts();
+
+    if (user && !isStoreConfigured()) {
+      if (step !== 'bio') {
+        setStep('home');
+      }
+      return;
+    }
+
+    if (user) {
+      const lastStep = user.user_metadata?.last_step as Step | undefined;
       if (lastStep && !['scouting', 'ready', 'treating', 'automation'].includes(lastStep)) {
         setStep(lastStep);
       } else {
         setStep('home');
       }
     }
-    if (saved.products) setProductList(JSON.parse(saved.products));
-    
-    // Se não houver itens ativos no localStorage, tenta buscar do Supabase
-    if (saved.active) {
-      setActiveItems(JSON.parse(saved.active));
-    } else {
-      loadScoutedProducts();
-    }
-    
-    // Load from Supabase on mount
-    fetchHistory();
-    fetchProductsDB();
-  }, []);
+  }, [user, storeSlug, storeReady, isLoadingAuth, isHydratingApp]);
 
   const loadScoutedProducts = async () => {
     const userId = getUserId();
+    if (!userId) return;
     const { data } = await supabase
       .from('scouted_products')
       .select('*')
@@ -424,6 +619,7 @@ const App: React.FC = () => {
 
   const saveScoutedProducts = async (items: any[]) => {
     const userId = getUserId();
+    if (!userId) return;
     // Limpa os antigos e salva os novos para manter a sincronia
     const productsToSave = items.map(p => ({
       user_id: userId,
@@ -466,33 +662,31 @@ const App: React.FC = () => {
         </p>
         
         <div className="w-full max-w-sm space-y-4">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              supabase.auth.getUser().then(({ data }) => {
-                if (data.user) {
-                  // IMPORTANTE: O usuário deve trocar 'prod_placeholder' pelo ID real do Stripe no Stripe Dashboard
-                  StripeService.redirectToCheckout(supabase, 'prod_placeholder', data.user.id, data.user.email || '');
-                  showToast("Redirecionando para pagamento seguro...");
-                } else {
-                  showToast("⚠️ Faça login primeiro!");
-                }
-              });
-            }}
-            className="w-full py-5 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 font-black uppercase italic tracking-[0.2em] rounded-2xl shadow-[0_15px_40px_rgba(16,185,129,0.3)] flex items-center justify-center gap-3"
-          >
-            <Zap size={20} fill="currentColor" />
-            DESBLOQUEAR TUDO: R$ 19,90/mês
-          </motion.button>
+          {user ? (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleUpgradeToPro}
+              className="w-full py-5 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 font-black uppercase italic tracking-[0.2em] rounded-2xl shadow-[0_15px_40px_rgba(16,185,129,0.3)] flex items-center justify-center gap-3"
+            >
+              <Zap size={20} fill="currentColor" />
+              LIBERAR ACESSO PRO: R$ 19,90/mês
+            </motion.button>
+          ) : (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] text-red-500 font-bold uppercase tracking-widest text-center">
+              ⚠️ ERRO DE AUTENTICAÇÃO: POR FAVOR, REINICIE O APP.
+            </div>
+          )}
           
           <div className="flex flex-col gap-2">
-            <button 
-              onClick={checkAccess}
-              className="text-[10px] font-black text-accent uppercase tracking-widest hover:brightness-125 transition-all"
-            >
-              Já é PRO? Clique para Atualizar
-            </button>
+            {user && (
+              <button 
+                onClick={() => checkAccess()}
+                className="text-[10px] font-black text-accent uppercase tracking-widest hover:brightness-125 transition-all"
+              >
+                Já pagou? Clique para Sincronizar
+              </button>
+            )}
             <button 
               onClick={() => setStep('home')}
               className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-white transition-colors"
@@ -530,6 +724,7 @@ const App: React.FC = () => {
 
   const fetchHistory = async () => {
     const userId = getUserId();
+    if (!userId) return;
     const { data } = await supabase
       .from('publication_history')
       .select('*')
@@ -543,10 +738,18 @@ const App: React.FC = () => {
 
   // Persistence Sync
   useEffect(() => {
-    localStorage.setItem('v-step', step);
-    localStorage.setItem('v-products', JSON.stringify(productList));
-    localStorage.setItem('v-active', JSON.stringify(activeItems));
-  }, [step, productList, activeItems]);
+    if (!user || ['scouting', 'ready', 'treating', 'automation'].includes(step)) return;
+    if (lastPersistedStepRef.current === step) return;
+
+    const timer = setTimeout(() => {
+      lastPersistedStepRef.current = step;
+      void updateUserMetadata({
+        last_step: step,
+      });
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [step, user]);
 
   // Transition synchronization effect
   useEffect(() => {
@@ -560,7 +763,6 @@ const App: React.FC = () => {
       const isNear = transitionTimestamps.some(ts => ct >= ts && ct < ts + transitionDuration);
       
       if (isNear !== isTransitionActive) {
-        console.log(`[EFFECT] Transition ${isNear ? 'ON' : 'OFF'} at ${ct.toFixed(2)}s`);
         setIsTransitionActive(isNear);
       }
       setCurrentTime(ct);
@@ -573,7 +775,6 @@ const App: React.FC = () => {
   // Auto-refresh timer (5 minutes)
   useEffect(() => {
     const timer = setInterval(() => {
-      console.log('[AUTO-REFRESH] Sincronizando produtos e tendências...');
       setProductList(prev => prev.map(p => {
         if (!p.price || typeof p.price !== 'string') return p;
         const currentPrice = parseFloat(p.price.replace('R$ ', '').replace(',', '.'));
@@ -588,27 +789,22 @@ const App: React.FC = () => {
   }, []);
 
   const getUserId = () => {
-    const slug = localStorage.getItem('bio_store_slug');
-    if (slug) return slug;
-    // Gerar um ID aleatório amigável no primeiro acesso
-    const newId = 'loja-' + Math.random().toString(36).substring(2, 6);
-    localStorage.setItem('bio_store_slug', newId);
-    return newId;
+    if (user?.id) return user.id;
+    return null;
   };
 
   const saveToSupabase = async (product: any, platform: string) => {
     if (!product) return;
     const userId = getUserId();
+    if (!userId) return;
     
     // Garantir que os dados são strings e nunca nulas/undefined para evitar Erro 400
     const payload = { 
-      user_id: String(userId || 'default-user'),
+      user_id: String(userId),
       product_id: String(product.id || product.product_id || 'sem-id'), 
       title: String(product.title || 'Produto sem título'), 
       platform: String(platform || 'Shopee') 
     };
-
-    console.log('Enviando para Supabase...', payload);
 
     const { data, error } = await supabase
       .from('publication_history')
@@ -616,7 +812,6 @@ const App: React.FC = () => {
       .select();
 
     if (error) {
-      console.error('ERRO CRÍTICO SUPABASE (RESTAURAÇÃO):', error.message);
       showToast("ERRO AO SALVAR NO BANCO");
       return;
     }
@@ -787,24 +982,8 @@ const App: React.FC = () => {
     setVideoLegend('');
   };
 
-  const sortByCommission = (array: any[]) => {
-    return [...array].sort((a, b) => b.commission_pct - a.commission_pct);
-  };
 
-  const startScouting = () => {
-    setIsScanning(true);
-    setStep('scouting');
-    setTimeout(() => {
-      setProductList(databaseProducts);
-      
-      const infinitePool = getInfinitePool(activeNiche);
-      const sortedNiche = sortByCommission(infinitePool);
-      
-      setActiveItems(sortedNiche.slice(0, 20)); 
-      setStep('list');
-      setIsScanning(false);
-    }, 2500);
-  };
+
 
   const goBackToList = () => {
     setStep('list');
@@ -892,7 +1071,7 @@ const App: React.FC = () => {
         }
 
       } catch (err) {
-        console.log("Falha no Proxy em Nuvem", err);
+        console.error("Falha no Proxy em Nuvem");
       }
     }
 
@@ -965,12 +1144,12 @@ const App: React.FC = () => {
     e.stopPropagation();
     setIsSavingToBio(true);
     try {
-      const email = localStorage.getItem('user_email');
-      const { data: user } = await supabase.from('users_profiles').select('id').eq('email', email).single();
+      const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
 
       if (!userId) {
         showToast('FAÇA LOGIN PARA ADICIONAR À BIO');
+        setStep('plans'); // Redirecionar para área de login/planos
         return;
       }
 
@@ -985,7 +1164,7 @@ const App: React.FC = () => {
       if (error) throw error;
       showToast('PRODUTO ADICIONADO À BIO! 🔗');
     } catch (err) {
-      console.error(err);
+      console.error('Erro ao adicionar a bio');
       showToast('ERRO AO ADICIONAR À BIO');
     } finally {
       setIsSavingToBio(false);
@@ -994,7 +1173,14 @@ const App: React.FC = () => {
 
   const researchTikTok = async (product: any) => {
     resetVideoEditor();
-    setIsScanning(true);
+    setStep('treating');
+    setTreatingStatus('Mapeando sinais de demanda e criativos virais...');
+    setTreatingProgress(12);
+    setTreatingChecklist([
+      'Lendo palavras-chave do produto',
+      'Consultando tendencias TikTok + Shopee',
+      'Preparando filtros de relevancia',
+    ]);
     try {
       // ── ETAPA 1: Extrair o núcleo semântico e definir o nicho
       const coreQuery = getSmartSearchName(product.query || product.title || '');
@@ -1030,10 +1216,15 @@ const App: React.FC = () => {
       const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
 
       // ── ETAPA 3: Estratégias de busca (Ultra Rigor Brasil)
+      // Usar o título original do produto para buscas mais precisas
+      const productTitle = product.title || product.query || '';
+      const searchKeywords = getSmartSearchName(productTitle);
+      
       const strategies = [
-        { query: `${coreQuery} brasil achadinhos`, weight: 2.0 },
-        { query: `shopee brasil ${coreQuery} review`, weight: 1.5 },
-        { query: `${coreQuery} testando achadinhos`, weight: 1.2 },
+        { query: searchKeywords, weight: 3.0 },
+        { query: `${searchKeywords} produto`, weight: 2.5 },
+        { query: `${searchKeywords} useful`, weight: 1.5 },
+        { query: `shopee ${searchKeywords}`, weight: 2.0 },
       ];
 
       // Dicionário de Idioma e Qualidade V6
@@ -1059,6 +1250,8 @@ const App: React.FC = () => {
       const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; 
 
       let allVideos: any[] = [];
+      setTreatingStatus('Consultando fontes e reunindo videos promissores...');
+      setTreatingProgress(28);
       for (const strategy of strategies) {
         const q = encodeURIComponent(strategy.query);
         try {
@@ -1074,6 +1267,13 @@ const App: React.FC = () => {
       }
 
       if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
+      setTreatingStatus('Validando idioma, qualidade e engajamento real...');
+      setTreatingProgress(56);
+      setTreatingChecklist([
+        'Filtrando resultados em portugues do Brasil',
+        'Removendo videos com baixa relevancia',
+        'Priorizando sinais de conversao e qualidade HD',
+      ]);
 
       // ── ETAPA 4: MOTOR DE SCORING V6 (Elite Brasil Quality)
       const scored = allVideos
@@ -1176,21 +1376,27 @@ const App: React.FC = () => {
       setVideoLegend(generateOverlayLegend(product));
 
       showToast(`💎 ${unique.length} VÍDEOS ELITE FILTRADOS!`);
+      setTreatingStatus('Finalizando edicao automatica e preparando postagem...');
+      setTreatingProgress(88);
+      setTreatingChecklist([
+        'Selecionando o melhor video da rodada',
+        'Montando legenda e gatilhos de clique',
+        'Preparando material final para postagem',
+      ]);
 
       setTimeout(() => {
-        setStep('treating');
+        setTreatingStatus('Material pronto. Abrindo central de postagem...');
+        setTreatingProgress(100);
         setTimeout(() => {
           setStep('ready');
           showToast("VÍDEO PRONTO PARA POSTAR! 🚀");
-        }, 2500);
-      }, 1000);
+        }, 900);
+      }, 1200);
 
     } catch (error) {
-      console.error("TikTok Research Error:", error);
+      console.error("TikTok Research Error");
       showToast("ERRO NA BUSCA INTELIGENTE");
       setStep('list');
-    } finally {
-      setIsScanning(false);
     }
   };
 
@@ -1296,7 +1502,7 @@ const App: React.FC = () => {
       
       return blob;
     } catch (error: any) {
-      console.error("Video Processing Error:", error);
+      console.error("Video Processing Error");
       showToast("ERRO AO RENDERIZAR — TENTE NOVAMENTE 📲");
       return null;
     } finally {
@@ -1484,7 +1690,7 @@ const App: React.FC = () => {
       setBioImageUrl(publicUrl);
       showToast("IMAGEM ANEXADA COM SUCESSO! ✅");
     } catch (error: any) {
-      console.error('Erro no upload:', error);
+      console.error('Erro no upload');
       showToast(`ERRO NO UPLOAD: ${error.message || 'Tente novamente'}`);
     } finally {
       setIsUploading(false);
@@ -1520,6 +1726,16 @@ const App: React.FC = () => {
       addLog('Histórico sincronizado com nuvem.', 'info');
     }
 
+    const openPublishingDestination = () => {
+      const target = getPlatformUrl(selectedPlatform);
+      window.open(target, '_blank', 'noopener,noreferrer');
+    };
+
+    const createMp4File = (blob: Blob) => {
+      const fileName = `viral_squad_${Date.now()}.mp4`;
+      return new File([blob], fileName, { type: 'video/mp4' });
+    };
+
     // 2. Render and Process Video
     addLog('Renderizando vídeo ultra-HD para postagem...', 'info');
     const finalBlob = await handleDownload(true);
@@ -1538,9 +1754,10 @@ const App: React.FC = () => {
       const triggerManualDownload = () => {
         addLog('Bypass: Download Manual Forçado...', 'warn');
         const a = document.createElement('a');
-        const url = URL.createObjectURL(finalBlob);
+        const downloadFile = createMp4File(finalBlob);
+        const url = URL.createObjectURL(downloadFile);
         a.href = url;
-        a.download = `video_viral_${Date.now()}.mp4`;
+        a.download = downloadFile.name;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1548,7 +1765,7 @@ const App: React.FC = () => {
       };
 
       try {
-        const fileToShare = new File([finalBlob], `viral_video_${Date.now()}.mp4`, { type: 'video/mp4' });
+        const fileToShare = createMp4File(finalBlob);
 
         if (navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
           await navigator.share({
@@ -1559,14 +1776,14 @@ const App: React.FC = () => {
           addLog('Compartilhamento disparado! Poste agora no App.', 'success');
         } else {
           triggerManualDownload();
-          window.open(getPlatformUrl(selectedPlatform), '_blank');
+          openPublishingDestination();
         }
       } catch (err: any) {
         if (err.name !== 'AbortError') {
           addLog('Erro no Share API. Tentando Download Forçado...', 'error');
           triggerManualDownload();
           setTimeout(() => {
-            window.open(getPlatformUrl(selectedPlatform), '_blank');
+            openPublishingDestination();
           }, 1500);
         } else {
           addLog('Operação cancelada pelo usuário.', 'warn');
@@ -1578,9 +1795,10 @@ const App: React.FC = () => {
       
       // Step A: Trigger Download (Robust PCA Style)
       const a = document.createElement('a');
-      const blobUrl = URL.createObjectURL(finalBlob);
+      const downloadFile = createMp4File(finalBlob);
+      const blobUrl = URL.createObjectURL(downloadFile);
       a.href = blobUrl;
-      a.download = `viral_squad_${Date.now()}.mp4`;
+      a.download = downloadFile.name;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1591,7 +1809,7 @@ const App: React.FC = () => {
       // Step B: Wait slightly and Open
       addLog(`Abrindo portal de upload do ${selectedPlatform.toUpperCase()}...`, 'info');
       setTimeout(() => {
-        window.open(getPlatformUrl(selectedPlatform), '_blank');
+        openPublishingDestination();
         addLog('PIPELINE CONCLUÍDO. COLE A LEGENDA NO SITE!', 'success');
       }, 1500);
     }
@@ -1604,66 +1822,128 @@ const App: React.FC = () => {
     }, 2500);
   };
 
+  if (isLoadingAuth || isHydratingApp) {
+    return (
+      <div className="h-screen bg-slate-950 flex items-center justify-center">
+        <ScanningHUD active={true} />
+      </div>
+    );
+  }
+  if (!user) {
+    return (
+      <LoginScreen 
+        onLoginSuccess={(loggedUser) => {
+          setUser(loggedUser);
+          checkAccess(loggedUser);
+        }} 
+      />
+    );
+  }
+
   return (
     <div className="app-container overflow-hidden bg-slate-950 text-slate-50 font-inter">
-      {(!isPro && !isLoadingAuth) && <LockScreen />}
       <ScanningHUD active={isScanning} />
       
-      {/* Hide header in editor modes to save mobile space */}
-      {(!['ready', 'treating', 'automation'].includes(step)) && (
-        <header className="border-b border-white/5 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur-2xl sticky top-0 z-40 transition-all duration-500" 
-          style={{ 
-            paddingTop: 'calc(var(--safe-top) + 1rem)', 
-            height: 'calc(7rem + var(--safe-top))' 
-          }}>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="absolute inset-0 bg-accent/20 blur-lg rounded-full animate-pulse" />
-              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center relative">
-                <Activity size={20} className="text-accent" />
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-xl font-black tracking-tighter uppercase leading-none italic">
-                VIRAL<span className="text-accent">SQUAD</span> <span className="text-[10px] text-accent/50 ml-1">v1.6.0</span>
-              </h1>
-              <span className="text-[8px] font-black tracking-[0.3em] uppercase opacity-40">Stealth Engine v4.0</span>
-            </div>
+      <header className="header px-3 py-3 sm:px-4 md:px-8 border-b border-white/5 bg-slate-950/50 backdrop-blur-3xl sticky top-0 z-[100]">
+        <div className="flex items-start justify-between gap-3 sm:items-center">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex flex-col">
+            <h1 className="text-lg sm:text-xl font-black tracking-tighter uppercase leading-none italic whitespace-nowrap">
+              VIRAL<span className="text-accent">SQUAD</span> <span className="text-[10px] text-accent/50 ml-1">v1.6.0</span>
+            </h1>
+            <span className="text-[8px] font-black tracking-[0.3em] uppercase opacity-40">Stealth Engine v4.0</span>
           </div>
-          
-          <div className="flex items-center gap-2">
-            {deferredPrompt && (
-              <motion.button
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                whileHover={{ scale: 1.1, backgroundColor: '#00E676' }}
-                whileTap={{ scale: 0.9 }}
-                onClick={installApp}
-                className="h-9 px-4 bg-[#00C853] text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-[0_0_20px_rgba(0,200,83,0.4)] border border-emerald-400/40 relative overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none" />
-                <Download size={14} strokeWidth={3} className="relative z-10" />
-                <span className="relative z-10">INSTALAR APP</span>
-              </motion.button>
-            )}
-            {isPro && (
-              <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                  {['meu-link', 'admin', 'everton', 'achadinhos_brasil_'].includes((localStorage.getItem('bio_store_slug') || '').toLowerCase()) ? 'SQUAD ADMIN' : 'SQUAD PRO'}
-                </span>
-              </div>
-            )}
-            <div className="px-3 py-1.5 rounded-full bg-accent/5 border border-accent/20 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Status: Link Online</span>
-            </div>
-          </div>
-        </header>
-      )}
+        </div>
 
-      {(!isStoreConfigured() && step !== 'bio') && (
-        <div className="bg-amber-500 text-black text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center animate-pulse z-[40] sticky" style={{ top: 'calc(5.5rem + var(--safe-top))' }}>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex-col items-end mr-2 hidden md:flex">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black text-white px-2 py-1 bg-white/5 rounded-lg border border-white/5 uppercase tracking-tighter truncate max-w-[100px]">
+                {user?.email?.split('@')[0]}
+              </span>
+              {hasActivePro ? (
+                <span className="px-2 py-1 bg-[linear-gradient(135deg,rgba(16,185,129,0.92)_0%,rgba(6,182,212,0.82)_100%)] text-slate-950 text-[8px] font-black uppercase rounded-lg border border-emerald-300/20 tracking-tighter italic shadow-[0_0_15px_rgba(16,185,129,0.18)]">
+                  SQUAD PRO
+                </span>
+              ) : (
+                <button
+                  onClick={handleUpgradeToPro}
+                  className="px-2 py-1 bg-white/5 text-slate-400 text-[8px] font-black uppercase rounded-lg border border-white/5 tracking-tighter italic hover:border-emerald-400/40 hover:text-emerald-300 transition-all"
+                  title="Ativar SQUAD PRO"
+                >
+                  TESTE GRÁTIS
+                </button>
+              )}
+              {!hasActivePro && (
+                <button
+                  onClick={handleUpgradeToPro}
+                  className="px-2 py-1 bg-gradient-to-r from-emerald-400 to-accent text-slate-950 text-[8px] font-black uppercase rounded-lg border border-emerald-300/40 tracking-tighter shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:brightness-110 transition-all"
+                  title="Ativar SQUAD PRO"
+                >
+                  PRO
+                </button>
+              )}
+            </div>
+            <span className="text-[7px] font-bold text-accent uppercase tracking-[0.2em] mt-1 opacity-70">Operação em curso</span>
+          </div>
+
+          <motion.button 
+            whileHover={{ scale: 1.05, backgroundColor: 'rgba(239, 68, 68, 0.2)' }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleLogout}
+            className="h-10 w-10 sm:w-auto sm:px-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-2 transition-all group"
+            title="Encerrar Sessão"
+          >
+            <LogOut size={16} className="text-red-500 group-hover:scale-110 transition-transform" />
+            <span className="text-[9px] font-black text-red-500 uppercase tracking-widest hidden sm:inline">SAIR</span>
+          </motion.button>
+        </div>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <TrialCountdown remainingMs={trialRemaining} isPro={hasActivePro} />
+          </div>
+          {hasActivePro ? (
+            <div className="flex items-center gap-2 shrink-0">
+              {isProExpiringSoon && (
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={handleUpgradeToPro}
+                  className="h-10 px-3 sm:px-4 bg-gradient-to-r from-amber-300 to-orange-400 text-slate-950 rounded-xl text-[8px] sm:text-[9px] font-black uppercase tracking-[0.14em] border border-amber-200/30 shadow-[0_10px_24px_rgba(251,191,36,0.18)] whitespace-nowrap"
+                  title="Renovar agora"
+                >
+                  RENOVAR
+                </motion.button>
+              )}
+              <motion.button
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={handleManageSubscription}
+                className="h-10 px-3 sm:px-4 bg-white/5 text-white rounded-xl text-[8px] sm:text-[9px] font-black uppercase tracking-[0.14em] border border-white/10 shadow-[0_10px_24px_rgba(15,23,42,0.18)] whitespace-nowrap"
+                title="Gerenciar assinatura"
+              >
+                GERENCIAR
+              </motion.button>
+            </div>
+          ) : (
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={handleUpgradeToPro}
+              className="h-10 px-3 sm:px-4 bg-gradient-to-r from-emerald-400 to-accent text-slate-950 rounded-xl text-[8px] sm:text-[9px] font-black uppercase tracking-[0.14em] border border-emerald-300/30 shadow-[0_10px_24px_rgba(16,185,129,0.18)] whitespace-nowrap shrink-0"
+              title="Quero ser PRO agora"
+            >
+              <span className="hidden xs:inline">QUERO SER PRO</span>
+              <span className="xs:hidden">SER PRO</span>
+            </motion.button>
+          )}
+        </div>
+      </header>
+
+      {(!isStoreConfigured() && step !== 'bio' && !['onboarding_start', 'onboarding_config', 'onboarding_filtering'].includes(step)) && (
+        <div className="bg-amber-500 text-black text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center animate-pulse z-[40] sticky" style={{ top: 'var(--safe-top)' }}>
           ⚠️ ALERTA SQUAD: CONFIGURE SEU LINK NA ABA LOJA PARA DESBLOQUEAR A PLATAFORMA!
         </div>
       )}
@@ -1678,7 +1958,12 @@ const App: React.FC = () => {
               exit={{ opacity: 0, scale: 1.05 }}
               className="h-[calc(100vh-10rem)] overflow-y-auto p-4 md:p-8"
             >
-              <BioManager onProceed={() => setStep('home')} />
+              <BioManager
+                initialStoreSlug={storeSlug}
+                initialStoreReady={storeReady}
+                onStoreConfigured={handleStoreConfigured}
+                onProceed={() => setStep('agents_scouting')}
+              />
             </motion.div>
           )}
           {step === 'home' && (
@@ -1687,18 +1972,18 @@ const App: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
-              className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-8 text-center space-y-16"
+              className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-8 text-center space-y-12"
             >
               <div className="relative">
                 <div className="absolute -inset-24 bg-accent/10 blur-[100px] rounded-full" />
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="w-32 h-32 rounded-[2.5rem] border-2 border-white/5 flex items-center justify-center bg-slate-900/40 backdrop-blur-3xl relative z-10 shadow-2xl"
+                  className="w-28 h-28 rounded-[2.5rem] border-2 border-white/5 flex items-center justify-center bg-slate-900/40 backdrop-blur-3xl relative z-10 shadow-2xl"
                 >
-                  <Shield size={56} className="text-accent" />
-                  <div className="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-accent/20 backdrop-blur-lg border border-accent/30 flex items-center justify-center">
-                    <Activity size={18} className="text-accent animate-pulse" />
+                  <Shield size={48} className="text-accent" />
+                  <div className="absolute -top-2 -right-2 w-8 h-8 rounded-xl bg-accent/20 backdrop-blur-lg border border-accent/30 flex items-center justify-center">
+                    <Activity size={14} className="text-accent animate-pulse" />
                   </div>
                 </motion.div>
               </div>
@@ -1708,26 +1993,209 @@ const App: React.FC = () => {
                   DOMINE O <br />
                   <span className="bg-gradient-to-r from-accent to-emerald-400 bg-clip-text text-transparent">ALGORITMO</span>
                 </h2>
-                <p className="text-xs text-dim uppercase font-bold tracking-[0.2em] max-w-[280px] mx-auto opacity-80 leading-relaxed">
-                  Transforme achadinhos em lucro real com automação stealth de alta performance.
-                </p>
+                <div className="flex flex-col items-center gap-2">
+                   <p className="text-[10px] text-dim uppercase font-black tracking-[0.4em] max-w-[280px] mx-auto opacity-70">
+                    SQUAD V6.0 STEALTH ENGINE
+                  </p>
+                  <div className="h-[2px] w-12 bg-accent/20 rounded-full" />
+                </div>
               </div>
 
-              <div className="w-full max-w-xs relative z-10">
-                <motion.button 
-                  whileHover={{ scale: 1.05, y: -2 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={isStoreConfigured() ? "btn-premium" : "btn-premium border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.2)]"}
-                  onClick={() => isStoreConfigured() ? startScouting() : setStep('bio')}
+              {/* Large Countdown for Trial Users */}
+              {!hasActivePro && trialRemaining !== null && (
+                <div className="relative z-10 scale-90 space-y-4">
+                  <TrialCountdown remainingMs={trialRemaining} isPro={false} variant="large" />
+                  <motion.button
+                    whileHover={{ scale: 1.03, y: -2 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={handleUpgradeToPro}
+                    className="w-full max-w-sm mx-auto py-4 px-6 rounded-2xl border border-emerald-400/20 bg-gradient-to-r from-emerald-400 to-accent text-slate-950 text-[11px] font-black uppercase tracking-[0.24em] shadow-[0_16px_40px_rgba(16,185,129,0.22)]"
+                  >
+                    QUERO SER PRO AGORA
+                  </motion.button>
+                </div>
+              )}
+
+              {isProExpiringSoon && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full max-w-sm relative z-10 rounded-[2rem] border border-amber-300/20 bg-[linear-gradient(135deg,rgba(245,158,11,0.14)_0%,rgba(251,191,36,0.08)_100%)] px-5 py-4 shadow-[0_20px_60px_rgba(245,158,11,0.12)]"
                 >
-                  {isStoreConfigured() ? (
-                    <>INICIAR OPERAÇÃO <Search size={20} /></>
-                  ) : (
-                    <>CONFIGURAR MINHA LOJA <ShoppingBag size={20} /></>
-                  )}
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-200">Vence em breve</p>
+                      <p className="mt-1 text-sm text-amber-50/90 leading-relaxed">Sua assinatura PRO esta nos ultimos dias. Renove agora para nao perder o acesso.</p>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={handleUpgradeToPro}
+                      className="shrink-0 rounded-xl bg-amber-300 px-3 py-2 text-[9px] font-black uppercase tracking-[0.16em] text-slate-950"
+                    >
+                      Renovar
+                    </motion.button>
+                  </div>
+                </motion.div>
+              )}
+
+              <div className="w-full max-w-xs relative z-10 space-y-4">
+                <motion.button
+                  whileHover={{ scale: 1.05, y: -4 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={`w-full py-6 rounded-3xl flex items-center justify-center gap-4 text-sm font-black uppercase italic tracking-[0.2em] shadow-2xl border-b-4 transition-all ${
+                    isStoreConfigured() 
+                    ? 'btn-premium border-slate-950/20' 
+                    : 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 border-orange-900/20'
+                  }`}
+                  onClick={() => {
+                    if (isStoreConfigured()) {
+                      setStep('agents_scouting');
+                    } else {
+                      setStep('bio');
+                    }
+                  }}
+                >
+                  <motion.span className="flex items-center gap-4">
+                    {isStoreConfigured() ? 'INICIAR BUSCAS DE PRODUTOS E VÍDEOS VIRAIS' : 'CRIAR MINHA LOJA'} 
+                    {isStoreConfigured() ? <Zap size={20} fill="currentColor" /> : <ArrowRight size={20} />}
+                  </motion.span>
+                </motion.button>
+                
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-relaxed">
+                   {isStoreConfigured() 
+                     ? "Sua loja está pronta. Agora vamos buscar produtos e vídeos virais" 
+                     : "Crie sua loja primeiro para liberar a busca automática"}
+                 </p>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 'onboarding_start' && (
+            <motion.div 
+              key="onboarding_start" 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.1 }}
+              className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-8 text-center space-y-8"
+            >
+              <div className="relative">
+                <div className="absolute -inset-12 bg-accent/20 blur-[60px] rounded-full animate-pulse" />
+                <div className="w-24 h-24 rounded-[2rem] bg-slate-900 border border-white/10 flex items-center justify-center relative z-10">
+                  <ShoppingBag size={40} className="text-accent" />
+                </div>
+              </div>
+              <div className="space-y-4 relative z-10">
+                <h2 className="text-4xl font-black italic uppercase leading-tight italic">
+                  BEM-VINDO AO <br />
+                  <span className="text-accent underline decoration-accent/30 decoration-8 underline-offset-8">VIRAL SQUAD</span>
+                </h2>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] leading-relaxed max-w-[280px] mx-auto">
+                  Para começar a lucrar, precisamos configurar sua <span className="text-white">VITRINE DE VENDAS</span>. É por lá que seus clientes vão comprar!
+                </p>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="btn-premium px-12 py-5 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] shadow-2xl relative z-10"
+                onClick={() => setStep('onboarding_config')}
+              >
+                CRIAR MINHA LOJA AGORA
+              </motion.button>
+            </motion.div>
+          )}
+
+          {step === 'onboarding_config' && (
+            <motion.div 
+              key="onboarding_config" 
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              className="h-[calc(100vh-10rem)] overflow-y-auto p-4 md:p-8"
+            >
+              <div className="max-w-md mx-auto space-y-8">
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-black italic uppercase italic">CONFIGURAÇÃO DE <span className="text-accent">LINK</span></h3>
+                  <p className="text-[9px] text-dim uppercase font-bold tracking-widest">Defina seu slug único no ecossistema</p>
+                </div>
+                <BioManager
+                  initialStoreSlug={storeSlug}
+                  initialStoreReady={storeReady}
+                  onStoreConfigured={handleStoreConfigured}
+                  onProceed={() => setStep('onboarding_filtering')}
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {step === 'onboarding_filtering' && (
+            <motion.div 
+              key="onboarding_filtering"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-8 text-center space-y-12 relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_#020617_80%)] z-10" />
+              
+              <div className="relative z-20 space-y-12 w-full max-w-sm">
+                <div className="relative mx-auto w-32 h-32">
+                   <motion.div 
+                     animate={{ rotate: 360, scale: [1, 1.1, 1] }}
+                     transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+                     className="absolute inset-0 border-2 border-t-accent border-r-emerald-500 border-b-purple-500 border-l-transparent rounded-full shadow-[0_0_60px_rgba(6,182,212,0.4)]"
+                   />
+                   <div className="absolute inset-0 flex items-center justify-center">
+                     <Activity size={40} className="text-accent animate-pulse" />
+                   </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-black italic uppercase tracking-tighter italic">RECRUTANDO AGENTES...</h2>
+                    <p className="text-[10px] text-dim uppercase tracking-[0.4em] font-bold animate-pulse text-accent">Status: Sincronizando Database Viral</p>
+                  </div>
+
+                  <div className="bg-slate-950/80 backdrop-blur-3xl border border-white/5 p-6 rounded-[2rem] font-mono text-[9px] text-left space-y-2 h-44 overflow-hidden relative shadow-2xl">
+                    <motion.div 
+                      animate={{ y: [0, -220] }}
+                      transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+                      className="space-y-2"
+                    >
+                      <p className="text-accent">&gt; INICIALIZANDO_NÚCLEO_V6</p>
+                      <p>&gt; MAPEANDO_TENDÊNCIAS_TTC</p>
+                      <p className="text-emerald-400">&gt; CONEXÃO_SHOPEE_ESTABELECIDA</p>
+                      <p>&gt; CARREGANDO_SCRIPTS_DE_VENDAS</p>
+                      <p className="text-purple-400">&gt; ATIVANDO_PROXY_ANTIBAN</p>
+                      <p>&gt; GERANDO_CRIAÇÃO_ESTRATÉGICA</p>
+                      <p className="text-accent">&gt; SINCRONIZANDO_LOJA_SQUAD...</p>
+                      <p className="text-white font-black">&gt; PROCESSO_CONCLUÍDO_COM_SUCESSO</p>
+                      <p className="text-dim">&gt; AGUARDANDO_COMANDO_MESTRE</p>
+                    </motion.div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-transparent to-slate-950 pointer-events-none" />
+                  </div>
+                </div>
+
+                <motion.button
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 3.5 }}
+                  whileHover={{ scale: 1.05, y: -5 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="w-full h-16 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 rounded-3xl text-[11px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_rgba(6,182,212,0.4)] border-b-4 border-slate-950/20 active:border-b-0"
+                  onClick={() => setStep('agents_scouting')}
+                >
+                  LOJA CRIADA! ATIVAR AGENTES VIRIAIS 🚀
                 </motion.button>
               </div>
             </motion.div>
+          )}
+
+          {step === 'agents_scouting' && (
+            <AgentScouting onComplete={() => {
+              setStep('list');
+              refreshProducts();
+            }} />
           )}
 
           {step === 'scouting' && (
@@ -1872,37 +2340,67 @@ const App: React.FC = () => {
           )}
 
           {step === 'treating' && (
-             <motion.div key="treating" initial={{opacity:0}} animate={{opacity:1}} className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-10 space-y-8">
-                <div className="relative">
-                  <div className="absolute -inset-16 bg-accent/20 blur-[80px] rounded-full animate-pulse" />
-                  <RefreshCcw size={64} className="text-accent animate-spin" />
-                </div>
-                <div className="text-center space-y-6">
-                  <div className="space-y-1">
-                    <p className="text-xl font-black italic tracking-widest text-accent uppercase">Treatment Engine</p>
-                    <p className="text-[10px] text-dim uppercase font-black tracking-[0.3em]">IA Removendo Marcas d'Água</p>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2 max-w-[240px] mx-auto">
-                    {[
-                      { l: 'Bypass Watermark TikTok', d: 0 },
-                      { l: 'Ajuste Dinâmico 9:16', d: 0.1 },
-                      { l: 'Injeção de Metadados Stealth', d: 0.2 },
-                      { l: 'Geração de Gatilhos Virais', d: 0.3 }
-                    ].map((s, i) => (
-                      <motion.div 
-                        key={i}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: s.d }}
-                        className="flex items-center gap-3 text-[9px] font-black uppercase tracking-widest bg-slate-900 px-4 py-2 rounded-xl border border-white/5"
-                      >
-                        <div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
-                        <span className="text-white/60">{s.l}</span>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+             <motion.div
+               key="treating"
+               initial={{ opacity: 0, y: 18 }}
+               animate={{ opacity: 1, y: 0 }}
+               className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-6"
+             >
+               <div className="w-full max-w-md rounded-[2.25rem] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.94)_0%,rgba(2,6,23,0.98)_100%)] p-7 shadow-[0_30px_120px_rgba(2,6,23,0.8)] backdrop-blur-3xl">
+                 <div className="flex flex-col items-center text-center gap-6">
+                   <div className="relative">
+                     <div className="absolute -inset-10 rounded-full bg-accent/12 blur-[60px]" />
+                     <motion.div
+                       animate={{ rotate: 360 }}
+                       transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+                       className="absolute -inset-6 rounded-full border border-accent/10 border-dashed"
+                     />
+                     <div className="relative w-24 h-24 rounded-[2rem] border border-white/15 bg-slate-900/90 flex items-center justify-center shadow-[0_0_40px_rgba(6,182,212,0.12)]">
+                       <RefreshCcw size={40} className="text-accent animate-spin" style={{ animationDuration: '3.2s' }} />
+                     </div>
+                   </div>
+
+                   <div className="space-y-2">
+                     <p className="text-[10px] font-black uppercase tracking-[0.45em] text-accent/80">Pipeline Viral</p>
+                     <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none text-white">
+                       Curando o melhor criativo
+                     </h2>
+                     <p className="text-sm text-slate-400 leading-relaxed">
+                       {treatingStatus}
+                     </p>
+                   </div>
+
+                   <div className="w-full space-y-3">
+                     <div className="flex items-end justify-between">
+                       <span className="text-[9px] font-black uppercase tracking-[0.35em] text-slate-500">Progresso da analise</span>
+                       <span className="text-2xl font-mono font-black text-accent">{treatingProgress}%</span>
+                     </div>
+                     <div className="h-2 rounded-full bg-white/5 overflow-hidden border border-white/5">
+                       <motion.div
+                         initial={{ width: 0 }}
+                         animate={{ width: `${treatingProgress}%` }}
+                         transition={{ duration: 0.7, ease: 'easeOut' }}
+                         className="h-full rounded-full bg-gradient-to-r from-accent via-cyan-300 to-emerald-400 shadow-[0_0_18px_rgba(6,182,212,0.35)]"
+                       />
+                     </div>
+                   </div>
+
+                   <div className="w-full space-y-3 text-left">
+                     {treatingChecklist.map((item, index) => (
+                       <motion.div
+                         key={`${index}-${item}`}
+                         initial={{ opacity: 0, x: -12 }}
+                         animate={{ opacity: 1, x: 0 }}
+                         transition={{ delay: index * 0.08 }}
+                         className="flex items-center gap-3 rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3"
+                       >
+                         <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
+                         <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-200">{item}</span>
+                       </motion.div>
+                     ))}
+                   </div>
+                 </div>
+               </div>
              </motion.div>
           )}
 
@@ -1911,11 +2409,12 @@ const App: React.FC = () => {
               key="ready"
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col h-[calc(100vh-5rem)]"
+              className="flex flex-col h-[calc(100vh-5rem)] bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.08),transparent_30%),linear-gradient(180deg,#020617_0%,#020617_100%)]"
             >
               {/* VÍDEO STICKY — sempre visível no topo ao rolar */}
-              <div className="sticky top-0 z-30 bg-slate-950 px-4 pt-safe shrink-0">
-                <div className="flex items-center justify-between mb-2 mt-4">
+              <div className="z-30 px-3 pt-safe shrink-0 bg-gradient-to-b from-slate-950 via-slate-950/94 to-transparent backdrop-blur-xl lg:sticky lg:top-0 sm:px-4">
+                <div className="mt-2 mb-2 rounded-[1.35rem] border border-white/6 bg-white/[0.025] px-3 py-3 shadow-[0_14px_40px_rgba(2,6,23,0.28)] sm:px-4">
+                <div className="flex items-center justify-between mb-2">
                   <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={goBackToList}
@@ -1924,13 +2423,34 @@ const App: React.FC = () => {
                     <ArrowLeft size={16} />
                     <span className="text-[10px] font-black uppercase tracking-widest">Voltar</span>
                   </motion.button>
-                  <div className="flex items-center gap-2 text-accent">
-                     <div className="w-2 h-2 bg-accent rounded-full animate-ping" />
-                     <span className="text-[10px] font-black uppercase tracking-widest italic">Edição Pro Ativa</span>
+                  <div className={`flex items-center gap-2 rounded-full px-2.5 py-1.5 sm:px-3 ${hasActivePro ? 'border border-emerald-400/16 bg-emerald-400/7 text-emerald-300' : 'border border-amber-400/16 bg-amber-400/7 text-amber-300'}`}>
+                     <div className={`w-2 h-2 rounded-full ${hasActivePro ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]' : 'bg-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.8)]'}`} />
+                     <span className="text-[10px] font-black uppercase tracking-[0.22em]">{hasActivePro ? 'Edição Pro Ativa' : 'Modo Teste Ativo'}</span>
                   </div>
                 </div>
 
-                <div className="video-preview-container !h-[300px] relative overflow-hidden rounded-[1.5rem] border-2 border-slate-800 shadow-2xl bg-slate-950">
+                <div className="mb-3 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.42em] text-accent/70">Central de postagem</p>
+                  <div className="space-y-3 sm:flex sm:items-start sm:justify-between sm:gap-3 sm:space-y-0">
+                    <div className="min-w-0 max-w-none sm:max-w-[240px]">
+                      <h2 className="text-[1.45rem] font-black italic uppercase leading-[0.92] tracking-tighter text-white sm:text-[1.8rem]">
+                        Criativo pronto para publicar
+                      </h2>
+                      <p className="mt-1.5 text-[12px] text-slate-400 leading-relaxed sm:text-[13px] sm:max-w-[220px]">
+                        Revise o video, ajuste o estilo final e publique com a copia estrategica da sua oferta.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-2xl border border-white/6 bg-slate-900/55 px-3 py-2 shrink-0 self-start w-fit sm:text-right">
+                      <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_12px_rgba(6,182,212,0.8)]" />
+                      <div>
+                        <p className="text-[8px] font-black uppercase tracking-[0.28em] text-slate-500">Modo</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white">Creative Top V6</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="video-preview-container !h-[220px] sm:!h-[260px] relative overflow-hidden rounded-[1.45rem] sm:rounded-[1.7rem] border border-white/8 shadow-[0_20px_50px_rgba(2,6,23,0.42)] bg-slate-950">
                 {videoData?.url ? (
                   <>
                     <video 
@@ -1948,9 +2468,9 @@ const App: React.FC = () => {
                     
                     <button 
                       onClick={() => setIsPlaying(!isPlaying)}
-                      className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity"
+                      className="absolute inset-0 z-10 flex items-center justify-center bg-black/10 opacity-0 hover:opacity-100 transition-opacity"
                     >
-                      <div className="bg-white/10 backdrop-blur-md p-6 rounded-full border border-white/20">
+                      <div className="bg-slate-950/55 backdrop-blur-md p-5 rounded-full border border-white/12">
                         {isPlaying ? <VolumeX size={48} className="text-white" /> : <RefreshCcw size={48} className="text-white animate-pulse" />}
                       </div>
                     </button>
@@ -1959,11 +2479,11 @@ const App: React.FC = () => {
                     <div className={`absolute inset-0 pointer-events-none effect-overlay-${activeFilter}`} />
                     
                     {videoLegend && (
-                      <div className="absolute inset-x-0 bottom-24 flex justify-center z-20 px-6">
+                      <div className="absolute inset-x-0 bottom-14 sm:bottom-16 flex justify-center z-20 px-4 sm:px-5">
                         <motion.div 
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          className="bg-accent text-slate-950 px-6 py-3 rounded-2xl font-black text-xs uppercase italic tracking-tighter text-center shadow-[0_10px_30px_rgba(16,185,129,0.4)] border-2 border-white/20"
+                          className="bg-gradient-to-r from-accent to-emerald-400 text-slate-950 px-4 py-2 rounded-2xl font-black text-[10px] sm:text-[11px] uppercase italic tracking-tight text-center shadow-[0_10px_24px_rgba(16,185,129,0.22)] border border-white/16 max-w-[88%] sm:max-w-[82%]"
                         >
                           {videoLegend}
                         </motion.div>
@@ -1971,16 +2491,16 @@ const App: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900/50 space-y-4">
-                    <Video size={48} className="text-white/10 animate-pulse" />
-                    <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Processando Mídia...</span>
-                  </div>
-                )}
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900/50 space-y-4">
+                      <Video size={48} className="text-white/10" />
+                      <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Processando Mídia...</span>
+                    </div>
+                  )}
 
                 <motion.button 
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setIsMuted(!isMuted)}
-                  className="absolute bottom-20 right-4 z-30 w-10 h-10 bg-black/60 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 text-white"
+                  className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-30 w-10 h-10 bg-slate-950/60 backdrop-blur-md rounded-full flex items-center justify-center border border-white/10 text-white"
                 >
                   {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                 </motion.button>                {/* Editor Header with Notch Support */}
@@ -1988,42 +2508,41 @@ const App: React.FC = () => {
                   className="absolute inset-x-0 top-0 z-30 px-4 flex justify-between items-center pointer-events-none"
                   style={{ paddingTop: 'calc(var(--safe-top) + 0.5rem)' }}
                 >
-                  <motion.button
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    onClick={() => setStep('list')}
-                    className="w-10 h-10 bg-slate-950/80 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10 text-white pointer-events-auto shadow-xl"
-                  >
-                    <ArrowLeft size={18} />
-                  </motion.button>
+                  <div className="w-10 h-10" />
 
-                  <div className="bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_#ef4444]" />
-                    <span className="text-[8px] font-black text-white italic tracking-[0.2em]">LIVE_PREVIEW_V4</span>
+                    <div className="bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-red-500 rounded-full shadow-[0_0_8px_#ef4444]" />
+                      <span className="text-[8px] font-black text-white italic tracking-[0.2em]">LIVE_PREVIEW_V4</span>
+                    </div>
                   </div>
-                </div>
 
-                {(!isPro && !isLoadingAuth && trialExpired) && <LockScreen />}
 
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/20 pointer-events-none opacity-60" />
+
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/10 pointer-events-none opacity-45" />
+              </div>
               </div>
 
             </div> {/* fim do sticky video */}
 
               {/* CONTROLES SCROLLÁVEIS ABAIXO */}
-              <div className="flex-1 overflow-y-auto pb-32 px-4 space-y-4">
+               <div className="flex-1 overflow-y-auto pb-32 px-3 space-y-4 sm:px-4">
                 {/* Main Professional Editor Controls */}
                 <div className="mt-2">
                   <VisualTimeline />
                 </div>
 
 
-                <div className="tech-card !p-6 space-y-6">
+                <div className="tech-card !p-4 sm:!p-5 !bg-white/[0.02] !border-white/6 space-y-5 shadow-[0_10px_30px_rgba(2,6,23,0.18)]">
                 <div className="space-y-3">
-                  <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1">Copiar Estratégia</p>
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] text-accent/80 font-black uppercase tracking-[0.3em] leading-none mb-1">Copiar Estratégia</p>
+                      <p className="text-[11px] text-slate-500">Use o nome curto para buscar mais rapido na central de afiliados.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
                     <div className="space-y-2 flex-1 min-w-0">
-                      <h3 className="text-lg font-black italic uppercase leading-tight truncate">{selectedProduct?.title || 'Carregando...'}</h3>
+                      <h3 className="text-sm sm:text-base font-black italic uppercase leading-tight text-white/95 line-clamp-3">{selectedProduct?.title || 'Carregando...'}</h3>
                       <button
                         onClick={() => {
                           if (selectedProduct?.title) {
@@ -2033,7 +2552,7 @@ const App: React.FC = () => {
                           }
                           window.open("https://affiliate.shopee.com.br/offer/product_offer", "_blank");
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#EE4D2D]/10 text-[#EE4D2D] border border-[#EE4D2D]/20 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[#EE4D2D] hover:text-white transition-all w-fit text-left leading-tight"
+                        className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#EE4D2D]/8 text-[#ff8b73] border border-[#EE4D2D]/16 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-[#EE4D2D]/14 hover:text-white transition-all w-fit text-left leading-tight"
                       >
                         <Search size={12} className="shrink-0" />
                         <span>Buscar Central de Afiliados <br/><span className="text-[8px] opacity-70">(Copia nome p/ colar)</span></span>
@@ -2049,7 +2568,7 @@ const App: React.FC = () => {
                           showToast("NOME CURTO COPIADO!"); 
                         }
                       }}
-                      className="shrink-0 p-2 bg-slate-900 border border-white/10 rounded-xl text-accent"
+                      className="shrink-0 p-2.5 sm:p-3 bg-slate-900/70 border border-white/8 rounded-xl text-accent"
                     >
                       <Copy size={16} />
                     </motion.button>
@@ -2077,10 +2596,13 @@ const App: React.FC = () => {
 
                 {/* QUICK ADD TO BIO STORE - ACID PREMIUM STYLE */}
                 <div className="pt-4 border-t border-white/5">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-2">
                       <ShoppingBag size={14} className="text-accent" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Publicar na Vitrine <span className="text-accent italic">(Opcional)</span></span>
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Publicar na Vitrine <span className="text-accent italic">(Opcional)</span></span>
+                        <p className="text-[11px] text-slate-500 mt-1">Adicione o item direto no seu link da bio com imagem, titulo e link afiliado.</p>
+                      </div>
                     </div>
                     <button 
                       onClick={() => {
@@ -2088,13 +2610,13 @@ const App: React.FC = () => {
                         if (videoData?.thumbnail) setBioImageUrl(videoData.thumbnail);
                         showToast("✨ CAMPOS PREENCHIDOS!");
                       }}
-                      className="text-[9px] font-black uppercase tracking-widest text-accent hover:text-white transition-colors flex items-center gap-1 bg-accent/5 px-2 py-1 rounded-md border border-accent/10"
+                      className="text-[9px] font-black uppercase tracking-widest text-accent hover:text-white transition-colors flex items-center justify-center gap-1 bg-accent/5 px-2.5 py-1.5 rounded-lg border border-accent/10 shrink-0 w-full sm:w-auto"
                     >
                       <Sparkles size={10} /> Preencher Auto
                     </button>
                   </div>
                   
-                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 space-y-4">
+                  <div className="bg-black/25 border border-white/5 rounded-2xl p-4 space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-black tracking-widest text-accent/70 ml-1">Link Afiliado</label>
                       <input 
@@ -2102,7 +2624,7 @@ const App: React.FC = () => {
                         placeholder="https://shope.ee/..." 
                         value={bioLink} 
                         onChange={e => setBioLink(e.target.value)}
-                        className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all"
+                        className="w-full bg-[#0a0a0a]/90 border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/40 outline-none transition-all"
                       />
                     </div>
 
@@ -2123,7 +2645,7 @@ const App: React.FC = () => {
                         placeholder="Cole o link da foto do produto..." 
                         value={bioImageUrl} 
                         onChange={e => setBioImageUrl(e.target.value)}
-                        className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all"
+                        className="w-full bg-[#0a0a0a]/90 border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/40 outline-none transition-all"
                       />
                       <input 
                         type="file"
@@ -2140,13 +2662,17 @@ const App: React.FC = () => {
                         placeholder="Ex: Nome do Produto... 🔥" 
                         value={bioTitle} 
                         onChange={e => setBioTitle(e.target.value)}
-                        className="w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/50 outline-none transition-all h-20 resize-none font-medium"
+                        className="w-full bg-[#0a0a0a]/90 border border-white/5 rounded-xl py-2.5 px-3 text-[11px] text-white focus:border-accent/40 outline-none transition-all h-20 resize-none font-medium"
                       />
                     </div>
 
                     <button
                       onClick={async () => {
                         const slug = getUserId();
+                        if (!slug) {
+                          showToast("FAÇA LOGIN PARA SALVAR SUA LOJA");
+                          return;
+                        }
                         if (!bioLink || !bioImageUrl || !bioTitle) {
                           showToast("⚠️ Preencha todos os campos da vitrine!");
                           return;
@@ -2167,7 +2693,7 @@ const App: React.FC = () => {
                         }
                       }}
                       disabled={isSavingToBio}
-                      className="w-full py-3 bg-accent/10 border border-accent/20 hover:bg-accent hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"
+                      className="w-full py-3 bg-accent/8 border border-accent/16 hover:bg-accent hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"
                     >
                       {isSavingToBio ? <RefreshCcw className="animate-spin" size={12} /> : <Zap size={12} fill="currentColor" />}
                       {isSavingToBio ? 'PUBLICANDO...' : 'ADICIONAR À MINHA LOJA'}
@@ -2313,43 +2839,75 @@ const App: React.FC = () => {
                 </div>
 
               <div className="flex flex-col gap-4">
-                <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-1 text-center italic">AÇÃO FINAL: POSTAGEM ASSISTIDA 🚀</p>
-                
-                <div className="flex gap-4">
-                  <motion.button 
+                <div className="space-y-2 text-center">
+                  <p className="text-[10px] text-accent font-black uppercase tracking-[0.34em] leading-none italic">Ação final</p>
+                  <h3 className="text-xl font-black italic uppercase tracking-tighter text-white">Escolha onde publicar</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed max-w-sm mx-auto">Os atalhos abaixo ja levam seu criativo para o fluxo ideal de postagem, com copia e video prontos para uso.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <motion.button
+                    whileHover={{ y: -4, scale: 1.01 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => runAutomation('tiktok')}
-                    className="flex-1 h-24 bg-white text-black font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl relative overflow-hidden"
+                    className="group relative overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(255,255,255,0.96)_0%,rgba(226,232,240,0.94)_52%,rgba(186,230,253,0.98)_100%)] px-5 py-5 text-left shadow-[0_20px_60px_rgba(6,182,212,0.16)]"
                   >
-                    <div className="absolute top-2 right-2 px-2 py-0.5 bg-black text-white text-[6px] rounded-full">
-                      {isMobile ? 'NATIVO' : 'AUTO-MACRO'}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.18),transparent_36%)] opacity-80" />
+                    <div className="relative flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-950 text-white flex items-center justify-center shadow-lg shadow-slate-950/20 group-hover:scale-105 transition-transform">
+                          <Zap size={20} fill="currentColor" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[9px] font-black uppercase tracking-[0.28em] text-slate-500">Publicar agora</p>
+                          <span className="block text-sm font-black uppercase tracking-[0.18em] text-slate-950">TikTok</span>
+                          <span className="block text-[10px] text-slate-600 font-bold uppercase tracking-[0.14em]">
+                            {isMobile ? 'Abre app e anexa o video' : 'Download + upload guiado'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="px-2.5 py-1 rounded-full bg-slate-950 text-white text-[7px] font-black uppercase tracking-[0.24em]">
+                          {isMobile ? 'NATIVO' : 'AUTO'}
+                        </div>
+                        <ArrowRight size={16} className="text-slate-950/60 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
                     </div>
-                    <Zap size={20} fill="currentColor" />
-                    <span>TIKTOK</span>
-                    <span className="text-[7px] opacity-50 tracking-normal px-2 text-center">
-                      {isMobile ? 'ABRE APP + ANEXO' : 'DOWNLOAD + UPLOAD'}
-                    </span>
                   </motion.button>
-                  
-                  <motion.button 
+
+                  <motion.button
+                    whileHover={{ y: -4, scale: 1.01 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => runAutomation('shopee')}
-                    className="flex-1 h-24 bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest rounded-3xl flex flex-col items-center justify-center gap-1 shadow-2xl shadow-orange-950/20 relative overflow-hidden"
+                    className="group relative overflow-hidden rounded-[2rem] border border-orange-400/20 bg-[linear-gradient(135deg,rgba(154,52,18,0.94)_0%,rgba(234,88,12,0.96)_55%,rgba(251,146,60,0.95)_100%)] px-5 py-5 text-left shadow-[0_20px_60px_rgba(249,115,22,0.18)]"
                   >
-                    <div className="absolute top-2 right-2 px-2 py-0.5 bg-white text-orange-600 text-[6px] rounded-full">
-                      {isMobile ? 'NATIVO' : 'AUTO-MACRO'}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.14),transparent_36%)] opacity-90" />
+                    <div className="relative flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-white text-orange-600 flex items-center justify-center shadow-lg shadow-orange-950/20 group-hover:scale-105 transition-transform">
+                          <ShoppingBag size={20} fill="currentColor" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[9px] font-black uppercase tracking-[0.28em] text-orange-100/70">Publicar agora</p>
+                          <span className="block text-sm font-black uppercase tracking-[0.18em] text-white">Shopee Videos</span>
+                          <span className="block text-[10px] text-orange-50/80 font-bold uppercase tracking-[0.14em]">
+                            {isMobile ? 'Abre app e anexa o video' : 'Download + upload guiado'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="px-2.5 py-1 rounded-full bg-white text-orange-600 text-[7px] font-black uppercase tracking-[0.24em]">
+                          {isMobile ? 'NATIVO' : 'AUTO'}
+                        </div>
+                        <ArrowRight size={16} className="text-white/70 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
                     </div>
-                    <ShoppingBag size={20} fill="currentColor" />
-                    <span>SHOPEE VÍDEOS</span>
-                    <span className="text-[7px] opacity-70 tracking-normal px-2 text-center">
-                      {isMobile ? 'ABRE APP + ANEXO' : 'DOWNLOAD + UPLOAD'}
-                    </span>
                   </motion.button>
                 </div>
-                
+
                 <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/5 space-y-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 bg-accent rounded-full animate-pulse shadow-[0_0_10px_#06b6d4]" />
+                    <div className="w-2.5 h-2.5 bg-accent rounded-full shadow-[0_0_10px_#06b6d4]" />
                     <p className="text-[9px] font-black uppercase text-accent tracking-tighter">PROTOCOLO DE POSTAGEM:</p>
                   </div>
                   <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
@@ -2573,7 +3131,7 @@ const App: React.FC = () => {
       </main>
 
       {/* Bloqueio de Acesso Se o Trial Expirou e Não é PRO */}
-      {trialExpired && !isPro && ['list', 'scouting', 'ready', 'treating', 'automation'].includes(step) && (
+      {trialExpired && !hasActivePro && !isLoadingAuth && ['list', 'scouting', 'ready', 'treating', 'automation'].includes(step) && (
         <LockScreen />
       )}
 
@@ -2795,8 +3353,8 @@ const App: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
+  </div>
+);
 };
 
 export default App;

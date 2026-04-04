@@ -70,7 +70,7 @@ export class VideoProcessor {
           if (blob.size > 50000) return URL.createObjectURL(blob);
         }
       } catch (e) {
-        console.warn('Proxy falhou ou timeout:', url.substring(0, 50));
+        console.warn('Proxy falhou ou timeout');
       }
     }
     return url;
@@ -93,7 +93,7 @@ export class VideoProcessor {
             testCtx.getImageData(0, 0, 1, 1);
             useExisting = true;
           } catch (e) {
-            console.warn("⚠️ Vídeo UI bloqueado por CORS. Usando fallback via Proxy...");
+            console.warn("Video UI bloqueado por CORS. Usando fallback via Proxy.");
             useExisting = false;
           }
         }
@@ -201,7 +201,7 @@ export class VideoProcessor {
             audioTrackToEncode = destination.stream.getAudioTracks()[0];
             if (audioTrackToEncode) this.stream.addTrack(audioTrackToEncode);
           } catch (audioErr) {
-            console.warn("[AUDIO] AudioContext fail:", audioErr);
+            console.warn("AudioContext falhou.");
           }
         }
 
@@ -215,7 +215,7 @@ export class VideoProcessor {
 
         const videoEncoder = new VideoEncoder({
           output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-          error: (e) => console.error("[VIDEO ENCODER] Erro:", e)
+          error: () => console.error("Erro no video encoder")
         });
 
         videoEncoder.configure({
@@ -228,7 +228,7 @@ export class VideoProcessor {
 
         const audioEncoder = new AudioEncoder({
           output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-          error: (e) => console.error("[AUDIO ENCODER] Erro:", e)
+          error: () => console.error("Erro no audio encoder")
         });
 
         audioEncoder.configure({
@@ -284,7 +284,7 @@ export class VideoProcessor {
               videoEncoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
             }
           } catch (e) {
-            console.error("[VIDEO ENCODER] Erro ao codificar frame:", e);
+            console.error("Erro ao codificar frame do video");
           } finally {
             frame.close();
           }
@@ -436,7 +436,6 @@ export class VideoProcessor {
   ) {
     if (videoEncoder.state === 'closed') return;
     
-    console.log("[ENCODER] Finalizando Muxer...");
     try {
       await videoEncoder.flush();
       if (audioEncoder.state === 'configured') await audioEncoder.flush();
@@ -458,10 +457,9 @@ export class VideoProcessor {
       videoEncoder.close();
       if (audioEncoder.state !== 'closed') audioEncoder.close();
 
-      console.log("[ENCODER] Renderização MP4 finalizada!");
       resolve(blob);
     } catch (err) {
-      console.error("Erro ao finalizar muxer:", err);
+      console.error("Erro ao finalizar muxer");
       // Garantir cleanup em caso de erro
       try { 
         videoEncoder.close(); 
