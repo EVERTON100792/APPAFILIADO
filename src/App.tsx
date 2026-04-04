@@ -46,7 +46,7 @@ import { TrialCountdown } from './components/TrialCountdown';
 import { AgentScouting } from './components/AgentScouting';
 // import { productDB } from './data/productDB';
 
-const STRIPE_PRICE_ID = 'price_1THnUQKpVBNjrtujGP8Hmn4H';
+const STRIPE_PRICE_ID = 'price_1TIZKzKYzfLaHvnki5ZXmNG9';
 const STORE_PLACEHOLDER_SLUGS = ['', 'meu-link', 'admin', 'null', 'undefined', 'default', 'escolha-seu-link'];
 
 function getSmartSearchName(title: string): string {
@@ -566,9 +566,6 @@ const App: React.FC = () => {
     { id: 'Beleza', label: 'Beleza', icon: '💄' },
     { id: 'Decoração', label: 'Casa & Deco', icon: '🏠' },
     { id: 'Pet', label: 'Pet', icon: '🐾' },
-    { id: 'Fitness', label: 'Fitness', icon: '💪' },
-    { id: 'Gamer', label: 'Gamer', icon: '🎮' },
-    { id: 'Kids', label: 'Kids', icon: '🧸' },
   ];
   const getInfinitePool = (niche: string) => {
     const staticPool = niche === 'Todos' ? databaseProducts : databaseProducts.filter(p => p.niche === niche);
@@ -1146,24 +1143,30 @@ const App: React.FC = () => {
     e.stopPropagation();
     setIsSavingToBio(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id;
+      console.log('[addToBio] storeSlug:', storeSlug, 'product:', p.title);
 
-      if (!userId) {
-        showToast('FAÇA LOGIN PARA ADICIONAR À BIO');
-        setStep('plans'); // Redirecionar para área de login/planos
+      const targetSlug = (storeSlug && storeSlug !== 'meu-link') ? storeSlug.toLowerCase() : '';
+
+      if (!targetSlug) {
+        showToast('CONFIGURE SUA LOJA PRIMEIRO!');
+        setStep('bio');
+        setIsSavingToBio(false);
         return;
       }
 
       const { error } = await supabase.from('bio_store').insert({
-        user_id: userId,
-        product_id: p.id,
+        user_id: targetSlug,
         title: generateViralProductName(p.title || p.query),
-        link: p.affiliate_link || p.url || '',
-        image_url: p.image || p.cover || ''
+        image_url: p.image || p.cover || '',
+        affiliate_link: p.affiliate_link || p.url || ''
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[addToBio] Supabase error:', error);
+        throw error;
+      }
+
+      console.log('[addToBio] Success! Saved with user_id:', targetSlug);
       showToast('PRODUTO ADICIONADO À BIO! 🔗');
     } catch (err) {
       console.error('Erro ao adicionar a bio');
@@ -1195,7 +1198,7 @@ const App: React.FC = () => {
       const nicheKeywords: Record<string, { positive: string[], negative: string[] }> = {
         'Cozinha': { 
           positive: ['cozinha', 'comida', 'chef', 'receita', 'utilidade', 'casa', 'lar', 'limpeza'],
-          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids'] 
+          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids', 'fitness', 'game'] 
         },
         'Tecnologia': { 
           positive: ['tech', 'gadget', 'unboxing', 'setup', 'pc', 'smartphone', 'eletronico', 'gamer'],
