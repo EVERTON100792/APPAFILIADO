@@ -2073,6 +2073,7 @@ const App: React.FC = () => {
               className="h-[calc(100vh-10rem)] overflow-y-auto p-4 md:p-8"
             >
               <BioManager
+                user={user}
                 initialStoreSlug={storeSlug}
                 initialStoreReady={storeReady}
                 onStoreConfigured={handleStoreConfigured}
@@ -2233,6 +2234,7 @@ const App: React.FC = () => {
                   <p className="text-[9px] text-dim uppercase font-bold tracking-widest">Defina seu slug único no ecossistema</p>
                 </div>
                 <BioManager
+                  user={user}
                   initialStoreSlug={storeSlug}
                   initialStoreReady={storeReady}
                   onStoreConfigured={handleStoreConfigured}
