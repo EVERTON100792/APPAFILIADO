@@ -1271,9 +1271,9 @@ const App: React.FC = () => {
       ];
       
       const foreignIndicators = [
-        'amazon.com', 'restock', 'organizedhome', 'cleaningday', 'satisfying',
+        'amazon.com', 'restock', 'organizedhome', 'cleaningday',
         'cleanwithme', 'amazonfinds', 'gadgets', 'tips', 'usa',
-        'product', 'items'
+        'items'
       ];
       
       const ptBrMustHave = [
@@ -1300,6 +1300,28 @@ const App: React.FC = () => {
         } catch {}
       }
 
+      if (allVideos.length === 0) {
+        setTreatingStatus('Buscando em fontes alternativas...');
+        setTreatingProgress(40);
+        const fallbackStrategies = [
+          { query: coreWords[0], weight: 1.0 },
+          { query: `${coreWords[0]} viral`, weight: 1.0 },
+        ];
+        for (const strategy of fallbackStrategies) {
+          const q = encodeURIComponent(strategy.query);
+          try {
+            const resp = await fetch(
+              `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
+              { signal: AbortSignal.timeout(10000) }
+            );
+            const json = await resp.json();
+            if (json.data?.videos?.length > 0) {
+              allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: strategy.weight }))];
+            }
+          } catch {}
+        }
+      }
+
       if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
       setTreatingStatus('Validando idioma, qualidade e engajamento real...');
       setTreatingProgress(56);
@@ -1310,14 +1332,14 @@ const App: React.FC = () => {
       ]);
 
       const scored = allVideos
-        .filter((v: any) => (v.play || v.wmplay) && v.duration > 5 && v.duration < 180)
+        .filter((v: any) => (v.play || v.wmplay) && v.duration > 3 && v.duration < 180)
         .map((v: any) => {
           const title = (v.title || '').toLowerCase();
           const author = (v.author?.nickname || '').toLowerCase();
           const music = (v.music_info?.title || '').toLowerCase();
           const text = `${title} ${author} ${music}`;
           
-          let score = 0;
+          let score = 100;
 
           let matchCount = 0;
           coreWords.forEach((word) => {
@@ -1325,21 +1347,21 @@ const App: React.FC = () => {
           });
 
           if (matchCount >= 2) score += 300; 
-          else if (matchCount === 1) score += 100;
+          else if (matchCount === 1) score += 150;
 
           const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
           const hasMustHave = ptBrMustHave.some(w => text.includes(w));
           const hasForeignIndicator = foreignIndicators.some(w => text.includes(w));
 
-          if (hasMustHave) score += 400;
-          if (hasPtBrKeywords) score += 150;
+          if (hasMustHave) score += 300;
+          if (hasPtBrKeywords) score += 100;
           
-          if (!hasPtBrKeywords && !hasMustHave) score -= 200;
-          if (hasForeignIndicator && !hasMustHave) score -= 300;
+          if (!hasPtBrKeywords && !hasMustHave) score -= 50;
+          if (hasForeignIndicator && !hasMustHave) score -= 100;
           if (nonLatinPattern.test(text)) score -= 5000;
 
-          if (v.width && v.width >= 1080) score += 200;
-          else if (v.width && v.width >= 720) score += 100;
+          if (v.width && v.width >= 1080) score += 150;
+          else if (v.width && v.width >= 720) score += 80;
 
           const views = v.play_count || v.play || 0;
           const diggs = v.digg_count || 0;
@@ -1348,17 +1370,19 @@ const App: React.FC = () => {
           
           const engagementRatio = views > 0 ? ((diggs + (comments * 4) + (shares * 6)) / views) * 100 : 0;
 
-          if (engagementRatio > 18) score += 500; 
-          else if (engagementRatio > 12) score += 300;
+          if (engagementRatio > 18) score += 400; 
+          else if (engagementRatio > 12) score += 250;
           else if (engagementRatio > 6) score += 100;
-          else if (engagementRatio < 2) score -= 200;
+          else if (engagementRatio > 3) score += 50;
+          else if (engagementRatio < 1) score -= 100;
 
-          if (views > 500000) score += 200;
-          else if (views > 100000) score += 100;
-          else if (views > 50000) score += 50;
+          if (views > 500000) score += 150;
+          else if (views > 100000) score += 80;
+          else if (views > 50000) score += 40;
+          else if (views > 10000) score += 20;
 
-          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 20; });
-          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 100; });
+          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 15; });
+          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 80; });
 
           score *= (v._queryWeight || 1.0);
           
@@ -1376,196 +1400,63 @@ const App: React.FC = () => {
             _score: score
           };
         })
-        .filter((v: any) => v._score > 100)
+        .filter((v: any) => v._score > 50)
         .sort((a: any, b: any) => b._score - a._score);
 
       if (scored.length === 0) {
-        showToast("DIFICULDADE EM ACHAR VÍDEOS 100% RELEVANTES");
-        setStep('list');
-        return;
-      }
-    resetVideoEditor();
-    setStep('treating');
-    setTreatingStatus('Mapeando sinais de demanda e criativos virais...');
-    setTreatingProgress(12);
-    setTreatingChecklist([
-      'Lendo palavras-chave do produto',
-      'Consultando tendencias TikTok + Shopee',
-      'Preparando filtros de relevancia',
-    ]);
-    try {
-      // ── ETAPA 1: Extrair o núcleo semântico e definir o nicho
-      const coreQuery = getSmartSearchName(product.query || product.title || '');
-      const coreWords = coreQuery.split(' ').filter(w => w.length > 2);
-      const productNiche = product.niche || activeNiche;
-      
-      if (coreWords.length === 0) throw new Error('Nome do produto incompleto');
-
-      // ── ETAPA 2: Mapeamento de Nichos para Refinamento Heurístico
-      const nicheKeywords: Record<string, { positive: string[], negative: string[] }> = {
-        'Cozinha': { 
-          positive: ['cozinha', 'comida', 'chef', 'receita', 'utilidade', 'casa', 'lar', 'limpeza'],
-          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids', 'fitness', 'game'] 
-        },
-        'Tecnologia': { 
-          positive: ['tech', 'gadget', 'unboxing', 'setup', 'pc', 'smartphone', 'eletronico', 'gamer'],
-          negative: ['cozinha', 'panela', 'maquiagem', 'bebe', 'infantil', 'pet'] 
-        },
-        'Beleza': { 
-          positive: ['make', 'maquiagem', 'skin', 'cabelo', 'beleza', 'beauty', 'tutorial', 'testando'],
-          negative: ['ferramenta', 'carro', 'moto', 'gamer', 'tecnologia', 'comida'] 
-        },
-        'Decoração': { 
-          positive: ['casa', 'decor', 'quarto', 'sala', 'iluminação', 'led', 'reforma'],
-          negative: ['maquiagem', 'carro', 'pet', 'comida'] 
-        },
-        'Pet': { 
-          positive: ['pet', 'gato', 'cachorro', 'dog', 'cat', 'animal', 'fofo'],
-          negative: ['maquiagem', 'cozinha', 'gamer'] 
-        }
-      };
-
-      const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
-
-      // ── ETAPA 3: Estratégias de busca (Ultra Rigor Brasil)
-      // Usar o título original do produto para buscas mais precisas
-      const productTitle = product.title || product.query || '';
-      const searchKeywords = getSmartSearchName(productTitle);
-      
-      const strategies = [
-        { query: searchKeywords, weight: 3.0 },
-        { query: `${searchKeywords} produto`, weight: 2.5 },
-        { query: `${searchKeywords} useful`, weight: 1.5 },
-        { query: `shopee ${searchKeywords}`, weight: 2.0 },
-      ];
-
-      // Dicionário de Idioma e Qualidade V6
-      const ptBrKeywords = [
-        'achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 
-        'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 
-        'promo', 'loja', 'casa', 'cozinha', 'comprinhas', 'melhor', 'perfeito',
-        'utilidades', 'organização', 'organizando', 'lar', 'enxoval', 'reforma',
-        'paguei', 'vale', 'muito', 'pena', 'gentee', 'olham'
-      ];
-      
-      const foreignIndicators = [
-        'amazon', 'restock', 'organizedhome', 'cleaningday', 'satisfying', 'asmr',
-        'haul', 'cleanwithme', 'amazonfinds', 'gadgets', 'hacks', 'tips', 'usa',
-        'trending', 'foryou', 'viral', 'fyp', 'gadget', 'product', 'items'
-      ];
-      
-      const ptBrMustHave = [
-        'shopee', 'brasil', 'achadinho', 'comprinha', 'link', 'bio', 'utilidade',
-        'loja', 'br', 'achei', 'achado', 'comprinha'
-      ];
-
-      const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; 
-
-      let allVideos: any[] = [];
-      setTreatingStatus('Consultando fontes e reunindo videos promissores...');
-      setTreatingProgress(28);
-      for (const strategy of strategies) {
-        const q = encodeURIComponent(strategy.query);
-        try {
-          const resp = await fetch(
-            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
-            { signal: AbortSignal.timeout(8000) }
-          );
-          const json = await resp.json();
-          if (json.data?.videos?.length > 0) {
-            allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: strategy.weight }))];
-          }
-        } catch {}
-      }
-
-      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
-      setTreatingStatus('Validando idioma, qualidade e engajamento real...');
-      setTreatingProgress(56);
-      setTreatingChecklist([
-        'Filtrando resultados em portugues do Brasil',
-        'Removendo videos com baixa relevancia',
-        'Priorizando sinais de conversao e qualidade HD',
-      ]);
-
-      // ── ETAPA 4: MOTOR DE SCORING V6 (Elite Brasil Quality)
-      const scored = allVideos
-        .filter((v: any) => (v.play || v.wmplay) && v.duration > 5)
-        .map((v: any) => {
-          const title = (v.title || '').toLowerCase();
-          const author = (v.author?.nickname || '').toLowerCase();
-          const music = (v.music_info?.title || '').toLowerCase();
-          const text = `${title} ${author} ${music}`;
-          
-          let score = 0;
-
-          // 1. Match de Palavras-Chave do Produto (Requer match duplo para alta confiança)
-          let matchCount = 0;
-          coreWords.forEach((word) => {
-            if (text.includes(word.toLowerCase())) matchCount++;
+        const allWithUrls = allVideos
+          .filter((v: any) => v.play || v.wmplay)
+          .slice(0, 10)
+          .map((v: any) => {
+            const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
+            const finalUrl = v.play || v.wmplay;
+            return {
+              id: v.video_id,
+              url: `${VIDEO_PROXY}${encodeURIComponent(finalUrl)}`,
+              cover: v.cover,
+              title: v.title,
+              duration: v.duration,
+              author: v.author?.nickname || 'Criador',
+              _score: 50
+            };
           });
+        
+        if (allWithUrls.length === 0) {
+          showToast("DIFICULDADE EM ACHAR VÍDEOS 100% RELEVANTES");
+          setStep('list');
+          return;
+        }
+        
+        const unique = allWithUrls.filter((v: any, i: number, arr: any[]) => 
+          arr.findIndex(x => x.id === v.id) === i
+        );
 
-          if (matchCount >= 2) score += 400; 
-          else if (matchCount === 1) score += 60;
+        setVideoResults(unique);
+        setCurrentVideoIndex(0);
+        setVideoData({ cover: unique[0].cover, url: unique[0].url, id: unique[0].id });
+        
+        setBioTitle(generateViralProductName(product.title));
+        setBioLink(product.affiliate_link || product.link || '');
+        setBioImageUrl(unique[0].cover);
 
-          // 2. Filtro de Idioma PT-BR Inflexível
-          const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
-          const hasMustHave = ptBrMustHave.some(w => text.includes(w));
-          const hasForeignIndicator = foreignIndicators.some(w => text.includes(w));
+        setCustomCopy(generateCreativeLegend(product));
+        setVideoLegend(generateOverlayLegend(product));
 
-          if (hasMustHave) score += 600;
-          if (hasPtBrKeywords) score += 200;
-          
-          // PENALIDADE RADICAL: Se não tem nada de português ou é gringo claro
-          if (!hasPtBrKeywords && !hasMustHave) score -= 5000;
-          if (hasForeignIndicator && !hasMustHave) score -= 5000;
-          if (nonLatinPattern.test(text)) score -= 8000;
-
-          // 3. Qualidade Técnica (Elite HD)
-          if (v.width && v.width >= 1080) score += 400;
-          else if (v.width && v.width >= 720) score += 150;
-          else score -= 500; // Penaliza forte baixa res
-
-          // 4. Inteligência de Engajamento V6 (Rigor Máximo)
-          const views = v.play_count || v.play || 0;
-          const diggs = v.digg_count || 0;
-          const comments = v.comment_count || 0;
-          const shares = v.share_count || 0;
-          
-          const engagementRatio = views > 0 ? ((diggs + (comments * 4) + (shares * 6)) / views) * 100 : 0;
-
-          if (engagementRatio > 18) score += 800; 
-          else if (engagementRatio > 12) score += 500;
-          else if (engagementRatio < 4) score -= 1000; // Descarte de "espelhamento" de bot gringo
-
-          if (views > 100000) score += 100;
-
-          // 5. Match de Nicho
-          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 25; });
-          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 150; });
-
-          // Multiplicador da Estratégia
-          score *= (v._queryWeight || 1.0);
-          
-          const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
-          const finalUrl = v.play || v.wmplay;
-          const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(finalUrl)}`;
-
-          return {
-            id: v.video_id,
-            url: proxiedUrl,
-            cover: v.cover,
-            title: v.title,
-            duration: v.duration,
-            author: v.author?.nickname || 'Criador',
-            _score: score
-          };
-        })
-        .filter((v: any) => v._score > 500) // Nota de corte aumentada para garantir ELITE REAL
-        .sort((a: any, b: any) => b._score - a._score);
-
-      if (scored.length === 0) {
-        showToast("DIFICULDADE EM ACHAR VÍDEOS 100% RELEVANTES");
-        setStep('list');
+        showToast(`💎 ${unique.length} VÍDEOS ENCONTRADOS!`);
+        setTreatingStatus('Finalizando edicao automatica e preparando postagem...');
+        setTreatingProgress(88);
+        setTreatingChecklist([
+          'Selecionando o melhor video da rodada',
+          'Montando legenda e gatilhos de clique',
+          'Aplicando filtros de cor e nitidez',
+          'Preparando para postagem automatica',
+        ]);
+        setTreatingProgress(95);
+        setTimeout(() => {
+          setStep('ready');
+          setTreatingStatus('');
+          setTreatingProgress(0);
+        }, 1500);
         return;
       }
 
