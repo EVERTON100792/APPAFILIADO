@@ -383,6 +383,8 @@ const App: React.FC = () => {
       const adminSlugs = ['admin', 'everto', 'everton', 'squad-pro', 'achadinhos_brasil_'];
       if (adminSlugs.includes(slug)) {
         setIsPro(true);
+        setTrialExpired(false);
+        setTrialRemaining(null);
         setIsLoadingAuth(false);
         setIsHydratingApp(false);
         return;
@@ -581,7 +583,7 @@ const App: React.FC = () => {
     fetchProductsDB();
     loadScoutedProducts();
 
-    if (user && !isStoreConfigured()) {
+    if (user && storeSlug === 'meu-link' && !storeReady) {
       if (step !== 'bio') {
         setStep('home');
       }

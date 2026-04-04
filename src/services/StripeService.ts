@@ -120,8 +120,18 @@ export const StripeService = {
     const now = Date.now();
     const { data: authData } = await supabase.auth.getUser();
     const authUser = authData?.user;
-    const proExpiresAt = authUser?.user_metadata?.pro_expires_at ? new Date(authUser.user_metadata.pro_expires_at).getTime() : null;
-    const isProActive = Boolean(data.is_pro && proExpiresAt && proExpiresAt > now);
+    const userMetadata = authUser?.user_metadata || {};
+    const isAdminUser = ['admin', 'everto', 'everton', 'squad-pro', 'achadinhos_brasil_'].includes((userMetadata.store_slug || '').toLowerCase());
+    const proExpiresAt = userMetadata?.pro_expires_at ? new Date(userMetadata.pro_expires_at).getTime() : null;
+    const isProActive = Boolean((data.is_pro && proExpiresAt && proExpiresAt > now) || isAdminUser);
+
+    if (isAdminUser) {
+      return {
+        isPro: true,
+        trialExpired: false,
+        trialRemainingMs: null,
+      };
+    }
 
     if (data.is_pro && proExpiresAt && proExpiresAt <= now) {
       await supabase
