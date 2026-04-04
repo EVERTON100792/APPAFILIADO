@@ -1143,9 +1143,17 @@ const App: React.FC = () => {
     e.stopPropagation();
     setIsSavingToBio(true);
     try {
-      console.log('[addToBio] storeSlug:', storeSlug, 'product:', p.title);
+      const metadataSlug = user?.user_metadata?.store_slug || '';
+      const urlSlug = new URLSearchParams(window.location.search).get('loja') || '';
+      const targetSlug = (metadataSlug && metadataSlug !== 'meu-link')
+        ? metadataSlug.toLowerCase()
+        : (urlSlug && urlSlug !== 'meu-link')
+          ? urlSlug.toLowerCase()
+          : (storeSlug && storeSlug !== 'meu-link')
+            ? storeSlug.toLowerCase()
+            : '';
 
-      const targetSlug = (storeSlug && storeSlug !== 'meu-link') ? storeSlug.toLowerCase() : '';
+      console.log('[addToBio] metadataSlug:', metadataSlug, 'urlSlug:', urlSlug, 'localSlug:', storeSlug, 'targetSlug:', targetSlug);
 
       if (!targetSlug) {
         showToast('CONFIGURE SUA LOJA PRIMEIRO!');
@@ -1154,23 +1162,27 @@ const App: React.FC = () => {
         return;
       }
 
-      const { error } = await supabase.from('bio_store').insert({
+      const payload = {
         user_id: targetSlug,
         title: generateViralProductName(p.title || p.query),
         image_url: p.image || p.cover || '',
         affiliate_link: p.affiliate_link || p.url || ''
-      });
+      };
+
+      console.log('[addToBio] Inserting:', payload);
+
+      const { data, error } = await supabase.from('bio_store').insert(payload).select();
 
       if (error) {
-        console.error('[addToBio] Supabase error:', error);
+        console.error('[addToBio] Supabase error:', JSON.stringify(error));
         throw error;
       }
 
-      console.log('[addToBio] Success! Saved with user_id:', targetSlug);
+      console.log('[addToBio] Success! Inserted:', JSON.stringify(data));
       showToast('PRODUTO ADICIONADO À BIO! 🔗');
-    } catch (err) {
-      console.error('Erro ao adicionar a bio');
-      showToast('ERRO AO ADICIONAR À BIO');
+    } catch (err: any) {
+      console.error('[addToBio] Error:', err?.message || err);
+      showToast('ERRO: ' + (err?.message || 'Falha ao adicionar'));
     } finally {
       setIsSavingToBio(false);
     }
