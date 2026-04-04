@@ -379,15 +379,13 @@ const App: React.FC = () => {
 
       const slug = (currentUser?.user_metadata?.store_slug || user?.user_metadata?.store_slug || '').toLowerCase();
       
-      // 1. Check if Admin
+      // 1. Check if Admin (mas continua para configurar o estado)
       const adminSlugs = ['admin', 'everto', 'everton', 'squad-pro', 'achadinhos_brasil_'];
-      if (adminSlugs.includes(slug)) {
+      const isAdmin = adminSlugs.includes(slug);
+      if (isAdmin) {
         setIsPro(true);
         setTrialExpired(false);
         setTrialRemaining(null);
-        setIsLoadingAuth(false);
-        setIsHydratingApp(false);
-        return;
       }
 
       // 2. Check Use provided user or fallback to auth
@@ -398,10 +396,12 @@ const App: React.FC = () => {
         lastPersistedStepRef.current = (activeUser.user_metadata?.last_step as Step | undefined) || null;
         setUser(activeUser);
         await applyUserAppState(activeUser);
-        const status = await StripeService.checkSubscriptionStatus(supabase, activeUser.id);
-        setIsPro(status.isPro);
-        setTrialExpired(status.trialExpired);
-        setTrialRemaining(status.trialRemainingMs ?? null);
+        if (!isAdmin) {
+          const status = await StripeService.checkSubscriptionStatus(supabase, activeUser.id);
+          setIsPro(status.isPro);
+          setTrialExpired(status.trialExpired);
+          setTrialRemaining(status.trialRemainingMs ?? null);
+        }
       } else {
         // No anonymous trial anymore, user must log in
         setIsPro(false);
