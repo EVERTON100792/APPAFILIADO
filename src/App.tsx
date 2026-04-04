@@ -49,6 +49,27 @@ import { AgentScouting } from './components/AgentScouting';
 const STRIPE_PRICE_ID = 'price_1TIZKzKYzfLaHvnki5ZXmNG9';
 const STORE_PLACEHOLDER_SLUGS = ['', 'meu-link', 'admin', 'null', 'undefined', 'default', 'escolha-seu-link'];
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 function getSmartSearchName(title: string): string {
   if (!title) return '';
   
@@ -1904,12 +1925,19 @@ const App: React.FC = () => {
     addLog('Analisando arquitetura do dispositivo...', 'info');
     addLog(`Ambiente detectado: ${isMobile ? 'MOBILE/PWA' : 'DESKTOP/PC'}`, 'info');
     
-    // 1. Copy caption to clipboard (Universal)
     try {
       await navigator.clipboard.writeText(customCopy);
       addLog('Bypass de Clipboard: LEGENDA COPIADA ✅', 'success');
     } catch (e) {
-      addLog('Erro ao acessar área de transferência.', 'error');
+      const textarea = document.createElement('textarea');
+      textarea.value = customCopy;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      addLog('LEGENDA COPIADA (fallback) ✅', 'success');
     }
 
     if (selectedProduct) {
@@ -2742,7 +2770,7 @@ const App: React.FC = () => {
                         onClick={() => {
                           if (selectedProduct?.title) {
                             const smartName = getSmartSearchName(selectedProduct.title);
-                            navigator.clipboard.writeText(smartName);
+                            copyToClipboard(smartName);
                             showToast("BUSCA INTELIGENTE COPIADA! 📋");
                           }
                           window.open("https://affiliate.shopee.com.br/offer/product_offer", "_blank");
@@ -2759,7 +2787,7 @@ const App: React.FC = () => {
                       onClick={() => { 
                         if (selectedProduct?.title) {
                           const smartName = getSmartSearchName(selectedProduct.title);
-                          navigator.clipboard.writeText(smartName); 
+                          copyToClipboard(smartName); 
                           showToast("NOME CURTO COPIADO!"); 
                         }
                       }}
@@ -3036,7 +3064,7 @@ const App: React.FC = () => {
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
                       className="absolute bottom-4 right-4 w-12 h-12 bg-accent text-slate-950 rounded-2xl flex items-center justify-center shadow-xl" 
-                      onClick={()=>{ navigator.clipboard.writeText(customCopy); showToast("LEGENDA COPIADA!"); }}
+                      onClick={()=>{ copyToClipboard(customCopy).then(()=>showToast("LEGENDA COPIADA!")); }}
                     >
                       <Copy size={20} />
                     </motion.button>
