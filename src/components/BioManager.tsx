@@ -297,7 +297,7 @@ export const BioManager: React.FC<{
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 400 }}
             transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-            className="fixed top-0 right-0 h-screen w-[380px] z-[200] bg-[#0a0a0a] border-l border-white/10 overflow-y-auto overflow-x-hidden"
+            className="fixed top-4 right-4 bottom-4 w-[380px] z-[200] bg-[#0a0a0a] border border-white/10 rounded-3xl overflow-hidden overflow-y-auto"
             style={{ scrollbarWidth: 'thin', scrollbarColor: '#22c55e33 transparent' }}
           >
             <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-3 flex items-center justify-between">
