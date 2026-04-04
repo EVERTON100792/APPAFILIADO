@@ -308,7 +308,7 @@ export const BioManager: React.FC<{
               style={{ scrollbarWidth: 'thin', scrollbarColor: '#22c55e33 transparent' }}
             >
               {/* Header do Painel */}
-              <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between">
+              <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                   <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Preview ao Vivo</span>
