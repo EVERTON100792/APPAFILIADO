@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette, Layout, Type as TypeIcon
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -14,11 +14,58 @@ interface BioItem {
   affiliate_link: string;
 }
 
-interface Toast {
-  id: number;
-  message: string;
-  type: 'success' | 'error' | 'info';
+interface StoreSettings {
+  theme_color: string;
+  accent_color: string;
+  bg_color: string;
+  text_color: string;
+  layout_type: string;
+  font_style: string;
+  header_style: string;
+  show_watermark: boolean;
+  card_radius: string;
 }
+
+const defaultSettings: StoreSettings = {
+  theme_color: '#10b981',
+  accent_color: '#10b981',
+  bg_color: '#050505',
+  text_color: '#e2e8f0',
+  layout_type: 'grid',
+  font_style: 'sans',
+  header_style: 'default',
+  show_watermark: true,
+  card_radius: '1.5rem',
+};
+
+const colorPresets = [
+  { name: 'Emerald', color: '#10b981' },
+  { name: 'Blue', color: '#3b82f6' },
+  { name: 'Purple', color: '#8b5cf6' },
+  { name: 'Pink', color: '#ec4899' },
+  { name: 'Orange', color: '#f97316' },
+  { name: 'Red', color: '#ef4444' },
+  { name: 'Cyan', color: '#06b6d4' },
+  { name: 'Gold', color: '#eab308' },
+];
+
+const layoutOptions = [
+  { id: 'grid', name: 'Grid', icon: '⊞' },
+  { id: 'list', name: 'Lista', icon: '☰' },
+  { id: 'masonry', name: 'Masonry', icon: '▥' },
+];
+
+const fontOptions = [
+  { id: 'sans', name: 'Moderna' },
+  { id: 'mono', name: 'Tech' },
+  { id: 'serif', name: 'Clássica' },
+];
+
+const headerOptions = [
+  { id: 'default', name: 'Padrão' },
+  { id: 'minimal', name: 'Minimalista' },
+  { id: 'bold', name: 'Impacto' },
+];
 
 const PRO_TIPS = [
   "💡 Títulos curtos e com emojis aumentam os cliques em 25%.",
@@ -29,35 +76,42 @@ const PRO_TIPS = [
 
 const FALLBACK_THUMBNAIL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' rx='24' fill='%23070b16'/%3E%3Crect x='16' y='16' width='128' height='128' rx='22' fill='%2311172a' stroke='%2322c55e' stroke-opacity='.22'/%3E%3Cpath d='M54 102h52' stroke='%2322c55e' stroke-width='8' stroke-linecap='round'/%3E%3Cpath d='M80 52c-11 0-20 9-20 20v9h40v-9c0-11-9-20-20-20Z' fill='none' stroke='%23e5e7eb' stroke-width='8' stroke-linejoin='round'/%3E%3Ccircle cx='80' cy='81' r='6' fill='%2322c55e'/%3E%3C/svg%3E";
 
+let toastCounter = 0;
+
 export const BioManager: React.FC<{
   onProceed?: () => void;
   initialStoreSlug?: string;
   initialStoreReady?: boolean;
   onStoreConfigured?: (slug: string) => void;
-}> = ({ onProceed, initialStoreSlug = 'meu-link', initialStoreReady = false, onStoreConfigured }) => {
+  user?: any;
+}> = ({ onProceed, initialStoreSlug = 'meu-link', initialStoreReady = false, onStoreConfigured, user }) => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Form State
   const [title, setTitle] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [link, setLink] = useState('');
 
-  // URL Slug personalizado
-  const [storeSlug, setStoreSlug] = useState(() => {
-    return initialStoreSlug || 'meu-link';
-  });
+  const [storeSlug, setStoreSlug] = useState(() => initialStoreSlug || 'meu-link');
   const [slugInput, setSlugInput] = useState(storeSlug);
   const [editingSlug, setEditingSlug] = useState(false);
 
-  // UI State
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' | 'info' }[]>([]);
   const [activeTip, setActiveTip] = useState(0);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  let toastCounter = 0;
+
+  const [showCustomizer, setShowCustomizer] = useState(false);
+  const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    const id = ++toastCounter + Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  };
 
   useEffect(() => {
     const tipInterval = setInterval(() => {
@@ -66,10 +120,72 @@ export const BioManager: React.FC<{
     return () => clearInterval(tipInterval);
   }, []);
 
-  const showToast = (message: string, type: Toast['type'] = 'success') => {
-    const id = ++toastCounter + Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  useEffect(() => {
+    fetchItems();
+  }, [storeSlug]);
+
+  useEffect(() => {
+    setStoreSlug(initialStoreSlug || 'meu-link');
+    setSlugInput(initialStoreSlug || 'meu-link');
+  }, [initialStoreSlug]);
+
+  useEffect(() => {
+    if (user) loadSettings();
+  }, [user]);
+
+  const loadSettings = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch(
+        `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/bio-settings`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      const json = await res.json();
+      if (json.settings) {
+        setSettings(prev => ({ ...prev, ...json.settings }));
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar settings:', e);
+    }
+  };
+
+  const saveSettings = async (newSettings: Partial<StoreSettings>) => {
+    if (!user) return;
+    setSavingSettings(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const merged = { ...settings, ...newSettings };
+      const res = await fetch(
+        `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/bio-settings`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(merged),
+        }
+      );
+      const json = await res.json();
+      if (json.settings) {
+        setSettings(json.settings);
+        showToast('✨ Personalização salva!');
+      }
+    } catch (e) {
+      console.error('Erro ao salvar settings:', e);
+      showToast('Erro ao salvar personalização', 'error');
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   const fetchItems = async () => {
@@ -81,15 +197,6 @@ export const BioManager: React.FC<{
     if (data) setItems(data);
     setLoading(false);
   };
-
-  useEffect(() => {
-    fetchItems();
-  }, [storeSlug]);
-
-  useEffect(() => {
-    setStoreSlug(initialStoreSlug || 'meu-link');
-    setSlugInput(initialStoreSlug || 'meu-link');
-  }, [initialStoreSlug]);
 
   const handleSaveSlug = () => {
     const clean = slugInput.toLowerCase().replace(/[^a-z0-9-_]/g, '').trim();
@@ -132,7 +239,6 @@ export const BioManager: React.FC<{
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
       showToast('Por favor, selecione um arquivo de imagem.', 'error');
       return;
@@ -141,28 +247,23 @@ export const BioManager: React.FC<{
       showToast('Imagem muito grande! Máximo 5MB.', 'error');
       return;
     }
-
     setUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
       const filePath = `${storeSlug}/${fileName}`;
-
       const { error: uploadError } = await supabase.storage
         .from('product-images')
         .upload(filePath, file);
-
       if (uploadError) throw uploadError;
-
       const { data: { publicUrl } } = supabase.storage
         .from('product-images')
         .getPublicUrl(filePath);
-
       setImageUrl(publicUrl);
       showToast('📸 Imagem enviada com sucesso!', 'success');
     } catch (error: any) {
       console.error('Erro no upload');
-      showToast('Erro ao enviar imagem. Verifique as permissões de Storage.', 'error');
+      showToast('Erro ao enviar imagem.', 'error');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -171,7 +272,6 @@ export const BioManager: React.FC<{
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Tem certeza que deseja remover este produto da sua vitrine?')) return;
-
     const { error } = await supabase.from('bio_store').delete().eq('id', id);
     if (!error) {
       fetchItems();
@@ -183,13 +283,20 @@ export const BioManager: React.FC<{
 
   const copyBioLink = () => {
     const url = `${window.location.origin}/?loja=${storeSlug}`;
-    navigator.clipboard.writeText(url);
+    const textarea = document.createElement('textarea');
+    textarea.value = url;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
     showToast('📋 Link da loja copiado!', 'success');
   };
 
-  const toastColors: Record<Toast['type'], string> = {
+  const toastColors: Record<string, string> = {
     success: 'bg-emerald-500 text-white border border-emerald-300/40',
     error:   'bg-red-600 text-white border border-red-400/40',
     info:    'bg-sky-600 text-white border border-sky-400/40'
@@ -199,7 +306,6 @@ export const BioManager: React.FC<{
     <div className="w-full max-w-5xl mx-auto space-y-8 pb-20 relative">
       <div className="noise-overlay" />
 
-      {/* Toast Container */}
       <div className="fixed top-6 right-6 z-[300] flex flex-col gap-2 items-end pointer-events-none">
         <AnimatePresence>
           {toasts.map(t => (
@@ -217,7 +323,6 @@ export const BioManager: React.FC<{
         </AnimatePresence>
       </div>
 
-      {/* Header Panel - Glass Acid */}
       <motion.div
         initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
         className="glass-acid p-8 flex flex-col gap-6 relative overflow-hidden"
@@ -243,10 +348,173 @@ export const BioManager: React.FC<{
              >
                 <ExternalLink size={18} className="text-slate-400 group-hover:text-emerald-400" />
              </motion.a>
+             {user && (
+               <motion.button
+                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                 onClick={() => setShowCustomizer(!showCustomizer)}
+                 className={`p-3 rounded-2xl transition-all border ${showCustomizer ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 hover:border-emerald-500/50 text-slate-400 hover:text-emerald-400'}`}
+               >
+                 <Palette size={18} />
+               </motion.button>
+             )}
           </div>
         </div>
 
-        {/* URL Personalizada - UI Estilo Verified */}
+        {/* Painel de Personalização */}
+        <AnimatePresence>
+          {showCustomizer && user && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-black/40 border border-emerald-500/20 rounded-[2rem] p-6 space-y-6 overflow-hidden"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Palette size={16} className="text-emerald-500" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Personalizar Vitrine</span>
+              </div>
+
+              {/* Cor do Tema */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: settings.theme_color }} />
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Cor Principal</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {colorPresets.map(preset => (
+                    <button
+                      key={preset.name}
+                      onClick={() => saveSettings({ theme_color: preset.color, accent_color: preset.color })}
+                      className={`w-9 h-9 rounded-full border-2 transition-all hover:scale-110 ${settings.theme_color === preset.color ? 'border-white scale-110 shadow-lg' : 'border-transparent'}`}
+                      style={{ backgroundColor: preset.color }}
+                      title={preset.name}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={settings.theme_color}
+                    onChange={(e) => saveSettings({ theme_color: e.target.value, accent_color: e.target.value })}
+                    className="w-9 h-9 rounded-full border-2 border-white/20 cursor-pointer bg-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Cor de Fundo */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Cor de Fundo</span>
+                <div className="flex items-center gap-3">
+                  {['#050505', '#0f172a', '#1a0a2e', '#0a1a0a', '#1a0a0a'].map(bg => (
+                    <button
+                      key={bg}
+                      onClick={() => saveSettings({ bg_color: bg })}
+                      className={`w-9 h-9 rounded-full border-2 transition-all hover:scale-110 ${settings.bg_color === bg ? 'border-white scale-110' : 'border-white/10'}`}
+                      style={{ backgroundColor: bg }}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={settings.bg_color}
+                    onChange={(e) => saveSettings({ bg_color: e.target.value })}
+                    className="w-9 h-9 rounded-full border-2 border-white/20 cursor-pointer bg-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Layout */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Layout size={14} className="text-emerald-500" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Layout</span>
+                </div>
+                <div className="flex gap-2">
+                  {layoutOptions.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => saveSettings({ layout_type: opt.id })}
+                      className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${settings.layout_type === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                    >
+                      {opt.icon} {opt.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fonte */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <TypeIcon size={14} className="text-emerald-500" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Fonte</span>
+                </div>
+                <div className="flex gap-2">
+                  {fontOptions.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => saveSettings({ font_style: opt.id })}
+                      className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${settings.font_style === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                    >
+                      {opt.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Header Style */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Estilo do Header</span>
+                <div className="flex gap-2">
+                  {headerOptions.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => saveSettings({ header_style: opt.id })}
+                      className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${settings.header_style === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                    >
+                      {opt.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Watermark Toggle */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Mostrar Marca D'água</span>
+                <button
+                  onClick={() => saveSettings({ show_watermark: !settings.show_watermark })}
+                  className={`w-12 h-7 rounded-full transition-all relative ${settings.show_watermark ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all ${settings.show_watermark ? 'left-6' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {/* Border Radius */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Arredondamento dos Cards</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="3"
+                  step="0.25"
+                  value={parseFloat(settings.card_radius)}
+                  onChange={(e) => saveSettings({ card_radius: `${e.target.value}rem` })}
+                  className="w-full accent-emerald-500"
+                />
+                <div className="flex justify-between text-[9px] text-slate-600 font-mono">
+                  <span>0rem</span>
+                  <span>{settings.card_radius}</span>
+                  <span>3rem</span>
+                </div>
+              </div>
+
+              {savingSettings && (
+                <div className="flex items-center justify-center gap-2 text-emerald-400 text-[10px] font-black uppercase tracking-widest">
+                  <Loader2 size={12} className="animate-spin" />
+                  Salvando...
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* URL Personalizada */}
         <div className="bg-black/40 border border-white/5 rounded-[2rem] p-6 space-y-5 relative">
           <div className="flex items-center gap-2">
             <Globe size={14} className="text-emerald-500" />
@@ -309,7 +577,6 @@ export const BioManager: React.FC<{
           )}
         </div>
 
-        {/* Botão para iniciar as buscas virais */}
         {storeSlug && storeSlug !== 'meu-link' && (initialStoreReady || onStoreConfigured) && onProceed && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -329,7 +596,6 @@ export const BioManager: React.FC<{
           </motion.div>
         )}
 
-        {/* Pro-Tips Cycle */}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTip}
@@ -349,48 +615,9 @@ export const BioManager: React.FC<{
             </div>
           </motion.div>
         </AnimatePresence>
-
-        {/* Dicas de Divulgação - NOVO SECTION */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white/5 border border-white/5 rounded-[2rem] p-6 space-y-4">
-            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500 flex items-center gap-2">
-              <Zap size={14} fill="currentColor" /> ONDE POSTAR SEU LINK?
-            </h4>
-            <div className="space-y-3">
-              {[
-                { n: 'Instagram Bio', d: 'O lugar clássico. Use um encurtador ou o link direto.' },
-                { n: 'TikTok Website', d: 'Essencial para converter as visualizações dos seus vídeos.' },
-                { n: 'Status do WhatsApp', d: 'Venda para seus contatos próximos todos os dias.' }
-              ].map((tip, i) => (
-                <div key={i} className="flex gap-3 items-start">
-                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] shrink-0 font-bold text-emerald-400">{i+1}</div>
-                  <div>
-                    <p className="text-[11px] font-bold text-white leading-none">{tip.n}</p>
-                    <p className="text-[9px] text-slate-500 mt-1 uppercase tracking-wider">{tip.d}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-[2rem] p-6 flex flex-col justify-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <Lightbulb className="text-emerald-400" size={20} />
-              </div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-emerald-400 italic">DICA DE OURO</p>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed italic">
-              "Poste pelo menos 3 vídeos por dia no TikTok/Reels e sempre direcione as pessoas para o link na sua Bio. A constância é o segredo do lucro!"
-            </p>
-          </div>
-        </div>
       </motion.div>
 
-      {/* Grid: Form + List */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-4">
-
-        {/* Form Panel - Mais largo (4 cols) */}
         <div className="lg:col-span-5">
           <motion.div
             initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}
@@ -421,19 +648,9 @@ export const BioManager: React.FC<{
                     className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-medium" />
                 </div>
                 <div className="flex gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleImageUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    disabled={uploading}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 hover:border-emerald-500/40 rounded-xl text-slate-400 hover:text-emerald-400 transition-all text-[10px] font-black uppercase tracking-widest"
-                  >
+                  <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                  <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 hover:border-emerald-500/40 rounded-xl text-slate-400 hover:text-emerald-400 transition-all text-[10px] font-black uppercase tracking-widest">
                     {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                     {uploading ? 'ENVIANDO...' : 'ANEXAR IMAGEM'}
                   </button>
@@ -469,7 +686,6 @@ export const BioManager: React.FC<{
           </motion.div>
         </div>
 
-        {/* Products List Panel - 7 cols */}
         <div className="lg:col-span-7 space-y-6">
           <div className="flex items-center justify-between px-2">
             <div className="flex flex-col">
@@ -504,15 +720,9 @@ export const BioManager: React.FC<{
                     className="glass-acid p-4 flex items-center gap-5 group hover:border-emerald-500/30 transition-all duration-500 rounded-[2rem]">
                     
                     <div className="relative w-20 h-20 shrink-0">
-                      <img
-                        src={item.image_url || FALLBACK_THUMBNAIL}
-                        alt={item.title}
+                      <img src={item.image_url || FALLBACK_THUMBNAIL} alt={item.title}
                         className="w-full h-full rounded-2xl object-cover bg-black/50 border border-white/5"
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          if (img.src === FALLBACK_THUMBNAIL) return;
-                          img.src = FALLBACK_THUMBNAIL;
-                        }}
+                        onError={(e) => { const img = e.currentTarget; if (img.src === FALLBACK_THUMBNAIL) return; img.src = FALLBACK_THUMBNAIL; }}
                       />
                       <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
                     </div>
