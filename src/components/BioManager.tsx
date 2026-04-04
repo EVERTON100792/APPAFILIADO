@@ -106,6 +106,8 @@ export const BioManager: React.FC<{
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [previewSettings, setPreviewSettings] = useState<StoreSettings>(defaultSettings);
+  const [showPreview, setShowPreview] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = ++toastCounter + Date.now();
@@ -138,22 +140,28 @@ export const BioManager: React.FC<{
       const meta = user?.user_metadata || {};
       if (meta.store_settings) {
         setSettings(prev => ({ ...prev, ...meta.store_settings }));
+        setPreviewSettings(prev => ({ ...prev, ...meta.store_settings }));
       }
     } catch (e) {
       console.warn('Erro ao carregar settings:', e);
     }
   };
 
+  const updatePreview = (newSettings: Partial<StoreSettings>) => {
+    setPreviewSettings(prev => ({ ...prev, ...newSettings }));
+  };
+
   const saveSettings = async (newSettings: Partial<StoreSettings>) => {
     if (!user) return;
     setSavingSettings(true);
     try {
-      const merged = { ...settings, ...newSettings };
+      const merged = { ...previewSettings, ...newSettings };
       const { data, error } = await supabase.auth.updateUser({
         data: { store_settings: merged }
       });
       if (error) throw error;
       setSettings(merged);
+      setPreviewSettings(merged);
       showToast('✨ Personalização salva!');
     } catch (e: any) {
       console.error('Erro ao salvar settings:', e);
@@ -342,149 +350,246 @@ export const BioManager: React.FC<{
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="bg-black/40 border border-emerald-500/20 rounded-[2rem] p-6 space-y-6 overflow-hidden"
+              className="space-y-6"
             >
-              <div className="flex items-center gap-2 mb-2">
-                <Palette size={16} className="text-emerald-500" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Personalizar Vitrine</span>
-              </div>
-
-              {/* Cor do Tema */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: settings.theme_color }} />
-                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Cor Principal</span>
+              {/* Preview ao vivo */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="border border-white/10 rounded-[2rem] overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-6 py-3 bg-white/5 border-b border-white/5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Preview em Tempo Real</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {colorPresets.map(preset => (
-                    <button
-                      key={preset.name}
-                      onClick={() => saveSettings({ theme_color: preset.color, accent_color: preset.color })}
-                      className={`w-9 h-9 rounded-full border-2 transition-all hover:scale-110 ${settings.theme_color === preset.color ? 'border-white scale-110 shadow-lg' : 'border-transparent'}`}
-                      style={{ backgroundColor: preset.color }}
-                      title={preset.name}
+                <div className="relative" style={{ backgroundColor: previewSettings.bg_color, minHeight: '320px' }}>
+                  <div className="max-w-sm mx-auto p-6 pt-10">
+                    {/* Mini Header Preview */}
+                    {previewSettings.header_style === 'bold' ? (
+                      <div className="p-4 rounded-2xl text-center mb-6" style={{ background: `linear-gradient(135deg, ${previewSettings.theme_color}22, ${previewSettings.theme_color}11)`, border: `1px solid ${previewSettings.theme_color}33` }}>
+                        <h3 className="font-black text-xl tracking-tighter" style={{ color: '#fff' }}>
+                          LOJA <span style={{ color: previewSettings.theme_color }}>@{storeSlug}</span>
+                        </h3>
+                      </div>
+                    ) : previewSettings.header_style === 'minimal' ? (
+                      <div className="text-center mb-6">
+                        <h3 className="font-black text-xl tracking-tighter text-white">@{storeSlug}</h3>
+                        <div className="w-8 h-0.5 mx-auto my-2" style={{ backgroundColor: previewSettings.theme_color }} />
+                      </div>
+                    ) : (
+                      <div className="mb-6">
+                        <div className="flex items-end gap-1.5 mb-1">
+                          <span className="text-2xl font-black" style={{ color: previewSettings.theme_color }}>LOJA</span>
+                          <div className="h-0.5 w-6 mb-1" style={{ backgroundColor: `${previewSettings.theme_color}33` }} />
+                        </div>
+                        <h3 className="text-white font-black text-lg tracking-tighter">
+                          @<span style={{ color: previewSettings.theme_color }}>{storeSlug}</span>
+                        </h3>
+                      </div>
+                    )}
+
+                    {/* Mini Cards Preview */}
+                    <div className={previewSettings.layout_type === 'list' ? 'space-y-2' : previewSettings.layout_type === 'masonry' ? 'columns-2 gap-2' : 'grid grid-cols-2 gap-2'}>
+                      {[1, 2, 3, 4].map((i) => (
+                        <div
+                          key={i}
+                          className={`overflow-hidden ${previewSettings.layout_type === 'list' ? 'flex items-center gap-2 p-2' : ''}`}
+                          style={{
+                            backgroundColor: 'rgba(255,255,255,0.04)',
+                            border: `1px solid rgba(255,255,255,0.06)`,
+                            borderRadius: previewSettings.card_radius,
+                          }}
+                        >
+                          {previewSettings.layout_type !== 'list' && (
+                            <div className="aspect-square w-full" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                              <div className="w-full h-full flex items-center justify-center">
+                                <ShoppingBag size={20} className="opacity-20" style={{ color: previewSettings.theme_color }} />
+                              </div>
+                            </div>
+                          )}
+                          <div className={previewSettings.layout_type === 'list' ? 'w-10 h-10 shrink-0 rounded-lg' : 'p-2'} style={{ backgroundColor: previewSettings.layout_type === 'list' ? 'rgba(255,255,255,0.03)' : undefined }}>
+                            <div className="h-1.5 w-16 rounded-full bg-white/10 mb-1" />
+                            <div className="h-1 w-10 rounded-full bg-white/5" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Watermark Preview */}
+                    {previewSettings.show_watermark && (
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03]">
+                        <span className="text-[80px] font-black rotate-12">SHOPEE</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Controles */}
+              <div className="bg-black/40 border border-emerald-500/20 rounded-[2rem] p-6 space-y-6 overflow-hidden">
+                <div className="flex items-center gap-2 mb-2">
+                  <Palette size={16} className="text-emerald-500" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Personalizar Vitrine</span>
+                </div>
+
+                {/* Cor do Tema */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: previewSettings.theme_color }} />
+                    <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Cor Principal</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {colorPresets.map(preset => (
+                      <button
+                        key={preset.name}
+                        onClick={() => updatePreview({ theme_color: preset.color, accent_color: preset.color })}
+                        className={`w-9 h-9 rounded-full border-2 transition-all hover:scale-110 ${previewSettings.theme_color === preset.color ? 'border-white scale-110 shadow-lg' : 'border-transparent'}`}
+                        style={{ backgroundColor: preset.color }}
+                        title={preset.name}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={previewSettings.theme_color}
+                      onChange={(e) => updatePreview({ theme_color: e.target.value, accent_color: e.target.value })}
+                      className="w-9 h-9 rounded-full border-2 border-white/20 cursor-pointer bg-transparent"
                     />
-                  ))}
-                  <input
-                    type="color"
-                    value={settings.theme_color}
-                    onChange={(e) => saveSettings({ theme_color: e.target.value, accent_color: e.target.value })}
-                    className="w-9 h-9 rounded-full border-2 border-white/20 cursor-pointer bg-transparent"
-                  />
+                  </div>
                 </div>
-              </div>
 
-              {/* Cor de Fundo */}
-              <div className="space-y-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Cor de Fundo</span>
-                <div className="flex items-center gap-3">
-                  {['#050505', '#0f172a', '#1a0a2e', '#0a1a0a', '#1a0a0a'].map(bg => (
-                    <button
-                      key={bg}
-                      onClick={() => saveSettings({ bg_color: bg })}
-                      className={`w-9 h-9 rounded-full border-2 transition-all hover:scale-110 ${settings.bg_color === bg ? 'border-white scale-110' : 'border-white/10'}`}
-                      style={{ backgroundColor: bg }}
+                {/* Cor de Fundo */}
+                <div className="space-y-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Cor de Fundo</span>
+                  <div className="flex items-center gap-3">
+                    {['#050505', '#0f172a', '#1a0a2e', '#0a1a0a', '#1a0a0a'].map(bg => (
+                      <button
+                        key={bg}
+                        onClick={() => updatePreview({ bg_color: bg })}
+                        className={`w-9 h-9 rounded-full border-2 transition-all hover:scale-110 ${previewSettings.bg_color === bg ? 'border-white scale-110' : 'border-white/10'}`}
+                        style={{ backgroundColor: bg }}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={previewSettings.bg_color}
+                      onChange={(e) => updatePreview({ bg_color: e.target.value })}
+                      className="w-9 h-9 rounded-full border-2 border-white/20 cursor-pointer bg-transparent"
                     />
-                  ))}
+                  </div>
+                </div>
+
+                {/* Layout */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Layout size={14} className="text-emerald-500" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Layout</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {layoutOptions.map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => updatePreview({ layout_type: opt.id })}
+                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${previewSettings.layout_type === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                      >
+                        {opt.icon} {opt.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Fonte */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <TypeIcon size={14} className="text-emerald-500" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Fonte</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {fontOptions.map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => updatePreview({ font_style: opt.id })}
+                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${previewSettings.font_style === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                      >
+                        {opt.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Header Style */}
+                <div className="space-y-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Estilo do Header</span>
+                  <div className="flex gap-2">
+                    {headerOptions.map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => updatePreview({ header_style: opt.id })}
+                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${previewSettings.header_style === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
+                      >
+                        {opt.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Watermark Toggle */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Mostrar Marca D'água</span>
+                  <button
+                    onClick={() => updatePreview({ show_watermark: !previewSettings.show_watermark })}
+                    className={`w-12 h-7 rounded-full transition-all relative ${previewSettings.show_watermark ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all ${previewSettings.show_watermark ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                {/* Border Radius */}
+                <div className="space-y-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Arredondamento dos Cards</span>
                   <input
-                    type="color"
-                    value={settings.bg_color}
-                    onChange={(e) => saveSettings({ bg_color: e.target.value })}
-                    className="w-9 h-9 rounded-full border-2 border-white/20 cursor-pointer bg-transparent"
+                    type="range"
+                    min="0"
+                    max="3"
+                    step="0.25"
+                    value={parseFloat(previewSettings.card_radius)}
+                    onChange={(e) => updatePreview({ card_radius: `${e.target.value}rem` })}
+                    className="w-full accent-emerald-500"
                   />
+                  <div className="flex justify-between text-[9px] text-slate-600 font-mono">
+                    <span>0rem</span>
+                    <span>{previewSettings.card_radius}</span>
+                    <span>3rem</span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Layout */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Layout size={14} className="text-emerald-500" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Layout</span>
-                </div>
-                <div className="flex gap-2">
-                  {layoutOptions.map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => saveSettings({ layout_type: opt.id })}
-                      className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${settings.layout_type === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
-                    >
-                      {opt.icon} {opt.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Fonte */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <TypeIcon size={14} className="text-emerald-500" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Fonte</span>
-                </div>
-                <div className="flex gap-2">
-                  {fontOptions.map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => saveSettings({ font_style: opt.id })}
-                      className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${settings.font_style === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
-                    >
-                      {opt.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Header Style */}
-              <div className="space-y-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Estilo do Header</span>
-                <div className="flex gap-2">
-                  {headerOptions.map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => saveSettings({ header_style: opt.id })}
-                      className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${settings.header_style === opt.id ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}
-                    >
-                      {opt.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Watermark Toggle */}
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Mostrar Marca D'água</span>
+                {/* Botão Salvar */}
                 <button
-                  onClick={() => saveSettings({ show_watermark: !settings.show_watermark })}
-                  className={`w-12 h-7 rounded-full transition-all relative ${settings.show_watermark ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                  onClick={() => saveSettings(previewSettings)}
+                  disabled={savingSettings}
+                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
                 >
-                  <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all ${settings.show_watermark ? 'left-6' : 'left-1'}`} />
+                  {savingSettings ? (
+                    <><Loader2 size={14} className="animate-spin" /> SALVANDO...</>
+                  ) : (
+                    <><Check size={14} /> SALVAR PERSONALIZAÇÃO</>
+                  )}
+                </button>
+
+                {/* Botão Resetar */}
+                <button
+                  onClick={() => { setPreviewSettings(defaultSettings); }}
+                  className="w-full py-3 bg-white/5 border border-white/10 hover:border-white/20 text-slate-400 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  RESETAR PADRÃO
                 </button>
               </div>
-
-              {/* Border Radius */}
-              <div className="space-y-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Arredondamento dos Cards</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="3"
-                  step="0.25"
-                  value={parseFloat(settings.card_radius)}
-                  onChange={(e) => saveSettings({ card_radius: `${e.target.value}rem` })}
-                  className="w-full accent-emerald-500"
-                />
-                <div className="flex justify-between text-[9px] text-slate-600 font-mono">
-                  <span>0rem</span>
-                  <span>{settings.card_radius}</span>
-                  <span>3rem</span>
-                </div>
-              </div>
-
-              {savingSettings && (
-                <div className="flex items-center justify-center gap-2 text-emerald-400 text-[10px] font-black uppercase tracking-widest">
-                  <Loader2 size={12} className="animate-spin" />
-                  Salvando...
-                </div>
-              )}
             </motion.div>
           )}
         </AnimatePresence>
