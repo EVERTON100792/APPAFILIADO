@@ -135,21 +135,9 @@ export const BioManager: React.FC<{
 
   const loadSettings = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
-      const res = await fetch(
-        `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/bio-settings`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      const json = await res.json();
-      if (json.settings) {
-        setSettings(prev => ({ ...prev, ...json.settings }));
+      const meta = user?.user_metadata || {};
+      if (meta.store_settings) {
+        setSettings(prev => ({ ...prev, ...meta.store_settings }));
       }
     } catch (e) {
       console.warn('Erro ao carregar settings:', e);
@@ -160,27 +148,14 @@ export const BioManager: React.FC<{
     if (!user) return;
     setSavingSettings(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
       const merged = { ...settings, ...newSettings };
-      const res = await fetch(
-        `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/bio-settings`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(merged),
-        }
-      );
-      const json = await res.json();
-      if (json.settings) {
-        setSettings(json.settings);
-        showToast('✨ Personalização salva!');
-      }
-    } catch (e) {
+      const { data, error } = await supabase.auth.updateUser({
+        data: { store_settings: merged }
+      });
+      if (error) throw error;
+      setSettings(merged);
+      showToast('✨ Personalização salva!');
+    } catch (e: any) {
       console.error('Erro ao salvar settings:', e);
       showToast('Erro ao salvar personalização', 'error');
     } finally {
