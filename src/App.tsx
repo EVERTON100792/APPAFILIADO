@@ -1199,6 +1199,180 @@ const App: React.FC = () => {
       'Preparando filtros de relevancia',
     ]);
     try {
+      const coreQuery = getSmartSearchName(product.query || product.title || '');
+      const coreWords = coreQuery.split(' ').filter(w => w.length > 2);
+      const productNiche = product.niche || activeNiche;
+      
+      if (coreWords.length === 0) throw new Error('Nome do produto incompleto');
+
+      const nicheKeywords: Record<string, { positive: string[], negative: string[] }> = {
+        'Cozinha': { 
+          positive: ['cozinha', 'comida', 'chef', 'receita', 'utilidade', 'casa', 'lar'],
+          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids', 'fitness'] 
+        },
+        'Tecnologia': { 
+          positive: ['tech', 'gadget', 'unboxing', 'setup', 'pc', 'smartphone', 'eletronico'],
+          negative: ['cozinha', 'panela', 'maquiagem', 'bebe', 'infantil', 'pet'] 
+        },
+        'Beleza': { 
+          positive: ['make', 'maquiagem', 'skin', 'cabelo', 'beleza', 'beauty', 'tutorial'],
+          negative: ['ferramenta', 'carro', 'moto', 'gamer', 'tecnologia', 'comida'] 
+        },
+        'Decoração': { 
+          positive: ['casa', 'decor', 'quarto', 'sala', 'iluminação', 'led', 'reforma'],
+          negative: ['maquiagem', 'carro', 'pet', 'comida'] 
+        },
+        'Pet': { 
+          positive: ['pet', 'gato', 'cachorro', 'dog', 'cat', 'animal', 'fofo'],
+          negative: ['maquiagem', 'cozinha', 'gamer'] 
+        }
+      };
+
+      const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
+
+      const productTitle = product.title || product.query || '';
+      const searchKeywords = getSmartSearchName(productTitle);
+      
+      const strategies = [
+        { query: searchKeywords, weight: 3.0 },
+        { query: `${searchKeywords} br`, weight: 2.5 },
+        { query: `${searchKeywords} shopee`, weight: 2.0 },
+        { query: `${searchKeywords} tiktok`, weight: 1.5 },
+        { query: `${searchKeywords} produto`, weight: 1.5 },
+      ];
+
+      const ptBrKeywords = [
+        'achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 
+        'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 
+        'promo', 'loja', 'casa', 'cozinha', 'comprinhas', 'melhor', 'perfeito',
+        'utilidades', 'organização', 'organizando', 'lar', 'enxoval', 'reforma',
+        'paguei', 'vale', 'muito', 'olha', 'gentee'
+      ];
+      
+      const foreignIndicators = [
+        'amazon.com', 'restock', 'organizedhome', 'cleaningday', 'satisfying',
+        'cleanwithme', 'amazonfinds', 'gadgets', 'tips', 'usa',
+        'product', 'items'
+      ];
+      
+      const ptBrMustHave = [
+        'shopee', 'brasil', 'achadinho', 'comprinha', 'link', 'bio', 'utilidade',
+        'loja', 'br', 'achei', 'achado'
+      ];
+
+      const nonLatinPattern = /[^\x00-\x7F\x80-\xFF\u0100-\u017F\u0180-\u024F\u0370-\u03FF]/; 
+
+      let allVideos: any[] = [];
+      setTreatingStatus('Consultando fontes e reunindo videos promissores...');
+      setTreatingProgress(28);
+      for (const strategy of strategies) {
+        const q = encodeURIComponent(strategy.query);
+        try {
+          const resp = await fetch(
+            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
+            { signal: AbortSignal.timeout(10000) }
+          );
+          const json = await resp.json();
+          if (json.data?.videos?.length > 0) {
+            allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: strategy.weight }))];
+          }
+        } catch {}
+      }
+
+      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
+      setTreatingStatus('Validando idioma, qualidade e engajamento real...');
+      setTreatingProgress(56);
+      setTreatingChecklist([
+        'Filtrando resultados em portugues do Brasil',
+        'Removendo videos com baixa relevancia',
+        'Priorizando sinais de conversao e qualidade HD',
+      ]);
+
+      const scored = allVideos
+        .filter((v: any) => (v.play || v.wmplay) && v.duration > 5 && v.duration < 180)
+        .map((v: any) => {
+          const title = (v.title || '').toLowerCase();
+          const author = (v.author?.nickname || '').toLowerCase();
+          const music = (v.music_info?.title || '').toLowerCase();
+          const text = `${title} ${author} ${music}`;
+          
+          let score = 0;
+
+          let matchCount = 0;
+          coreWords.forEach((word) => {
+            if (text.includes(word.toLowerCase())) matchCount++;
+          });
+
+          if (matchCount >= 2) score += 300; 
+          else if (matchCount === 1) score += 100;
+
+          const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
+          const hasMustHave = ptBrMustHave.some(w => text.includes(w));
+          const hasForeignIndicator = foreignIndicators.some(w => text.includes(w));
+
+          if (hasMustHave) score += 400;
+          if (hasPtBrKeywords) score += 150;
+          
+          if (!hasPtBrKeywords && !hasMustHave) score -= 200;
+          if (hasForeignIndicator && !hasMustHave) score -= 300;
+          if (nonLatinPattern.test(text)) score -= 5000;
+
+          if (v.width && v.width >= 1080) score += 200;
+          else if (v.width && v.width >= 720) score += 100;
+
+          const views = v.play_count || v.play || 0;
+          const diggs = v.digg_count || 0;
+          const comments = v.comment_count || 0;
+          const shares = v.share_count || 0;
+          
+          const engagementRatio = views > 0 ? ((diggs + (comments * 4) + (shares * 6)) / views) * 100 : 0;
+
+          if (engagementRatio > 18) score += 500; 
+          else if (engagementRatio > 12) score += 300;
+          else if (engagementRatio > 6) score += 100;
+          else if (engagementRatio < 2) score -= 200;
+
+          if (views > 500000) score += 200;
+          else if (views > 100000) score += 100;
+          else if (views > 50000) score += 50;
+
+          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 20; });
+          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 100; });
+
+          score *= (v._queryWeight || 1.0);
+          
+          const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
+          const finalUrl = v.play || v.wmplay;
+          const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(finalUrl)}`;
+
+          return {
+            id: v.video_id,
+            url: proxiedUrl,
+            cover: v.cover,
+            title: v.title,
+            duration: v.duration,
+            author: v.author?.nickname || 'Criador',
+            _score: score
+          };
+        })
+        .filter((v: any) => v._score > 100)
+        .sort((a: any, b: any) => b._score - a._score);
+
+      if (scored.length === 0) {
+        showToast("DIFICULDADE EM ACHAR VÍDEOS 100% RELEVANTES");
+        setStep('list');
+        return;
+      }
+    resetVideoEditor();
+    setStep('treating');
+    setTreatingStatus('Mapeando sinais de demanda e criativos virais...');
+    setTreatingProgress(12);
+    setTreatingChecklist([
+      'Lendo palavras-chave do produto',
+      'Consultando tendencias TikTok + Shopee',
+      'Preparando filtros de relevancia',
+    ]);
+    try {
       // ── ETAPA 1: Extrair o núcleo semântico e definir o nicho
       const coreQuery = getSmartSearchName(product.query || product.title || '');
       const coreWords = coreQuery.split(' ').filter(w => w.length > 2);
