@@ -28,7 +28,7 @@ export class VideoProcessor {
     this.auxCanvas = document.createElement('canvas');
     this.auxCtx = this.auxCanvas.getContext('2d')!;
     this.ownedVideo = document.createElement('video');
-    this.ownedVideo.muted = true;
+    this.ownedVideo.muted = false;
     this.ownedVideo.playsInline = true;
   }
 
@@ -152,6 +152,8 @@ export class VideoProcessor {
         this.auxCtx.imageSmoothingEnabled = true;
         this.auxCtx.imageSmoothingQuality = 'low';
 
+        video.muted = false;
+        video.volume = 1;
         await video.play();
         
         this.stream = this.canvas.captureStream(30); 
@@ -162,6 +164,9 @@ export class VideoProcessor {
             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
               sampleRate: 44100
             });
+            if (audioCtx.state === 'suspended') {
+              await audioCtx.resume();
+            }
             const destination = audioCtx.createMediaStreamDestination();
             
             const originalSource = audioCtx.createMediaElementSource(video);
