@@ -292,14 +292,20 @@ export const BioManager: React.FC<{
       {/* Painel Fixo Lateral de Personalização */}
       <AnimatePresence>
         {showCustomizer && user && (
-          <motion.div
-            initial={{ opacity: 0, x: 400 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 400 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-            className="fixed top-4 right-4 bottom-4 w-[380px] z-[200] bg-[#0a0a0a] border border-white/10 rounded-3xl overflow-hidden overflow-y-auto"
-            style={{ scrollbarWidth: 'thin', scrollbarColor: '#22c55e33 transparent' }}
-          >
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowCustomizer(false)}
+              className="fixed inset-0 bg-black/60 z-[199] lg:hidden"
+            />
+            <motion.div
+              initial={{ opacity: 0, x: 400 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 400 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 30 }}
+              className="fixed inset-0 lg:inset-y-4 lg:right-4 lg:w-[380px] lg:max-w-[calc(100vw-2rem)] z-[200] bg-[#0a0a0a] lg:border lg:border-white/10 lg:rounded-3xl overflow-y-auto"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: '#22c55e33 transparent' }}
+            >
             <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -449,18 +455,8 @@ export const BioManager: React.FC<{
                 </button>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Overlay escuro quando customizer aberto (mobile) */}
-      <AnimatePresence>
-        {showCustomizer && user && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setShowCustomizer(false)}
-            className="fixed inset-0 bg-black/50 z-[150] lg:hidden"
-          />
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
