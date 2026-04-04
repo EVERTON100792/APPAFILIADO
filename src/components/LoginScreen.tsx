@@ -78,169 +78,176 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onTogg
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden font-inter selection:bg-accent/30">
+    <div className="min-h-screen w-full bg-[#0a0a0f] flex flex-col items-center justify-center p-5 relative overflow-hidden font-sans">
       
-      {/* Background Effects */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-accent/5 to-transparent" />
-        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-accent/10 rounded-full blur-[150px] -translate-y-1/2 translate-x-1/4" />
-        
-        {/* Subtle Grid */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{ 
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)`,
-          backgroundSize: '40px 40px'
-        }} />
+      {/* Background */}
+      <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0f172a] via-[#0a0a0f] to-[#0f172a]" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-cyan-500/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[80px]" />
       </div>
 
-      {/* Main Container */}
+      {/* Content */}
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 w-full max-w-sm"
+        className="relative z-10 w-full max-w-[380px]"
       >
-        {/* Header */}
+        {/* Logo Area */}
         <div className="text-center mb-8">
-          <motion.div 
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-accent to-cyan-400 mb-4 shadow-lg shadow-accent/30"
-          >
-            <Zap size={28} className="text-slate-950" />
-          </motion.div>
-          
-          <h1 className="text-2xl font-black tracking-tight text-white">
-            VIRAL<span className="text-accent">SQUAD</span>
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 mb-4 shadow-lg shadow-cyan-500/25 ring-1 ring-white/10">
+            <Zap size={26} className="text-white" />
+          </div>
+          <h1 className="text-[28px] font-bold tracking-tight text-white">
+            VIRAL<span className="text-cyan-400">SQUAD</span>
           </h1>
-          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-2">
-            Affiliate Pro
+          <p className="text-xs text-slate-500 font-medium tracking-[0.2em] mt-2">
+            AFFILIATE PRO
           </p>
         </div>
 
-        {/* Card */}
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+        {/* Main Card */}
+        <div className="bg-slate-900/60 backdrop-blur-2xl border border-slate-800/60 rounded-3xl overflow-hidden shadow-2xl shadow-black/50">
           
-          {/* Top Bar */}
-          <div className="bg-slate-950/50 border-b border-white/5 py-3 px-4 flex items-center justify-center gap-2">
-            <Shield size={12} className="text-emerald-500" />
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-              24h de teste grátis
-            </span>
+          {/* Header */}
+          <div className="bg-gradient-to-r from-slate-900/80 to-slate-800/40 border-b border-slate-700/30 px-6 py-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-medium text-slate-300">
+                24h de teste grátis liberado
+              </span>
+            </div>
           </div>
 
-          <div className="p-5 space-y-4">
-            {/* Title */}
-            <div className="text-center">
-              <h2 className="text-base font-semibold text-white">
-                {isLogin ? 'Entrar' : 'Criar conta'}
+          {/* Form Area */}
+          <div className="p-6">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-white">
+                {isLogin ? 'Olá, seja bem-vindo!' : 'Crie sua conta'}
               </h2>
-              <p className="text-[10px] text-slate-500 mt-1">
-                {isLogin ? 'Acesse sua conta' : 'Comece gratuitamente'}
+              <p className="text-sm text-slate-500 mt-1">
+                {isLogin ? 'Entre com seus dados para continuar' : 'Comece agora mesmo'}
               </p>
             </div>
 
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {error && (
                 <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 flex items-center gap-2 text-red-400 text-[10px]"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3"
                 >
-                  <AlertCircle size={14} />
-                  <span>{error}</span>
+                  <AlertCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
+                  <span className="text-xs text-red-300 leading-relaxed">{error}</span>
                 </motion.div>
               )}
 
               {success && (
                 <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 flex items-center gap-2 text-emerald-400 text-[10px]"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3"
                 >
-                  <CheckCircle2 size={14} />
-                  <span>Conta criada! Verifique seu e-mail.</span>
+                  <CheckCircle2 size={18} className="text-emerald-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-xs text-emerald-300 font-medium">Conta criada com sucesso!</span>
+                    <p className="text-xs text-emerald-400/70 mt-0.5">Verifique seu e-mail para confirmar</p>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <form onSubmit={handleAuth} className="space-y-3">
-              {/* Email */}
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input 
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="E-mail"
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-accent/50 transition-colors"
-                />
+            <form onSubmit={handleAuth} className="space-y-4">
+              {/* Email Field */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-2">E-mail</label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                    <Mail size={18} className="text-slate-500" />
+                  </div>
+                  <input 
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="seu@email.com"
+                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl py-3.5 pl-12 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50 focus:bg-slate-800/80 transition-all"
+                  />
+                </div>
               </div>
 
-              {/* Password */}
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input 
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Senha"
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg py-2.5 pl-10 pr-10 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-accent/50 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-                >
-                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
+              {/* Password Field */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-2">Senha</label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                    <Lock size={18} className="text-slate-500" />
+                  </div>
+                  <input 
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl py-3.5 pl-12 pr-12 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50 focus:bg-slate-800/80 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
-              {/* Button */}
+              {/* Submit Button */}
               <button 
                 type="submit"
                 disabled={loading}
-                className="w-full bg-accent hover:bg-cyan-400 text-slate-950 font-bold text-xs uppercase tracking-wider py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-sm py-4 rounded-xl transition-all shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2"
               >
                 {loading ? (
-                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    {isLogin ? 'Entrar' : 'Cadastrar'}
-                    <LogIn size={14} />
+                    <span>{isLogin ? 'ENTRAR' : 'CRIAR CONTA'}</span>
+                    <LogIn size={18} />
                   </>
                 )}
               </button>
             </form>
 
             {/* Toggle */}
-            <div className="text-center pt-2 border-t border-white/5">
-              <button 
-                onClick={() => { setIsLogin(!isLogin); setError(null); setSuccess(false); }}
-                className="text-[10px] text-slate-500 hover:text-white transition-colors"
-              >
+            <div className="mt-6 pt-4 border-t border-slate-700/30 text-center">
+              <p className="text-sm text-slate-500">
                 {isLogin ? 'Não tem conta? ' : 'Já tem conta? '}
-                <span className="text-accent font-semibold">{isLogin ? 'Cadastre-se' : 'Entre'}</span>
-              </button>
+                <button 
+                  onClick={() => { setIsLogin(!isLogin); setError(null); setSuccess(false); }}
+                  className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors"
+                >
+                  {isLogin ? 'Cadastre-se' : 'Entre aqui'}
+                </button>
+              </p>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-center items-center gap-4 mt-6 text-[8px] text-slate-600 uppercase tracking-wider">
-          <span>Seguro</span>
-          <span className="w-0.5 h-0.5 bg-slate-700 rounded-full" />
-          <span>v1.6.2</span>
+        <div className="flex justify-center items-center gap-3 mt-6">
+          <Shield size={12} className="text-slate-600" />
+          <span className="text-[10px] text-slate-600 uppercase tracking-wider">Conexão segura</span>
+          <span className="text-[10px] text-slate-700">•</span>
+          <span className="text-[10px] text-slate-600">v1.6.2</span>
         </div>
 
-        {/* Dev Button */}
+        {/* Dev Tools */}
         <button 
           onClick={onToggleDevTools}
-          className="absolute top-4 right-4 p-2 text-slate-700 hover:text-accent transition-colors"
+          className="absolute top-5 right-5 p-2 text-slate-600 hover:text-cyan-400"
         >
-          <Terminal size={14} />
+          <Terminal size={16} />
         </button>
       </motion.div>
     </div>
