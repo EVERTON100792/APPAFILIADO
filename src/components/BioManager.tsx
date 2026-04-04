@@ -303,21 +303,23 @@ export const BioManager: React.FC<{
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 400 }}
               transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              className="fixed inset-0 lg:inset-y-4 lg:right-4 lg:w-[380px] lg:max-w-[calc(100vw-2rem)] z-[200] bg-[#0a0a0a] lg:border lg:border-white/10 lg:rounded-3xl overflow-y-auto"
+              className="fixed z-[200] bg-[#0a0a0a] overflow-y-auto
+                inset-0 lg:inset-y-4 lg:right-4 lg:w-[380px] lg:max-w-[calc(100vw-2rem)] lg:border lg:border-white/10 lg:rounded-3xl"
               style={{ scrollbarWidth: 'thin', scrollbarColor: '#22c55e33 transparent' }}
             >
-            <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Preview ao Vivo</span>
+              {/* Header do Painel */}
+              <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Preview ao Vivo</span>
+                </div>
+                <button onClick={() => setShowCustomizer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white transition-colors">
+                  ✕
+                </button>
               </div>
-              <button onClick={() => setShowCustomizer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white transition-colors">
-                ✕
-              </button>
-            </div>
 
-            {/* Preview Compacto */}
-            <div className="px-5 pt-4 pb-3">
+              {/* Conteúdo com padding seguro */}
+              <div className="px-5 pb-6 pt-2 space-y-4">
               <div className="rounded-2xl overflow-hidden border border-white/10" style={{ backgroundColor: previewSettings.bg_color }}>
                 <div className="p-4 pt-6">
                   {previewSettings.header_style === 'bold' ? (
