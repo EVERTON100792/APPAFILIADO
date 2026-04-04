@@ -203,26 +203,17 @@ const App: React.FC = () => {
     let inferredReady = Boolean(metadataReady || (legacyReady && inferredSlug && !STORE_PLACEHOLDER_SLUGS.includes(inferredSlug)));
 
     if (!inferredReady && authUser.id) {
-      const { data: directStoreRows } = await supabase
-        .from('bio_store')
-        .select('id')
-        .eq('user_id', authUser.id)
-        .limit(1);
+      if (metadataSlug && !STORE_PLACEHOLDER_SLUGS.includes(metadataSlug)) {
+        const { data: slugStoreRows } = await supabase
+          .from('bio_store')
+          .select('user_id')
+          .eq('user_id', metadataSlug)
+          .limit(1);
 
-      const { data: slugStoreRows } = metadataSlug
-        ? await supabase
-            .from('bio_store')
-            .select('id')
-            .eq('user_id', metadataSlug)
-            .limit(1)
-        : { data: null };
-
-      if (slugStoreRows && slugStoreRows.length > 0) {
-        inferredSlug = metadataSlug;
-        inferredReady = true;
-      } else if (directStoreRows && directStoreRows.length > 0) {
-        inferredSlug = authUser.id;
-        inferredReady = true;
+        if (slugStoreRows && slugStoreRows.length > 0) {
+          inferredSlug = metadataSlug;
+          inferredReady = true;
+        }
       }
     }
 
@@ -429,7 +420,6 @@ const App: React.FC = () => {
     const interval = setInterval(() => {
       setTrialRemaining(prev => {
         if (prev === null || prev <= 0) {
-          setTrialExpired(true);
           return 0;
         }
         return prev - 1000;
@@ -438,6 +428,12 @@ const App: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [user, isPro, trialRemaining]);
+
+  useEffect(() => {
+    if (trialRemaining !== null && trialRemaining <= 0 && !isPro) {
+      setTrialExpired(true);
+    }
+  }, [trialRemaining, isPro]);
 
   useEffect(() => {
     // Initial check
@@ -574,28 +570,26 @@ const App: React.FC = () => {
 
   // Persistence
   useEffect(() => {
-    if (isLoadingAuth || isHydratingApp) return;
+    if (isLoadingAuth || isHydratingApp || !user) return;
 
     fetchHistory();
     fetchProductsDB();
     loadScoutedProducts();
 
-    if (user && storeSlug === 'meu-link' && !storeReady) {
+    if (storeSlug === 'meu-link' && !storeReady) {
       if (step !== 'bio') {
         setStep('home');
       }
       return;
     }
 
-    if (user) {
-      const lastStep = user.user_metadata?.last_step as Step | undefined;
-      if (lastStep && !['scouting', 'ready', 'treating', 'automation'].includes(lastStep)) {
-        setStep(lastStep);
-      } else {
-        setStep('home');
-      }
+    const lastStep = user.user_metadata?.last_step as Step | undefined;
+    if (lastStep && !['scouting', 'ready', 'treating', 'automation'].includes(lastStep)) {
+      setStep(lastStep);
+    } else {
+      setStep('home');
     }
-  }, [user, storeSlug, storeReady, isLoadingAuth, isHydratingApp]);
+  }, [user?.id]);
 
   const loadScoutedProducts = async () => {
     const userId = getUserId();
@@ -619,7 +613,7 @@ const App: React.FC = () => {
   const saveScoutedProducts = async (items: any[]) => {
     const userId = getUserId();
     if (!userId) return;
-    // Limpa os antigos e salva os novos para manter a sincronia
+    await supabase.from('scouted_products').delete().eq('user_id', userId);
     const productsToSave = items.map(p => ({
       user_id: userId,
       product_id: p.id,
@@ -632,7 +626,8 @@ const App: React.FC = () => {
       niche: p.niche || activeNiche
     }));
 
-    await supabase.from('scouted_products').insert(productsToSave);
+    const { error } = await supabase.from('scouted_products').insert(productsToSave);
+    if (error) console.error('Erro ao salvar scouted_products:', error);
   };
 
   const fetchProductsDB = async () => {
@@ -793,11 +788,10 @@ const App: React.FC = () => {
   };
 
   const saveToSupabase = async (product: any, platform: string) => {
-    if (!product) return;
+    if (!product) return false;
     const userId = getUserId();
-    if (!userId) return;
+    if (!userId) return false;
     
-    // Garantir que os dados são strings e nunca nulas/undefined para evitar Erro 400
     const payload = { 
       user_id: String(userId),
       product_id: String(product.id || product.product_id || 'sem-id'), 
@@ -812,13 +806,14 @@ const App: React.FC = () => {
 
     if (error) {
       showToast("ERRO AO SALVAR NO BANCO");
-      return;
+      return false;
     }
 
     if (data && data.length > 0) {
       setPublicationHistory(prev => [data[0], ...prev]);
       showToast("PUBLICAÇÃO REGISTRADA! ☁️");
     }
+    return true;
   };
 
   const deleteFromSupabase = async (id: string) => {
@@ -830,6 +825,8 @@ const App: React.FC = () => {
     if (!error) {
       setPublicationHistory(prev => prev.filter(h => h.id !== id));
       showToast("REMOVIDO DO SUPABASE! 🗑️");
+    } else {
+      showToast("ERRO AO REMOVER: " + error.message);
     }
   };
 
@@ -1021,7 +1018,7 @@ const App: React.FC = () => {
     const shuffled = [...infinitePool].sort(() => Math.random() - 0.5);
     const items = shuffled.slice(0, 15);
     setActiveItems(items);
-    saveScoutedProducts(items);
+    await saveScoutedProducts(items);
   };
 
   const handleCustomLinkSubmit = async (e: React.FormEvent) => {
@@ -1099,8 +1096,7 @@ const App: React.FC = () => {
     setSelectedProduct(customProduct); 
     researchTikTok(customProduct);
     setCustomLink('');
-    // Salva o produto customizado no banco também
-    saveScoutedProducts([customProduct]);
+    await saveScoutedProducts([customProduct]);
   };
 
   const refreshProducts = async () => {
@@ -1113,7 +1109,7 @@ const App: React.FC = () => {
     
     const items = shuffled.slice(0, 15);
     setActiveItems(items);
-    saveScoutedProducts(items);
+    await saveScoutedProducts(items);
     showToast('PRODUTOS ATIVOS EM ALTA 🔄');
   };
 
@@ -1189,6 +1185,10 @@ const App: React.FC = () => {
   };
 
   const researchTikTok = async (product: any) => {
+    if (trialExpired && !hasActivePro) {
+      showToast('SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.');
+      return;
+    }
     resetVideoEditor();
     setStep('treating');
     setTreatingStatus('Mapeando sinais de demanda e criativos virais...');
@@ -1739,8 +1739,12 @@ const App: React.FC = () => {
     }
 
     if (selectedProduct) {
-      saveToSupabase(selectedProduct, selectedPlatform);
-      addLog('Histórico sincronizado com nuvem.', 'info');
+      const saved = await saveToSupabase(selectedProduct, selectedPlatform);
+      if (saved) {
+        addLog('Histórico sincronizado com nuvem.', 'success');
+      } else {
+        addLog('Falha ao sincronizar com nuvem.', 'error');
+      }
     }
 
     const openPublishingDestination = () => {
@@ -2685,9 +2689,19 @@ const App: React.FC = () => {
 
                     <button
                       onClick={async () => {
-                        const slug = getUserId();
-                        if (!slug) {
-                          showToast("FAÇA LOGIN PARA SALVAR SUA LOJA");
+                        const metadataSlug = user?.user_metadata?.store_slug || '';
+                        const urlSlug = new URLSearchParams(window.location.search).get('loja') || '';
+                        const targetSlug = (metadataSlug && metadataSlug !== 'meu-link')
+                          ? metadataSlug.toLowerCase()
+                          : (urlSlug && urlSlug !== 'meu-link')
+                            ? urlSlug.toLowerCase()
+                            : (storeSlug && storeSlug !== 'meu-link')
+                              ? storeSlug.toLowerCase()
+                              : '';
+
+                        if (!targetSlug) {
+                          showToast("CONFIGURE SUA LOJA PRIMEIRO!");
+                          setStep('bio');
                           return;
                         }
                         if (!bioLink || !bioImageUrl || !bioTitle) {
@@ -2696,7 +2710,7 @@ const App: React.FC = () => {
                         }
                         setIsSavingToBio(true);
                         const { error } = await supabase.from('bio_store').insert({
-                          user_id: slug,
+                          user_id: targetSlug,
                           title: bioTitle,
                           image_url: bioImageUrl,
                           affiliate_link: bioLink
@@ -2706,7 +2720,7 @@ const App: React.FC = () => {
                           showToast("🛍️ PUBLICADO COM SUCESSO!");
                           setBioLink(''); setBioImageUrl(''); setBioTitle('');
                         } else {
-                          showToast("❌ Erro ao publicar. Tente novamente.");
+                          showToast("❌ Erro ao publicar: " + error.message);
                         }
                       }}
                       disabled={isSavingToBio}
@@ -3106,7 +3120,7 @@ const App: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {publicationHistory.map(h => {
-                    const item = productList.find(p => p.id === h.product_id);
+                    const item = activeItems.find(p => p.id === h.product_id);
 
                     return (
                       <motion.div 
@@ -3172,7 +3186,7 @@ const App: React.FC = () => {
                   setStep('bio');
                   return;
                 }
-                if (tab.id === 'list' && !productList.length) {
+                if (tab.id === 'list' && !activeItems.length) {
                   startScouting();
                 } else {
                   setStep(tab.id as any);
