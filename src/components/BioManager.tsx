@@ -303,23 +303,24 @@ export const BioManager: React.FC<{
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 400 }}
               transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              className="fixed z-[200] bg-[#0a0a0a] overflow-y-auto
-                inset-0 h-[100dvh] lg:h-auto lg:inset-y-4 lg:right-4 lg:w-[380px] lg:max-w-[calc(100vw-2rem)] lg:border lg:border-white/10 lg:rounded-3xl"
               style={{ scrollbarWidth: 'thin', scrollbarColor: '#22c55e33 transparent' }}
+              className="fixed z-[200] bg-[#0a0a0a] overflow-y-auto
+                top-0 left-0 right-0 bottom-0
+                lg:top-4 lg:left-auto lg:bottom-4 lg:right-4 lg:w-[380px] lg:max-w-[calc(100vw-2rem)] lg:border lg:border-white/10 lg:rounded-3xl"
             >
-              <div className="flex flex-col min-h-full" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+              <div className="flex flex-col" style={{ minHeight: '100dvh', paddingTop: 'max(16px, env(safe-area-inset-top))', paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
               {/* Header do Painel */}
-              <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between">
+              <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                   <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Preview ao Vivo</span>
                 </div>
-                <button onClick={() => setShowCustomizer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white transition-colors">
+                <button onClick={() => setShowCustomizer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white transition-colors shrink-0">
                   ✕
                 </button>
               </div>
 
-              {/* Conteúdo com padding seguro */}
+              {/* Conteúdo */}
               <div className="px-5 pb-8 pt-3 space-y-4 flex-1">
               <div className="rounded-2xl overflow-hidden border border-white/10" style={{ backgroundColor: previewSettings.bg_color }}>
                 <div className="p-4 pt-6">
