@@ -265,7 +265,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
                       </div>
                     </div>
                     
-                    <div className="absolute inset-0 transition-all duration-500" style={{ border: `1px solid transparent`, groupHover: { borderColor: `${themeColor}40` } }} />
+                    <div className="absolute inset-0 transition-all duration-500" style={{ border: `1px solid transparent` }} />
                   </motion.a>
                 );
               })}

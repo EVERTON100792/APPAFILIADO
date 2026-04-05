@@ -334,9 +334,10 @@ const App: React.FC = () => {
       return 'https://www.tiktok.com/tiktokstudio/upload?from=creator_center';
     }
   };
-  const [productList, setProductList] = useState<any[]>([]); 
-  const [activeItems, setActiveItems] = useState<any[]>([]); 
+ 
   const [publicationHistory, setPublicationHistory] = useState<any[]>([]); 
+  const [activeItems, setActiveItems] = useState<any[]>([]);
+  const [_productList, setProductList] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [videoData, setVideoData] = useState<any>(null);
   const [customCopy, setCustomCopy] = useState('');

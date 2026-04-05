@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2, Palette, Layout, Type as TypeIcon
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -104,10 +104,9 @@ export const BioManager: React.FC<{
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [showCustomizer, setShowCustomizer] = useState(false);
-  const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
+  const [_settings, setSettings] = useState<StoreSettings>(defaultSettings);
   const [savingSettings, setSavingSettings] = useState(false);
   const [previewSettings, setPreviewSettings] = useState<StoreSettings>(defaultSettings);
-  const [showPreview, setShowPreview] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = ++toastCounter + Date.now();
@@ -156,7 +155,7 @@ export const BioManager: React.FC<{
     setSavingSettings(true);
     try {
       const merged = { ...previewSettings, ...newSettings };
-      const { data, error } = await supabase.auth.updateUser({
+      const { error } = await supabase.auth.updateUser({
         data: { store_settings: merged }
       });
       if (error) throw error;
