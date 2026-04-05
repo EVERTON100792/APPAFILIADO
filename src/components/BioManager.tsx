@@ -353,10 +353,9 @@ export const BioManager: React.FC<{
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Controles Compactos */}
-            <div className="px-5 pb-6 space-y-4">
+              {/* Controles Compactos */}
+              <div className="space-y-4">
               {/* Cor Principal */}
               <div>
                 <div className="flex items-center gap-1.5 mb-2">
@@ -457,6 +456,8 @@ export const BioManager: React.FC<{
                   className="w-full py-2.5 bg-white/5 border border-white/10 hover:border-white/20 text-slate-500 hover:text-white rounded-xl text-[8px] font-black uppercase tracking-widest transition-all">
                   RESETAR PADRÃO
                 </button>
+              </div>
+              </div>
               </div>
               </div>
             </motion.div>
