@@ -132,13 +132,13 @@ export const BioManager: React.FC<{
   }, [initialStoreSlug]);
 
   useEffect(() => {
-    if (user) loadSettings();
+    if (user && user.user_metadata) loadSettings();
   }, [user]);
 
   const loadSettings = async () => {
     try {
       const meta = user?.user_metadata || {};
-      if (meta.store_settings) {
+      if (meta?.store_settings) {
         setSettings(prev => ({ ...prev, ...meta.store_settings }));
         setPreviewSettings(prev => ({ ...prev, ...meta.store_settings }));
       }
