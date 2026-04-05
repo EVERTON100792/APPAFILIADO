@@ -20,6 +20,7 @@ interface StoreSettings {
   header_style: string;
   show_watermark: boolean;
   card_radius: string;
+  profile_image: string;
 }
 
 const defaultSettings: StoreSettings = {
@@ -32,6 +33,7 @@ const defaultSettings: StoreSettings = {
   header_style: 'default',
   show_watermark: true,
   card_radius: '1.5rem',
+  profile_image: '',
 };
 
 const fontMap: Record<string, string> = {
@@ -130,6 +132,21 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
 
       <div className="max-w-md mx-auto pt-16 px-6 relative z-10" style={{ paddingTop: 'calc(4rem + var(--safe-top))' }}>
         
+        {/* Profile Image */}
+        {settings.profile_image && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+            className="mb-8 text-center"
+          >
+            <img 
+              src={settings.profile_image} 
+              alt="Foto de perfil" 
+              className="w-24 h-24 mx-auto rounded-full object-cover border-4"
+              style={{ borderColor: themeColor }}
+            />
+          </motion.div>
+        )}
+
         {/* Header */}
         {settings.header_style === 'minimal' ? (
           <motion.div 

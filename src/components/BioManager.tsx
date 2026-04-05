@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2, Palette
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -24,6 +24,7 @@ interface StoreSettings {
   header_style: string;
   show_watermark: boolean;
   card_radius: string;
+  profile_image: string;
 }
 
 const defaultSettings: StoreSettings = {
@@ -36,6 +37,7 @@ const defaultSettings: StoreSettings = {
   header_style: 'default',
   show_watermark: true,
   card_radius: '1.5rem',
+  profile_image: '',
 };
 
 const colorPresets = [
@@ -107,6 +109,30 @@ export const BioManager: React.FC<{
   const [_settings, setSettings] = useState<StoreSettings>(defaultSettings);
   const [savingSettings, setSavingSettings] = useState(false);
   const [previewSettings, setPreviewSettings] = useState<StoreSettings>(defaultSettings);
+  const [uploadingProfile, setUploadingProfile] = useState(false);
+  const profileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingProfile(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('uploads')
+        .upload(`profiles/${user?.id}/${fileName}`, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(uploadData.path);
+      updatePreview({ profile_image: publicUrl });
+      showToast('Foto de perfil atualizada!', 'success');
+    } catch (err) {
+      console.error('Erro ao subir foto:', err);
+      showToast('Erro ao subir foto', 'error');
+    } finally {
+      setUploadingProfile(false);
+    }
+  };
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = ++toastCounter + Date.now();
@@ -323,6 +349,11 @@ export const BioManager: React.FC<{
               <div className="px-5 pb-8 pt-3 space-y-4 flex-1">
               <div className="rounded-2xl overflow-hidden border border-white/10" style={{ backgroundColor: previewSettings.bg_color }}>
                 <div className="p-4 pt-6">
+                  {previewSettings.profile_image && (
+                    <div className="mb-4 text-center">
+                      <img src={previewSettings.profile_image} alt="Preview" className="w-16 h-16 mx-auto rounded-full object-cover border-2" style={{ borderColor: previewSettings.theme_color }} />
+                    </div>
+                  )}
                   {previewSettings.header_style === 'bold' ? (
                     <div className="p-3 rounded-xl text-center mb-3" style={{ background: `linear-gradient(135deg, ${previewSettings.theme_color}22, ${previewSettings.theme_color}11)`, border: `1px solid ${previewSettings.theme_color}33` }}>
                       <p className="font-black text-sm tracking-tighter text-white">LOJA <span style={{ color: previewSettings.theme_color }}>@{storeSlug}</span></p>
@@ -443,6 +474,39 @@ export const BioManager: React.FC<{
                 <input type="range" min="0" max="3" step="0.25" value={parseFloat(previewSettings.card_radius)}
                   onChange={(e) => updatePreview({ card_radius: `${e.target.value}rem` })}
                   className="w-full accent-emerald-500 h-1" />
+              </div>
+
+              {/* Foto de Perfil */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <User size={12} className="text-slate-500" />
+                  <span className="text-[8px] font-black uppercase tracking-[0.15em] text-slate-500">Foto de Perfil</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={profileInputRef}
+                  onChange={handleProfileUpload}
+                  className="hidden"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => profileInputRef.current?.click()}
+                    disabled={uploadingProfile}
+                    className="flex-1 py-2.5 bg-white/5 border border-white/10 hover:border-white/20 text-slate-400 hover:text-white rounded-xl text-[8px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {uploadingProfile ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                    {previewSettings.profile_image ? 'TROCAR' : 'ADICIONAR'}
+                  </button>
+                  {previewSettings.profile_image && (
+                    <button
+                      onClick={() => updatePreview({ profile_image: '' })}
+                      className="px-3 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-xl text-[8px] font-black uppercase transition-all"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Ações */}
