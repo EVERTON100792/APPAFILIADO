@@ -225,11 +225,20 @@ export const BioManager: React.FC<{
       showToast('URL inválida! Use apenas letras, números ou hífens.', 'error');
       return;
     }
-    setStoreSlug(clean);
-    setSlugInput(clean);
-    setEditingSlug(false);
-    onStoreConfigured?.(clean);
-    showToast(`✅ Link atualizado para: /?loja=${clean}`, 'success');
+    setSaving(true);
+    try {
+      setStoreSlug(clean);
+      setSlugInput(clean);
+      setEditingSlug(false);
+      if (onStoreConfigured) {
+        onStoreConfigured(clean);
+      }
+      showToast(`✅ Link atualizado para: /?loja=${clean}`, 'success');
+    } catch (err: any) {
+      showToast('Erro ao salvar: ' + (err?.message || 'Tente novamente'), 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAdd = async (e: React.FormEvent) => {
