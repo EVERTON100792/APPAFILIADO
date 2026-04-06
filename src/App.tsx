@@ -2079,6 +2079,7 @@ const App: React.FC = () => {
                 initialStoreReady={storeReady}
                 onStoreConfigured={handleStoreConfigured}
                 onProceed={() => setStep('agents_scouting')}
+                onBack={() => setStep('home')}
               />
             </motion.div>
           )}
@@ -2240,6 +2241,7 @@ const App: React.FC = () => {
                   initialStoreReady={storeReady}
                   onStoreConfigured={handleStoreConfigured}
                   onProceed={() => setStep('onboarding_filtering')}
+                  onBack={() => setStep('onboarding_config')}
                 />
               </div>
             </motion.div>
