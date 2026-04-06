@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Zap, ArrowUpRight, Sparkles } from 'lucide-react';
+import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 interface BioItem {
@@ -194,6 +194,13 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       )}
 
       <div className="max-w-md mx-auto pt-16 px-6 relative z-10" style={{ paddingTop: 'calc(4rem + var(--safe-top))' }}>
+        
+        <button
+          onClick={() => window.location.href = '/'}
+          className="fixed top-4 left-4 z-50 p-3 rounded-full bg-slate-900/80 backdrop-blur-md border border-white/10 text-white hover:bg-slate-800/80 transition-all"
+        >
+          <ArrowLeft size={20} />
+        </button>
         
         {/* Profile Image */}
         {settings.profile_image && (
