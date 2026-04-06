@@ -350,12 +350,10 @@ export const BioManager: React.FC<{
               <div className="flex flex-col" style={{ minHeight: '100dvh', paddingTop: 'max(16px, env(safe-area-inset-top))', paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
               {/* Header do Painel */}
               <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setShowCustomizer(false)} className="flex items-center gap-1 text-slate-400 hover:text-white transition-colors text-[10px] font-black uppercase">
-                    <ArrowLeft size={14} />
-                    Voltar
-                  </button>
-                </div>
+                <button onClick={() => setShowCustomizer(false)} className="flex items-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg font-bold text-xs uppercase">
+                  <ArrowLeft size={14} />
+                  Voltar
+                </button>
                 <button onClick={() => setShowCustomizer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white transition-colors shrink-0">
                   ✕
                 </button>
