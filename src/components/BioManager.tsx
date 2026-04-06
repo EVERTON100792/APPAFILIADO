@@ -189,15 +189,7 @@ export const BioManager: React.FC<{
         data: { store_settings: merged }
       });
       if (error) throw error;
-      
-       const { error: upsertError } = await supabase.from('bio_store_settings').upsert({
-         user_id: storeSlug,
-         ...merged,
-         updated_at: new Date().toISOString()
-       }, { onConflict: 'user_id' });
        
-       if (upsertError) throw upsertError;
-      
       setSettings(merged);
       setPreviewSettings(merged);
       showToast('✨ Personalização salva!');
