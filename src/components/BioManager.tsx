@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User, ArrowLeft
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -573,6 +573,14 @@ export const BioManager: React.FC<{
       >
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-[80px]" />
         
+        <button
+          onClick={() => window.open(`/?loja=${storeSlug}`, '_blank')}
+          className="absolute top-6 left-6 z-50 flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:border-emerald-500/50 rounded-xl text-slate-400 hover:text-emerald-400 transition-all text-[10px] font-black uppercase tracking-widest"
+        >
+          <ArrowLeft size={16} />
+          Voltar à Loja
+        </button>
+
           <div className="flex items-center justify-between flex-wrap gap-6 relative z-10">
             <div className="flex items-center space-x-4 space-y-2 flex-wrap">
               <div className="space-y-1 flex-1">
