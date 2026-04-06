@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User, ArrowLeft
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -351,8 +351,10 @@ export const BioManager: React.FC<{
               {/* Header do Painel */}
               <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Preview ao Vivo</span>
+                  <button onClick={() => setShowCustomizer(false)} className="flex items-center gap-1 text-slate-400 hover:text-white transition-colors text-[10px] font-black uppercase">
+                    <ArrowLeft size={14} />
+                    Voltar
+                  </button>
                 </div>
                 <button onClick={() => setShowCustomizer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white transition-colors shrink-0">
                   ✕
