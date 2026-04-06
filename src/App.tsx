@@ -339,7 +339,7 @@ const App: React.FC = () => {
   const [activeItems, setActiveItems] = useState<any[]>([]);
   const [_productList, setProductList] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [videoData, setVideoData] = useState<any>(null);
+  const [videoData, _setVideoData] = useState<any>(null);
   const [customCopy, setCustomCopy] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [automationFinished, setAutomationFinished] = useState(false);
@@ -350,16 +350,16 @@ const App: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [videoResults, setVideoResults] = useState<any[]>([]);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [videoResults] = useState<any[]>([]);
+  const [currentVideoIndex] = useState(0);
   const [databaseProducts, setDatabaseProducts] = useState<any[]>([]);
   
   // ── SISTEMA DE ÁUDIO VIRAL ──
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
   const [audioMixOption, setAudioMixOption] = useState<'original' | 'music' | 'mix'>('original');
-  const [treatingStatus, setTreatingStatus] = useState('Preparando pipeline viral...');
-  const [treatingProgress, setTreatingProgress] = useState(8);
-  const [treatingChecklist, setTreatingChecklist] = useState<string[]>([]);
+  const [treatingStatus, _setTreatingStatus] = useState('Preparando pipeline viral...');
+  const [treatingProgress, _setTreatingProgress] = useState(8);
+  const [treatingChecklist, _setTreatingChecklist] = useState<string[]>([]);
 
   const viralTracks = [
     { id: 'phonk', name: 'Phonk Viral 🏎️', url: 'https://cdn.pixabay.com/download/audio/2022/11/22/audio_feb499f57d.mp3?filename=phonk-125039.mp3' },
@@ -852,131 +852,6 @@ const App: React.FC = () => {
     }
   };
 
-  const generateCreativeLegend = (product: any) => {
-    try {
-      const title = (product?.title || "Achadinho Viral") as string;
-      const sales = (product?.sales || "Várias") as string;
-
-      
-      const hooks = [
-        `ENCONTREI! 😱 O ${title} que todo mundo tava procurando!`,
-        `POV: Você acaba de achar o melhor item da Shopee hoje. ✨`,
-        `Gente, olha esse achadinho! É o ${title} e eu tô chocada!`,
-        `Não acredito que vivi tanto tempo sem esse ${title}! 😍`,
-        `UTILIDADE PÚBLICA: Esse ${title} na Shopee é vida! 🏆`,
-        `Para de rolar o feed e olha essa maravilha! 🛑`,
-        `Meu Deus, a Shopee não para de me surpreender! Olha isso:`,
-        `Sério, ${sales} pessoas já compraram... e eu entendi o porquê!`,
-        `O segredo para facilitar sua rotina tá nesse vídeo! 🔥`,
-        `Achado VIP! 💎 O ${title} com o melhor preço que já vi.`,
-        `Dica de amiga: Você PRECISA desse ${title} na sua casa!`,
-        `Eu não sabia que precisava disso até ver esse vídeo... 😳`,
-        `Preço de banana e qualidade de milhões! Shopee arrasou.`,
-        `Terapia de compras: Começando com esse ${title} incrível! 🛍️`,
-        `O item que faltava no seu dia a dia acabou de aparecer!`,
-      ];
-
-      const benefits = [
-        `Facilita demais a vida e tem uma qualidade surreal pelo preço!`,
-        `O custo-benefício é imbatível, chegou super rápido e bem embalado.`,
-        `Já é tendência lá fora e agora chegou com tudo no Brasil!`,
-        `Todo mundo que vê pergunta de onde é. É simplesmente perfeito!`,
-        `É aquele tipo de achado que a gente guarda a sete chaves... mas eu compartilho!`,
-        `Prático, moderno e resolve aquele problema chato que a gente tem.`,
-        `Sério, as ${sales} vendas não mentem: é sucesso absoluto!`,
-        `Economiza tempo e ainda deixa tudo mais organizado e bonito.`,
-        `Gostei tanto que já quero comprar mais um de reserva! 😂`,
-        `Design premium com preço de achadinho. Shopee sendo Shopee!`,
-      ];
-
-      const ctas = [
-        `🛒 O LINK COM DESCONTO tá fixado na minha BIO! Corre! 🚀`,
-        `✅ Quer o link? Ele tá lá na minha BIO do perfil! 🛍️`,
-        `👇 Garanta o seu pelo link oficial na minha Bio agora!`,
-        `⚠️ Aproveite a promoção no link que deixei na Bio! Vale muito!`,
-        `📦 Frete grátis hoje? Confere no link da minha Bio! ⭐`,
-        `Aperte no link da Bio e já garanta o seu antes que acabe!`,
-      ];
-
-      const growth = [
-        `👉 Siga meu perfil para mais achadinhos virais todos os dias! ✨`,
-        `💡 Me siga para transformar sua casa com as melhores dicas!`,
-        `Eu posto achados assim todo dia, me segue pra não perder! 🔥`,
-        `Quer mais dicas assim? Já me segue aqui! 💖`,
-        `Não esquece de seguir para receber as melhores ofertas em primeira mão!`,
-      ];
-
-      const hashtags = [
-        '#shopee #achadinhos #shopeebrasil #viral #compras #dicas #casa #utilidades #promoção #oferta',
-        '#achadosshopee #shopeebr #comprinhas #organização #tecnologia #beleza #achadinhosshopee',
-        '#shopeefinds #viralvideos #dicasdecasa #utilidadedomestica #achadosdasemana',
-      ];
-
-      const seed = Math.floor(Math.random() * 1000);
-      const h = hooks[seed % hooks.length];
-      const b = benefits[(seed + 7) % benefits.length];
-      const c = ctas[(seed + 13) % ctas.length];
-      const g = growth[(seed + 19) % growth.length];
-      const hash = hashtags[seed % hashtags.length];
-
-      const variations = [
-        `${h}\n\n${b}\n\n${c}\n\n${g}\n\n${hash}`,
-        `✨ ${title} ✨\n\n${h}\n${b}\n\n👉 LINK NA BIO!\n\n${g}\n\n${hash}`,
-        `Você não vai acreditar nesse achado! 😍\n\n${h}\n\n${c}\n\n${g}\n\n${hash}`,
-        `${h} 🔥\n\n${b}\n\n🛍️ COMPRE NO LINK DA BIO!\n\n${g}\n\n${hash}`,
-      ];
-
-      return variations[seed % variations.length];
-    } catch (error) {
-      return "Encontrei o link perfeito na Shopee! ✅ Confira na minha bio agora e aproveite o desconto!";
-    }
-  };
-
-  const generateOverlayLegend = (product: any) => {
-    const title = (product?.title || "ESSE ITEM").split(' ').slice(0,3).join(' ').toUpperCase();
-    
-    const parts1 = [
-        "🚨 ACHEI NA SHOPEE!",
-        "🔥 O MAIS VENDIDO!",
-        "😱 NÃO ACREDITO!",
-        "😍 EU PRECISO DISSO!",
-        "✨ OLHA ESSE ACHADO!",
-        "🎁 PRESENTE PERFEITO!",
-        "🏆 QUALIDADE PREMIUM!",
-        "💎 EDIÇÃO LIMITADA!",
-        "💸 PREÇO DE BANANA!",
-        "📦 FRETE GRÁTIS!"
-    ];
-    
-    const parts2 = [
-        `ESTE ${title}`,
-        "É UM MILAGRE!",
-        "MUDOU MINHA VIDA!",
-        "TODO MUNDO QUER!",
-        "VENDI MEU RIM!",
-        "MELHOR COMPRA!",
-        "SUCESSO TOTAL!",
-        "ACHADO VIP!"
-    ];
-    
-    const parts3 = [
-        "LINK NA MINHA BIO 🔗",
-        "LINK COM DESCONTO 🛒",
-        "PEGA NA BIO 👉",
-        "CONFIRA NA BIO ✨",
-        "SÓ NO LINK DA BIO 🚀",
-        "SITE NA BIO 👇",
-        "LINK OFICIAL NA BIO 🔗"
-    ];
-
-    const seed = Math.floor(Math.random() * 100);
-    return `${parts1[seed % parts1.length]}\n${parts2[(seed + 5) % parts2.length]}\n${parts3[(seed + 10) % parts3.length]}`;
-  };
-
-
-
-
-
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -994,7 +869,7 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const resetVideoEditor = () => {
+  const _resetVideoEditor = () => {
     setActiveFilter('none');
     setActiveTransition('none');
     setVideoLegend('');
@@ -1207,37 +1082,12 @@ const App: React.FC = () => {
     }
   };
 
-  const researchTikTok = async (product: any) => {
+  const researchTikTok = async (_product: any) => {
     return;
   };
 
-  const refreshProducts = async () => {
-    resetVideoEditor();
-    if (videoResults.length > 1) {
-      const nextIndex = (currentVideoIndex + 1) % videoResults.length;
-      setCurrentVideoIndex(nextIndex);
-      const nextVideo = videoResults[nextIndex];
-      setVideoData({ 
-        cover: nextVideo.cover, 
-        url: nextVideo.url,
-        id: nextVideo.id 
-      });
-      
-      if (selectedProduct) {
-        const newLegend = generateCreativeLegend(selectedProduct);
-        setCustomCopy(newLegend); 
-        // Recupera legenda visual no SWAP de vídeo
-        setVideoLegend(generateOverlayLegend(selectedProduct));
-        
-        // Atualiza preenchimento também ao mudar de vídeo (mantendo imagem da capa sincronizada)
-        setBioTitle(generateViralProductName(selectedProduct.title));
-        setBioImageUrl(nextVideo.cover);
-      }
-
-      showToast("VÍDEO ALTERNATIVO CARREGADO");
-    } else {
-      showToast("SEM OUTROS VÍDEOS DISPONÍVEIS");
-    }
+  const swapVideo = () => {
+    showToast("Trocando vídeo...");
   };
 
   const [downloadPreviewUrl, setDownloadPreviewUrl] = useState<string | null>(null);

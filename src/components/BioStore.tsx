@@ -141,7 +141,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const { data: storeData, error } = await supabase
+        const { data: storeData } = await supabase
           .from('bio_store')
           .select('settings')
           .eq('user_id', userId)
