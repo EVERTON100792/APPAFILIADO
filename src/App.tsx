@@ -1119,6 +1119,7 @@ const App: React.FC = () => {
     researchTikTok(customProduct);
     setCustomLink('');
     await saveScoutedProducts([customProduct]);
+    setStep('list');
   };
 
   const refreshProducts = async () => {
