@@ -339,7 +339,7 @@ const App: React.FC = () => {
   const [activeItems, setActiveItems] = useState<any[]>([]);
   const [_productList, setProductList] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [videoData, _setVideoData] = useState<any>(null);
+  const [videoData, setVideoData] = useState<any>(null);
   const [customCopy, setCustomCopy] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [automationFinished, setAutomationFinished] = useState(false);
@@ -357,9 +357,9 @@ const App: React.FC = () => {
   // ── SISTEMA DE ÁUDIO VIRAL ──
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
   const [audioMixOption, setAudioMixOption] = useState<'original' | 'music' | 'mix'>('original');
-  const [treatingStatus, _setTreatingStatus] = useState('Preparando pipeline viral...');
-  const [treatingProgress, _setTreatingProgress] = useState(8);
-  const [treatingChecklist, _setTreatingChecklist] = useState<string[]>([]);
+  const [treatingStatus, setTreatingStatus] = useState('Preparando pipeline viral...');
+  const [treatingProgress, setTreatingProgress] = useState(8);
+  const [treatingChecklist, setTreatingChecklist] = useState<string[]>([]);
 
   const viralTracks = [
     { id: 'phonk', name: 'Phonk Viral 🏎️', url: 'https://cdn.pixabay.com/download/audio/2022/11/22/audio_feb499f57d.mp3?filename=phonk-125039.mp3' },
@@ -869,7 +869,7 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const _resetVideoEditor = () => {
+  const resetVideoEditor = () => {
     setActiveFilter('none');
     setActiveTransition('none');
     setVideoLegend('');
@@ -1082,8 +1082,225 @@ const App: React.FC = () => {
     }
   };
 
-  const researchTikTok = async (_product: any) => {
-    return;
+  const researchTikTok = async (product: any) => {
+    if (trialExpired && !hasActivePro) {
+      showToast('SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.');
+      return;
+    }
+    resetVideoEditor();
+    setStep('treating');
+    setTreatingStatus('Mapeando sinais de demanda e criativos virais...');
+    setTreatingProgress(12);
+    setTreatingChecklist([
+      'Lendo palavras-chave do produto',
+      'Consultando tendencias TikTok + Shopee',
+      'Preparando filtros de relevancia',
+    ]);
+    try {
+      const coreQuery = getSmartSearchName(product.query || product.title || '');
+      const coreWords = coreQuery.split(' ').filter(w => w.length > 2);
+      const productNiche = product.niche || activeNiche;
+      
+      if (coreWords.length === 0) throw new Error('Nome do produto incompleto');
+
+      const nicheKeywords: Record<string, { positive: string[], negative: string[] }> = {
+        'Cozinha': { 
+          positive: ['cozinha', 'comida', 'chef', 'receita', 'utilidade', 'casa', 'lar'],
+          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids', 'fitness'] 
+        },
+        'Tecnologia': { 
+          positive: ['tech', 'gadget', 'unboxing', 'setup', 'pc', 'smartphone', 'eletronico'],
+          negative: ['cozinha', 'panela', 'maquiagem', 'bebe', 'infantil', 'pet'] 
+        },
+        'Beleza': { 
+          positive: ['make', 'maquiagem', 'skin', 'cabelo', 'beleza', 'beauty', 'tutorial'],
+          negative: ['ferramenta', 'carro', 'moto', 'gamer', 'tecnologia', 'comida'] 
+        },
+        'Decoração': { 
+          positive: ['casa', 'decor', 'quarto', 'sala', 'iluminação', 'led', 'reforma'],
+          negative: ['maquiagem', 'carro', 'pet', 'comida'] 
+        },
+        'Pet': { 
+          positive: ['pet', 'gato', 'cachorro', 'dog', 'cat', 'animal', 'fofo'],
+          negative: ['maquiagem', 'cozinha', 'gamer'] 
+        }
+      };
+
+      const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
+
+      const searchKeywords = coreQuery;
+      
+      const strategies = [
+        { query: searchKeywords, weight: 3.0 },
+        { query: `${searchKeywords} br`, weight: 2.5 },
+        { query: `${searchKeywords} shopee`, weight: 2.0 },
+        { query: `${searchKeywords} tiktok`, weight: 1.5 },
+      ];
+
+      const ptBrKeywords = ['achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 'promo', 'loja', 'casa', 'cozinha', 'comprinhas', 'melhor', 'perfeito', 'utilidades', 'organização', 'organizando', 'lar'];
+      const ptBrMustHave = ['shopee', 'brasil', 'achadinho', 'comprinha', 'link', 'bio', 'utilidade', 'loja', 'br', 'achei', 'achado'];
+
+      let allVideos: any[] = [];
+      setTreatingStatus('Consultando fontes e reunindo videos promissores...');
+      setTreatingProgress(28);
+      
+      for (const strategy of strategies) {
+        const q = encodeURIComponent(strategy.query);
+        try {
+          const resp = await fetch(
+            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
+            { signal: AbortSignal.timeout(10000) }
+          );
+          const json = await resp.json();
+          if (json.data?.videos?.length > 0) {
+            allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: strategy.weight }))];
+          }
+        } catch {}
+      }
+
+      if (allVideos.length === 0) {
+        setTreatingStatus('Buscando em fontes alternativas...');
+        setTreatingProgress(40);
+        const fallbackQueries = [coreWords[0], `${coreWords[0]} viral`];
+        for (const fallbackQuery of fallbackQueries) {
+          const q = encodeURIComponent(fallbackQuery);
+          try {
+            const resp = await fetch(
+              `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
+              { signal: AbortSignal.timeout(10000) }
+            );
+            const json = await resp.json();
+            if (json.data?.videos?.length > 0) {
+              allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: 1.0 }))];
+            }
+          } catch {}
+        }
+      }
+
+      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
+      
+      setTreatingStatus('Validando idioma, qualidade e engajamento real...');
+      setTreatingProgress(56);
+      setTreatingChecklist([
+        'Filtrando resultados em português do Brasil',
+        'Removendo videos com baixa relevância',
+        'Priorizando sinais de conversão e qualidade HD',
+      ]);
+
+      const scored = allVideos
+        .filter((v: any) => (v.play || v.wmplay) && v.duration > 3 && v.duration < 180)
+        .map((v: any) => {
+          const title = (v.title || '').toLowerCase();
+          const author = (v.author?.nickname || '').toLowerCase();
+          const music = (v.music_info?.title || '').toLowerCase();
+          const text = `${title} ${author} ${music}`;
+          
+          let score = 100;
+
+          let matchCount = 0;
+          coreWords.forEach((word) => {
+            if (text.includes(word.toLowerCase())) matchCount++;
+          });
+
+          if (matchCount >= 2) score += 300; 
+          else if (matchCount === 1) score += 150;
+
+          const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
+          const hasMustHave = ptBrMustHave.some(w => text.includes(w));
+
+          if (hasMustHave) score += 300;
+          if (hasPtBrKeywords) score += 100;
+          if (!hasPtBrKeywords && !hasMustHave) score -= 50;
+
+          if (v.width && v.width >= 1080) score += 150;
+          else if (v.width && v.width >= 720) score += 80;
+
+          const views = v.play_count || v.play || 0;
+          const diggs = v.digg_count || 0;
+          const comments = v.comment_count || 0;
+          const shares = v.share_count || 0;
+          
+          const engagementRatio = views > 0 ? ((diggs + (comments * 4) + (shares * 6)) / views) * 100 : 0;
+
+          if (engagementRatio > 18) score += 400; 
+          else if (engagementRatio > 12) score += 250;
+          else if (engagementRatio > 6) score += 100;
+
+          if (views > 500000) score += 150;
+          else if (views > 100000) score += 80;
+          else if (views > 50000) score += 40;
+
+          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 15; });
+          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 80; });
+
+          score *= (v._queryWeight || 1.0);
+          
+          const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
+          const finalUrl = v.play || v.wmplay;
+          const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(finalUrl)}`;
+
+          return {
+            id: v.video_id,
+            url: proxiedUrl,
+            cover: v.cover,
+            title: v.title,
+            duration: v.duration,
+            author: v.author?.nickname || 'Criador',
+            originalUrl: v.play || v.wmplay,
+            _score: score
+          };
+        })
+        .filter((v: any) => v._score > 50)
+        .sort((a: any, b: any) => b._score - a._score);
+
+      if (scored.length === 0) throw new Error('Nenhum vídeo adequado encontrado');
+
+      setTreatingStatus('Processando melhor criativo...');
+      setTreatingProgress(65);
+      setTreatingChecklist(prev => [...prev, 'Selecionando vídeo de maior impacto']);
+
+      const bestVideo = scored[0];
+      const videoUrl = bestVideo.originalUrl;
+
+      setTreatingStatus('Baixando assets visuais...');
+      setTreatingProgress(85);
+      setTreatingChecklist(prev => [...prev, 'Preparando ambiente de edição']);
+
+      const videoBlob = await fetch(videoUrl).then(r => r.blob()).catch(() => null);
+      
+      if (!videoBlob) {
+        throw new Error('Falha ao baixar video');
+      }
+
+      const videoObjectUrl = URL.createObjectURL(videoBlob);
+      
+      setVideoData({
+        id: bestVideo.id,
+        url: videoObjectUrl,
+        thumbnail: bestVideo.cover || '',
+        title: bestVideo.title || product.title,
+        author: bestVideo.author,
+        stats: { 
+          likes: bestVideo.digg_count || 0, 
+          shares: bestVideo.share_count || 0, 
+          comments: bestVideo.comment_count || 0 
+        }
+      });
+
+      setTreatingStatus('Finalizando pipeline viral...');
+      setTreatingProgress(100);
+      setTreatingChecklist(prev => [...prev, 'Pronto para editar']);
+      
+      await new Promise(r => setTimeout(r, 800));
+      
+      setStep('ready');
+      showToast('VIDEO SELECIONADO! 🎬');
+      
+    } catch (err: any) {
+      console.error('Erro ao buscar TikTok:', err);
+      showToast('TENTE NOVAMENTE COM OUTRO PRODUTO');
+      setStep('list');
+    }
   };
 
   const swapVideo = () => {
