@@ -185,20 +185,10 @@ export const BioManager: React.FC<{
     setSavingSettings(true);
     try {
       const merged = { ...previewSettings, ...newSettings };
-      
-      const { error: upsertError } = await supabase.from('bio_store').upsert({
-        user_id: storeSlug,
-        settings: merged,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id });
-      
-      if (upsertError) {
-        console.warn('Tabela bio_store não suporta settings, tentando user_metadata:', upsertError);
-        const { error } = await supabase.auth.updateUser({
-          data: { store_settings: merged }
-        });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.updateUser({
+        data: { store_settings: merged }
+      });
+      if (error) throw error;
        
       setSettings(merged);
       setPreviewSettings(merged);

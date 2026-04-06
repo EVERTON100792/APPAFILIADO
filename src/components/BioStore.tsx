@@ -141,9 +141,19 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.user_metadata?.store_settings) {
-          setSettings(prev => ({ ...prev, ...session.user.user_metadata.store_settings }));
+        const { data: storeData, error } = await supabase
+          .from('bio_store')
+          .select('settings')
+          .eq('user_id', userId)
+          .single();
+        
+        if (storeData?.settings) {
+          setSettings(prev => ({ ...prev, ...storeData.settings }));
+        } else {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user?.user_metadata?.store_settings) {
+            setSettings(prev => ({ ...prev, ...session.user.user_metadata.store_settings }));
+          }
         }
       } catch (e) {
         console.warn('Erro ao carregar settings da vitrine:', e);
