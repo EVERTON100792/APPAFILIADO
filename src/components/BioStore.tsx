@@ -77,17 +77,65 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const cleanId = userId.trim().toLowerCase();
+    console.log('[BioStore] Loading for user_id:', cleanId);
+    setError(null);
     
-    supabase.from('bio_store').select('*')
-      .eq('user_id', cleanId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-         if (data) setItems(data);
-         setLoading(false);
+    const fetchData = async () => {
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('bio_store')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      const filteredData = itemsData?.filter(item => 
+        item.user_id?.toLowerCase() === cleanId
+      ) || [];
+      
+      let settingsData: any = null;
+      try {
+        const { data } = await supabase
+          .from('bio_store_settings')
+          .select('*')
+          .eq('user_id', cleanId)
+          .maybeSingle();
+        settingsData = data;
+      } catch (e) {
+        console.log('[BioStore] Table bio_store_settings not available yet');
+      }
+      
+      console.log('[BioStore] Fetch result:', { 
+        items: filteredData.length, 
+        settings: settingsData,
+        cleanId 
       });
+      
+      if (itemsError) {
+        setError(itemsError.message);
+      }
+      setItems(filteredData);
+      
+      if (settingsData) {
+        setSettings(prev => ({ ...prev, ...settingsData }));
+      }
+      setLoading(false);
+    };
+    
+    fetchData();
+
+    const pollInterval = setInterval(fetchData, 3000);
+
+    const channel = supabase
+      .channel('bio_store_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bio_store' }, () => fetchData())
+      .subscribe();
+
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -102,6 +150,9 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       }
     };
     loadSettings();
+
+    const settingsInterval = setInterval(loadSettings, 5000);
+    return () => clearInterval(settingsInterval);
   }, [userId]);
 
   const fontClass = fontMap[settings.font_style] || 'font-sans';
@@ -115,6 +166,18 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
         <div className="animate-pulse flex flex-col items-center gap-4" style={{ color: themeColor }}>
           <div className="w-12 h-12 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: themeColor, borderTopColor: 'transparent' }} />
           <span className="font-black tracking-[0.3em] text-[10px] uppercase">Sincronizando Vitrine...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: bgColor }}>
+        <div className="text-center p-8">
+          <p className="text-red-500 font-bold mb-2">Erro ao carregar:</p>
+          <p className="text-slate-400 text-sm">{error}</p>
+          <p className="text-slate-500 text-xs mt-4">userId: {userId}</p>
         </div>
       </div>
     );
@@ -290,7 +353,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
           </div>
         )}
         
-        {items.length === 0 && (
+        {items.length === 0 && !loading && (
            <motion.div 
              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
              className="text-center py-20 border-dashed opacity-40"
@@ -299,6 +362,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
              <ShoppingBag size={48} className="mx-auto mb-4" style={{ color: themeColor }} />
              <p className="font-black text-[10px] uppercase tracking-[0.2em]">Vitrine Vazia</p>
              <p className="text-[10px] text-slate-500 mt-2">Aguardando curadoria de produtos...</p>
+             <p className="text-[8px] text-slate-600 mt-4 font-mono">userId: {userId}</p>
            </motion.div>
         )}
         

@@ -112,23 +112,27 @@ export const BioManager: React.FC<{
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const profileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!user?.id) {
+      showToast('Erro: Usuário não autenticado', 'error');
+      return;
+    }
     setUploadingProfile(true);
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('uploads')
-        .upload(`profiles/${user?.id}/${fileName}`, file);
+        .from('product-images')
+        .upload(`profiles/${user.id}/${fileName}`, file);
       if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(uploadData.path);
+      const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(uploadData.path);
       updatePreview({ profile_image: publicUrl });
       showToast('Foto de perfil atualizada!', 'success');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao subir foto:', err);
-      showToast('Erro ao subir foto', 'error');
+      showToast('Erro ao subir foto: ' + (err?.message || 'Verifique o bucket storage'), 'error');
     } finally {
       setUploadingProfile(false);
     }
@@ -185,6 +189,15 @@ export const BioManager: React.FC<{
         data: { store_settings: merged }
       });
       if (error) throw error;
+      
+       const { error: upsertError } = await supabase.from('bio_store_settings').upsert({
+         user_id: storeSlug,
+         ...merged,
+         updated_at: new Date().toISOString()
+       }, { onConflict: 'user_id' });
+       
+       if (upsertError) throw upsertError;
+      
       setSettings(merged);
       setPreviewSettings(merged);
       showToast('✨ Personalização salva!');
@@ -370,7 +383,15 @@ export const BioManager: React.FC<{
                     </div>
                   )}
                   <div className={previewSettings.layout_type === 'list' ? 'space-y-1.5' : 'grid grid-cols-2 gap-1.5'}>
-                    {[1,2,3,4].map(i => (
+                    {items.length > 0 ? items.slice(0, 4).map((item: any) => (
+                      <div key={item.id} className="aspect-square rounded-lg overflow-hidden flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.06)`, borderRadius: previewSettings.card_radius }}>
+                        {item.image_url ? (
+                          <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <ShoppingBag size={14} className="opacity-20" style={{ color: previewSettings.theme_color }} />
+                        )}
+                      </div>
+                    )) : [1,2,3,4].map(i => (
                       <div key={i} className="aspect-square rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.06)`, borderRadius: previewSettings.card_radius }}>
                         <ShoppingBag size={14} className="opacity-20" style={{ color: previewSettings.theme_color }} />
                       </div>
@@ -551,36 +572,38 @@ export const BioManager: React.FC<{
       >
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-[80px]" />
         
-        <div className="flex items-center justify-between flex-wrap gap-6 relative z-10">
-          <div className="space-y-1">
-            <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tighter">
-              <MousePointerClick className="text-emerald-500" size={32} /> LOJA LINK NA <span className="text-emerald-500 italic">BIO</span>
-            </h2>
-            <p className="text-slate-500 text-[10px] uppercase font-black tracking-[0.4em]">Dashboard de Afiliados Pro</p>
-          </div>
-          <div className="flex items-center gap-4">
-             <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-2xl flex items-center gap-3">
-                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_#10b981]" />
-                <span className="text-emerald-400 text-[11px] font-black uppercase tracking-widest">{items.length} ITENS</span>
-             </div>
-             <motion.a 
-                href={`/?loja=${storeSlug}`} target="_blank"
-                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                className="bg-white/5 border border-white/10 hover:border-emerald-500/50 p-3 rounded-2xl transition-all group"
-             >
-                <ExternalLink size={18} className="text-slate-400 group-hover:text-emerald-400" />
-             </motion.a>
-             {user && (
-               <motion.button
+          <div className="flex items-center justify-between flex-wrap gap-6 relative z-10">
+            <div className="flex items-center space-x-4 space-y-2 flex-wrap">
+              <div className="space-y-1 flex-1">
+                <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tighter">
+                  <MousePointerClick className="text-emerald-500" size={32} /> LOJA LINK NA <span className="text-emerald-500 italic">BIO</span>
+                </h2>
+                <p className="text-slate-500 text-[10px] uppercase font-black tracking-[0.4em]">Dashboard de Afiliados Pro</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+               <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-2xl flex items-center gap-3">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_#10b981]" />
+                  <span className="text-emerald-400 text-[11px] font-black uppercase tracking-widest">{items.length} ITENS</span>
+               </div>
+               <motion.a 
+                 href={`/?loja=${storeSlug}`} target="_blank"
                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                 onClick={() => setShowCustomizer(!showCustomizer)}
-                 className={`p-3 rounded-2xl transition-all border ${showCustomizer ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 hover:border-emerald-500/50 text-slate-400 hover:text-emerald-400'}`}
-               >
-                 <Palette size={18} />
-               </motion.button>
-             )}
+                 className="bg-white/5 border border-white/10 hover:border-emerald-500/50 p-3 rounded-2xl transition-all group"
+              >
+                 <ExternalLink size={18} className="text-slate-400 group-hover:text-emerald-400" />
+              </motion.a>
+              {user && (
+                <motion.button
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowCustomizer(!showCustomizer)}
+                  className={`p-3 rounded-2xl transition-all border ${showCustomizer ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-white/5 border-white/10 hover:border-emerald-500/50 text-slate-400 hover:text-emerald-400'}`}
+                >
+                  <Palette size={18} />
+                </motion.button>
+              )}
+            </div>
           </div>
-        </div>
 
         {/* URL Personalizada */}
         <div className="bg-black/40 border border-white/5 rounded-[2rem] p-6 space-y-5 relative">
@@ -781,26 +804,26 @@ export const BioManager: React.FC<{
               </motion.div>
             ) : (
               <AnimatePresence>
-                {items.map((item, i) => (
-                  <motion.div key={item.id}
-                    initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                    transition={{ delay: i * 0.05 }}
-                    className="glass-acid p-4 flex items-center gap-5 group hover:border-emerald-500/30 transition-all duration-500 rounded-[2rem]">
+                 {items.map((item, i) => (
+                   <motion.div key={item.id}
+                     initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                     transition={{ delay: i * 0.05 }}
+                     className="glass-acid p-4 flex items-center gap-5 group hover:border-emerald-500/30 transition-all duration-500 rounded-[1.5rem]">
                     
-                    <div className="relative w-20 h-20 shrink-0">
-                      <img src={item.image_url || FALLBACK_THUMBNAIL} alt={item.title}
-                        className="w-full h-full rounded-2xl object-cover bg-black/50 border border-white/5"
-                        onError={(e) => { const img = e.currentTarget; if (img.src === FALLBACK_THUMBNAIL) return; img.src = FALLBACK_THUMBNAIL; }}
-                      />
-                      <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
-                    </div>
+                     <div className="relative w-16 h-16 shrink-0">
+                       <img src={item.image_url || FALLBACK_THUMBNAIL} alt={item.title}
+                         className="w-full h-full rounded-xl object-cover bg-black/50 border border-white/5"
+                         onError={(e) => { const img = e.currentTarget; if (img.src === FALLBACK_THUMBNAIL) return; img.src = FALLBACK_THUMBNAIL; }}
+                       />
+                       <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl" />
+                     </div>
 
                     <div className="flex-1 min-w-0 space-y-2">
                        <div className="flex items-center gap-2">
                          <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" />
                          <span className="text-emerald-500 text-[9px] font-black uppercase tracking-widest">Online</span>
                        </div>
-                       <h4 className="text-white font-bold text-sm leading-snug line-clamp-2 italic tracking-tight">{item.title}</h4>
+                        <h4 className="text-white font-bold text-xs leading-snug line-clamp-2 italic tracking-tight">{item.title}</h4>
                        <div className="flex items-center gap-3">
                          <a href={item.affiliate_link} target="_blank" rel="noopener noreferrer"
                            className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
