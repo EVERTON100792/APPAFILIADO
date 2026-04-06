@@ -1116,10 +1116,10 @@ const App: React.FC = () => {
     };
     
     setSelectedProduct(customProduct); 
+    setStep('list');
     researchTikTok(customProduct);
     setCustomLink('');
     await saveScoutedProducts([customProduct]);
-    setStep('list');
   };
 
   const refreshProducts = async () => {
