@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User, ArrowLeft
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -82,12 +82,11 @@ let toastCounter = 0;
 
 export const BioManager: React.FC<{
   onProceed?: () => void;
-  onBack?: () => void;
   initialStoreSlug?: string;
   initialStoreReady?: boolean;
   onStoreConfigured?: (slug: string) => void;
   user?: any;
-}> = ({ onProceed, onBack, initialStoreSlug = 'meu-link', initialStoreReady = false, onStoreConfigured, user }) => {
+}> = ({ onProceed, initialStoreSlug = 'meu-link', initialStoreReady = false, onStoreConfigured, user }) => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -571,16 +570,6 @@ export const BioManager: React.FC<{
         initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
         className="glass-acid p-8 flex flex-col gap-6 relative overflow-hidden"
       >
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="absolute top-6 left-6 z-50 flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:border-emerald-500/50 rounded-xl text-slate-400 hover:text-emerald-400 transition-all text-[10px] font-black uppercase tracking-widest"
-          >
-            <ArrowLeft size={16} />
-            Voltar
-          </button>
-        )}
-
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-[80px]" />
         
           <div className="flex items-center justify-between flex-wrap gap-6 relative z-10">

@@ -197,7 +197,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
         
         <div className="fixed top-4 left-4 z-50">
           <button
-            onClick={() => window.location.href = '/'}
+            onClick={() => window.location.href = '/?loja=personalizar'}
             className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider shadow-lg transition-all"
           >
             <ArrowLeft size={18} />

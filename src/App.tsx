@@ -133,8 +133,11 @@ function generateViralProductName(baseName: string): string {
 type Step = 'home' | 'scouting' | 'list' | 'ready' | 'treating' | 'automation' | 'history' | 'bio' | 'plans' | 'agents_scouting' | 'onboarding_start' | 'onboarding_config' | 'onboarding_filtering';
 
 const App: React.FC = () => {
-  const bioUserId = new URLSearchParams(window.location.search).get('loja');
-  if (bioUserId) return <BioStore userId={bioUserId} />;
+  const urlParam = new URLSearchParams(window.location.search).get('loja');
+  const bioUserId = urlParam;
+  
+  if (bioUserId && bioUserId !== 'personalizar') return <BioStore userId={bioUserId} />;
+  if (bioUserId === 'personalizar') return <BioManager user={null} initialStoreSlug="meu-link" initialStoreReady={false} onStoreConfigured={() => {}} onProceed={() => window.location.href = '/'} />;
 
   const [storeSlug, setStoreSlug] = useState('meu-link');
   const [storeReady, setStoreReady] = useState(false);
@@ -2079,7 +2082,6 @@ const App: React.FC = () => {
                 initialStoreReady={storeReady}
                 onStoreConfigured={handleStoreConfigured}
                 onProceed={() => setStep('agents_scouting')}
-                onBack={() => setStep('home')}
               />
             </motion.div>
           )}
@@ -2241,7 +2243,6 @@ const App: React.FC = () => {
                   initialStoreReady={storeReady}
                   onStoreConfigured={handleStoreConfigured}
                   onProceed={() => setStep('onboarding_filtering')}
-                  onBack={() => setStep('onboarding_config')}
                 />
               </div>
             </motion.div>
