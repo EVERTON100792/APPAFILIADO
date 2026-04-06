@@ -2316,22 +2316,7 @@ const App: React.FC = () => {
             }} />
           )}
 
-          {step === 'scouting' && (
-            <motion.div key="scouting" initial={{opacity:0}} animate={{opacity:1}} className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-10 space-y-8">
-              <div className="relative">
-                <RefreshCcw size={64} className="text-accent animate-spin" />
-                <motion.div 
-                  animate={{ scale: [1, 1.8], opacity: [1, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  className="absolute inset-0 border-2 border-accent rounded-full"
-                />
-              </div>
-              <div className="text-center space-y-2">
-                <p className="text-lg font-black italic tracking-widest text-accent uppercase animate-pulse">Escaner Ativo</p>
-                <p className="text-[10px] text-dim uppercase tracking-[0.3em] font-bold">Mapeando Lucratividade Real...</p>
-              </div>
-            </motion.div>
-          )}
+          {/* Tela de scouting removida - redireciona direto para list */}
 
           {step === 'list' && (
             <motion.div 
