@@ -129,7 +129,7 @@ body {
   align-items: center;
   justify-content: space-around;
   padding: 0 1.5rem;
-  z-index: 50;
+  z-index: 900;
   padding-bottom: var(--safe-bottom);
 }
 

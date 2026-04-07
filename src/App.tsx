@@ -160,7 +160,7 @@ const App: React.FC = () => {
   const [trialExpired, setTrialExpired] = useState(false);
   const [trialRemaining, setTrialRemaining] = useState<number | null>(null);
   const [user, setUser] = useState<any>(null);
-  const hasActivePro = Boolean(isPro && (trialRemaining ?? 0) > 0);
+  const hasActivePro = isPro || (trialRemaining !== null && trialRemaining > 0);
   const isProExpiringSoon = Boolean(hasActivePro && trialRemaining !== null && trialRemaining <= 3 * 24 * 60 * 60 * 1000);
 
   const [activeFilter, setActiveFilter] = useState('none');
@@ -332,6 +332,10 @@ const App: React.FC = () => {
     if (type === 'shopee') {
       return 'https://affiliate.shopee.com.br/offer/product_offer';
     } else {
+      // No mobile, abrimos o app do TikTok diretamente para evitar o TikTok Studio web.
+      if (isMobile) {
+        return 'snssdk1128://feed'; 
+      }
       return 'https://www.tiktok.com/tiktokstudio/upload?from=creator_center';
     }
   };
@@ -1129,7 +1133,8 @@ const App: React.FC = () => {
     if (!customLink) return;
 
     setIsScanning(true);
-    let extractedName = customLink.trim();
+    try {
+      let extractedName = customLink.trim();
     let stringParseSuccess = false;
 
     // 1. Tenta tirar o nome da própria string se for um link completo da Shopee 
@@ -1196,12 +1201,16 @@ const App: React.FC = () => {
       url: customLink.includes('shopee.com') ? customLink : undefined // Preserva o link original se for Shopee
     };
     
-    setSelectedProduct(customProduct); 
-    setIsScanning(false);
-    setStep('list');
-    researchTikTok(customProduct);
-    setCustomLink('');
-    await saveScoutedProducts([customProduct]);
+      setSelectedProduct(customProduct); 
+      setStep('list');
+      void researchTikTok(customProduct);
+      setCustomLink('');
+      await saveScoutedProducts([customProduct]);
+    } catch (err: any) {
+      showToast(err.message || 'ERRO AO BUSCAR LINK');
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const refreshProducts = async () => {
@@ -1874,7 +1883,12 @@ const App: React.FC = () => {
 
     const openPublishingDestination = () => {
       const target = getPlatformUrl(selectedPlatform);
-      window.open(target, '_blank', 'noopener,noreferrer');
+      if (isMobile && selectedPlatform === 'tiktok') {
+        // No mobile o redirect via location.href é mais performático para links de app
+        window.location.assign(target);
+      } else {
+        window.open(target, '_blank', 'noopener,noreferrer');
+      }
     };
 
     const createMp4File = (blob: Blob) => {
@@ -3552,9 +3566,7 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {trialExpired && !isPro && <LockScreen />}
-      </AnimatePresence>
+      {/* LockScreen unificado é gerenciado próximo à bottom-nav para melhor controle de UX */}
 
       <AnimatePresence>
         {isCheckoutOpen && <CheckoutOverlay />}
