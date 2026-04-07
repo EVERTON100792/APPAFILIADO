@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User, ArrowLeft
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User, ArrowLeft, Share2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -300,6 +300,40 @@ export const BioManager: React.FC<{
       showToast('🗑️ Produto removido da loja.', 'info');
     } else {
       showToast('Erro ao remover produto.', 'error');
+    }
+  };
+
+  const handleShare = async (item: BioItem) => {
+    const shareTitle = `🔥 ${item.title.toUpperCase()} 🔥`;
+    const shareText = `Olha esse achadinho que encontrei! 😱\n\n✅ Qualidade Premium\n✅ Testado e Aprovado\n\n🛍️ COMPRE AQUI: ${item.affiliate_link}\n\nSiga meu perfil para mais achados! ✨`;
+
+    if (navigator.share) {
+      try {
+        const response = await fetch(item.image_url);
+        const blob = await response.blob();
+        const file = new File([blob], 'produto.jpg', { type: 'image/jpeg' });
+
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          files: [file],
+        });
+      } catch (err) {
+        try {
+          await navigator.share({
+            title: shareTitle,
+            text: shareText,
+            url: item.affiliate_link
+          });
+        } catch (shareErr) {
+          console.error('Share failed', shareErr);
+          const encodedText = encodeURIComponent(`${shareTitle}\n\n${shareText}`);
+          window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+        }
+      }
+    } else {
+      const encodedText = encodeURIComponent(`${shareTitle}\n\n${shareText}`);
+      window.open(`https://wa.me/?text=${encodedText}`, '_blank');
     }
   };
 
@@ -874,6 +908,10 @@ export const BioManager: React.FC<{
                            className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
                            <ExternalLink size={10} /> Ver na Shopee
                          </a>
+                         <button onClick={() => handleShare(item)}
+                           className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
+                           <Share2 size={10} /> Compartilhar
+                         </button>
                        </div>
                     </div>
 

@@ -118,22 +118,26 @@ function generateViralProductName(baseName: string): string {
   if (!clean) return baseName;
 
   const prefixes = [
-    'O FAMOSO', 'A INCRÍVEL', 'CHEGOU:', 'MAIS VENDIDO:', 'ACHADINHO:', 
-    'REVELADO:', 'VOCÊ PRECISA DISSO:', 'GENTE! OLHA ESTE', 'O SEGREDO DO LAR:', 
-    'O QUERIDINHO:', 'PRODUTO VIRAL:', 'A MELHOR COMPRA:', 'JÁ QUERIA UM:',
-    'ESSE É DIFERENTE:', 'VIROU FEBRE:', 'O MELHOR ACHADO:'
+    'O FAMOSO', 'A INCRÍVEL', 'CHEGOU!', 'MAIS VENDIDO 🏆', 'ACHADINHO DE HOJE 😱', 
+    'REVELADO!', 'VOCÊ PRECISA DISSO!', 'GENTE! OLHA ISSO', 'O SEGREDO DO LAR:', 
+    'O QUERIDINHO:', 'PRODUTO VIRAL 🔥', 'A MELHOR COMPRA:', 'JÁ QUERIA UM:',
+    'ESSE É DIFERENTE ✨', 'VIROU FEBRE!', 'O MELHOR ACHADO 💎', 'ISSO É GENIAL!',
+    'UTILIDADE PÚBLICA 🚨', 'MEU FAVORITO:', 'DICA DE AMIGA:', 'PROMOÇÃO RELÂMPAGO ⚡'
   ];
   
   const suffixes = [
-    '🔥', '✨', ' (DÁ UMA OLHADA! 😱)', ' (O PRIMEIRO É MELHOR)', ' (OFERTA RELÂMPAGO ⚡)', 
+    ' 🔥', ' ✨', ' (DÁ UMA OLHADA! 😱)', ' (O MELHOR QUE JÁ VI)', ' (OFERTA RELÂMPAGO ⚡)', 
     ' (VOCÊ VAI AMAR!)', ' [RECOMENDO MUITO]', ' ✨ MELHOR ACHADO DO DIA', ' 💎 QUALIDADE PREMIUM',
-    ' - SÉRIO, É PERFEITO!', ' (MELHOR QUE O ORIGINAL)', ' (ACHADO DE OURO)'
+    ' - SÉRIO, É PERFEITO!', ' (MELHOR QUE O ORIGINAL)', ' (ACHADO DE OURO)', ' ✅ TESTADO E APROVADO'
   ];
 
   const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
   const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
 
-  return `${prefix} ${clean.toUpperCase()}${suffix}`;
+  const fullName = `${prefix} ${clean.toUpperCase()}${suffix}`;
+  
+  // Garantir que não seja excessivamente longo mas que seja impactante
+  return fullName.length > 80 ? `${prefix} ${clean.toUpperCase()} 🔥` : fullName;
 }
 
 // Step types for the main application navigation
@@ -963,57 +967,57 @@ const App: React.FC = () => {
 
       
       const hooks = [
-        `ENCONTREI! 😱 O ${title} que todo mundo tava procurando!`,
-        `POV: Você acaba de achar o melhor item da Shopee hoje. ✨`,
-        `Gente, olha esse achadinho! É o ${title} e eu tô chocada!`,
-        `Não acredito que vivi tanto tempo sem esse ${title}! 😍`,
-        `UTILIDADE PÚBLICA: Esse ${title} na Shopee é vida! 🏆`,
-        `Para de rolar o feed e olha essa maravilha! 🛑`,
-        `Meu Deus, a Shopee não para de me surpreender! Olha isso:`,
-        `Sério, ${sales} pessoas já compraram... e eu entendi o porquê!`,
-        `O segredo para facilitar sua rotina tá nesse vídeo! 🔥`,
-        `Achado VIP! 💎 O ${title} com o melhor preço que já vi.`,
-        `Dica de amiga: Você PRECISA desse ${title} na sua casa!`,
-        `Eu não sabia que precisava disso até ver esse vídeo... 😳`,
-        `Preço de banana e qualidade de milhões! Shopee arrasou.`,
-        `Terapia de compras: Começando com esse ${title} incrível! 🛍️`,
-        `O item que faltava no seu dia a dia acabou de aparecer!`,
+        `ENCONTREI! 😱 O ${title} que está viralizando no mundo todo!`,
+        `POV: Você acaba de achar o segredo para facilitar sua rotina. ✨`,
+        `Gente, olha esse achadinho! O ${title} é simplesmente genial!`,
+        `Parece mentira, mas esse ${title} resolve a sua vida! 😍`,
+        `UTILIDADE PÚBLICA: Se você busca praticidade, o ${title} é a escolha certa! 🏆`,
+        `Para de rolar o feed e olha o que essa maravilha faz! 🛑`,
+        `A Shopee não para de me surpreender! O ${title} superou todas as expectativas.`,
+        `Sério, ${sales} unidades vendidas e eu entendi o porquê de tanto sucesso! 🔥`,
+        `O segredo para um lar mais moderno e organizado tá nesse vídeo! 💎`,
+        `Achado de Ouro! 💎 O ${title} com qualidade premium e preço de banana.`,
+        `Dica de quem já testou: Você PRECISA ter o ${title} na sua casa!`,
+        `Eu não sabia que minha vida seria tão melhor com o ${title}... 😳`,
+        `Design impecável e funcionalidade nota 10. Shopee acertou demais!`,
+        `Terapia de compras com propósito: Esse ${title} é puro investimento! 🛍️`,
+        `O item que faltava na sua coleção acabou de aparecer na sua tela!`,
       ];
 
       const benefits = [
-        `Facilita demais a vida e tem uma qualidade surreal pelo preço!`,
-        `O custo-benefício é imbatível, chegou super rápido e bem embalado.`,
-        `Já é tendência lá fora e agora chegou com tudo no Brasil!`,
-        `Todo mundo que vê pergunta de onde é. É simplesmente perfeito!`,
-        `É aquele tipo de achado que a gente guarda a sete chaves... mas eu compartilho!`,
-        `Prático, moderno e resolve aquele problema chato que a gente tem.`,
-        `Sério, as ${sales} vendas não mentem: é sucesso absoluto!`,
-        `Economiza tempo e ainda deixa tudo mais organizado e bonito.`,
-        `Gostei tanto que já quero comprar mais um de reserva! 😂`,
-        `Design premium com preço de achadinho. Shopee sendo Shopee!`,
+        `A tecnologia desse item é surreal pelo custo-benefício que ele entrega!`,
+        `Material de alta resistência, acabamento premium e chega super rápido.`,
+        `É aquele tipo de achado que esgota em minutos. Qualidade 10/10!`,
+        `Um investimento pequeno que traz uma praticidade gigantesca pro dia a dia.`,
+        `Se você quer modernidade e estilo, esse item foi feito pra você.`,
+        `Resolve aquele problema chato com elegância e eficiência absoluta.`,
+        `Não é à toa que virou febre entre os maiores influenciadores de casa!`,
+        `Economize tempo e garanta um resultado profissional com esse ${title}.`,
+        `Gostei tanto da experiência que já garanti mais um pra presentear! 😂`,
+        `É o equilíbrio perfeito entre design minimalista e potência máxima.`,
       ];
 
       const ctas = [
-        `🛒 O LINK COM DESCONTO tá fixado na minha BIO! Corre! 🚀`,
-        `✅ Quer o link? Ele tá lá na minha BIO do perfil! 🛍️`,
-        `👇 Garanta o seu pelo link oficial na minha Bio agora!`,
-        `⚠️ Aproveite a promoção no link que deixei na Bio! Vale muito!`,
-        `📦 Frete grátis hoje? Confere no link da minha Bio! ⭐`,
-        `Aperte no link da Bio e já garanta o seu antes que acaba!`,
+        `🛒 O LINK COM DESCONTO EXCLUSIVO tá na minha BIO! Corre antes que acabe! 🚀`,
+        `✅ Garanta o seu agora! O link oficial está liberado na minha BIO do perfil! 🛍️`,
+        `👇 Link direto e seguro fixado na minha BIO para você aproveitar!`,
+        `⚠️ Promoção por tempo limitado! Link na Bio esperando por você! Vale muito!`,
+        `📦 Frete grátis e desconto especial apenas pelo link da minha Bio! ⭐`,
+        `Aperte no link da Bio e adquira o seu ${title} com segurança total!`,
       ];
 
       const growth = [
-        `👉 Siga meu perfil para mais achadinhos virais todos os dias! ✨`,
-        `💡 Me siga para transformar sua casa com as melhores dicas!`,
-        `Eu posto achados assim todo dia, me segue pra não perder! 🔥`,
-        `Quer mais dicas assim? Já me segue aqui! 💖`,
-        `Não esquece de seguir para receber as melhores ofertas em primeira mão!`,
+        `👉 Siga meu perfil @AchadosVirais para não perder os melhores achados todos os dias! ✨`,
+        `💡 Me siga para receber dicas diárias que facilitam sua vida!`,
+        `Eu posto os melhores virais da internet todo dia aqui. Me segue pra acompanhar! 🔥`,
+        `Quer ver mais vídeos como este? Já me segue para ficar por dentro de tudo! 💖`,
+        `Não esquece de seguir para receber as ofertas VIP antes de todo mundo!`,
       ];
 
       const hashtags = [
-        '#shopee #achadinhos #shopeebrasil #viral #compras #dicas #casa #utilidades #promoção #oferta',
-        '#achadosshopee #shopeebr #comprinhas #organização #tecnologia #beleza #achadinhosshopee',
-        '#shopeefinds #viralvideos #dicasdecasa #utilidadedomestica #achadosdasemana',
+        '#shopee #achadinhos #shopeebrasil #viral #compras #dicas #casa #utilidades #promoção #oferta #compraonline #achadosshopee #shopeefinds',
+        '#achadosshopee #shopeebr #comprinhas #organização #tecnologia #beleza #achadinhosshopee #marketingdeafiliados #vendas #lucro',
+        '#shopeefinds #viralvideos #dicasdecasa #utilidadedomestica #achadosdasemana #produtosvirais #casaorganizada #achadinhosbr',
       ];
 
       const seed = Math.floor(Math.random() * 1000);
@@ -1024,10 +1028,10 @@ const App: React.FC = () => {
       const hash = hashtags[seed % hashtags.length];
 
       const variations = [
-        `${h}\n\n${b}\n\n${c}\n\n${g}\n\n${hash}`,
-        `✨ ${title} ✨\n\n${h}\n${b}\n\n👉 LINK NA BIO!\n\n${g}\n\n${hash}`,
+        `🔥 ${title.toUpperCase()} 🔥\n\n${h}\n\n✨ ${b}\n\n${c}\n\n${g}\n\n${hash}`,
+        `💎 ACHADO EXCLUSIVO 💎\n\n${h}\n\n✅ ${b}\n\n🛍️ LINK NA BIO!\n\n${g}\n\n${hash}`,
         `Você não vai acreditar nesse achado! 😍\n\n${h}\n\n${c}\n\n${g}\n\n${hash}`,
-        `${h} 🔥\n\n${b}\n\n🛍️ COMPRE NO LINK DA BIO!\n\n${g}\n\n${hash}`,
+        `🚀 ITEM IMPORTADO VIRAL 🚀\n\n${h}\n\n${b}\n\n🛍️ COMPRE NO LINK DA BIO!\n\n${g}\n\n${hash}`,
       ];
 
       return variations[seed % variations.length];

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft } from 'lucide-react';
+import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft, Share2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 interface BioItem {
@@ -165,6 +165,45 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     return () => clearInterval(settingsInterval);
   }, [userId]);
 
+  const handleShare = async (item: BioItem, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const shareTitle = `🔥 ${item.title.toUpperCase()} 🔥`;
+    const shareText = `Olha esse achadinho que encontrei! 😱\n\n✅ Qualidade Premium\n✅ Testado e Aprovado\n\n🛍️ COMPRE AQUI: ${item.affiliate_link}\n\nSiga meu perfil para mais achados! ✨`;
+
+    if (navigator.share) {
+      try {
+        const response = await fetch(item.image_url);
+        const blob = await response.blob();
+        const file = new File([blob], 'produto.jpg', { type: 'image/jpeg' });
+
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          files: [file],
+        });
+      } catch (err) {
+        // Fallback para compartilhamento de texto se falhar com arquivo ou não suportar files
+        try {
+          await navigator.share({
+            title: shareTitle,
+            text: shareText,
+            url: item.affiliate_link
+          });
+        } catch (shareErr) {
+          console.error('Share failed', shareErr);
+          const encodedText = encodeURIComponent(`${shareTitle}\n\n${shareText}`);
+          window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+        }
+      }
+    } else {
+      // Fallback para wa.me se navigator.share não existir
+      const encodedText = encodeURIComponent(`${shareTitle}\n\n${shareText}`);
+      window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    }
+  };
+
   const fontClass = fontMap[settings.font_style] || 'font-sans';
   const themeColor = settings.theme_color;
   const bgColor = settings.bg_color;
@@ -312,8 +351,16 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-white font-bold leading-tight text-[13px] uppercase tracking-tight line-clamp-2">{item.title}</h3>
-                    <div className="flex items-center gap-1 mt-2 text-[11px] font-black" style={{ color: themeColor }}>
-                      RESGATAR <ArrowUpRight size={12} />
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="flex items-center gap-1 text-[11px] font-black" style={{ color: themeColor }}>
+                        RESGATAR <ArrowUpRight size={12} />
+                      </div>
+                      <button 
+                        onClick={(e) => handleShare(item, e)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-white transition-colors"
+                      >
+                        <Share2 size={14} /> COMPARTILHAR
+                      </button>
                     </div>
                   </div>
                 </motion.a>
@@ -356,8 +403,16 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
                       </h3>
                       
                       <div className="flex items-center justify-between mt-auto">
-                        <div className="flex items-center gap-1 text-[11px] font-black group-hover:opacity-80 transition-colors" style={{ color: themeColor }}>
-                          RESGATAR <ArrowUpRight size={12} />
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-1 text-[11px] font-black group-hover:opacity-80 transition-colors" style={{ color: themeColor }}>
+                            RESGATAR <ArrowUpRight size={12} />
+                          </div>
+                          <button 
+                            onClick={(e) => handleShare(item, e)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors"
+                          >
+                            <Share2 size={12} /> COMPARTILHAR
+                          </button>
                         </div>
                         <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 group-hover:text-black" style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
                           <ShoppingBag size={14} />
