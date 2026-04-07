@@ -334,7 +334,8 @@ const App: React.FC = () => {
     } else {
       // No mobile, abrimos o app do TikTok diretamente para evitar o TikTok Studio web.
       if (isMobile) {
-        return 'snssdk1128://feed'; 
+        // snssdk1233 é o protocolo global do TikTok. 1128 era o Douyin (China).
+        return 'snssdk1233://'; 
       }
       return 'https://www.tiktok.com/tiktokstudio/upload?from=creator_center';
     }
@@ -1884,8 +1885,8 @@ const App: React.FC = () => {
     const openPublishingDestination = () => {
       const target = getPlatformUrl(selectedPlatform);
       if (isMobile && selectedPlatform === 'tiktok') {
-        // No mobile o redirect via location.href é mais performático para links de app
-        window.location.assign(target);
+        // No mobile, usamos href para disparar o deep link do app com máxima prioridade
+        window.location.href = target;
       } else {
         window.open(target, '_blank', 'noopener,noreferrer');
       }
@@ -1936,7 +1937,9 @@ const App: React.FC = () => {
           addLog('Compartilhamento disparado! Poste agora no App.', 'success');
         } else {
           triggerManualDownload();
-          openPublishingDestination();
+          setTimeout(() => {
+            openPublishingDestination();
+          }, 1500);
         }
       } catch (err: any) {
         if (err.name !== 'AbortError') {
