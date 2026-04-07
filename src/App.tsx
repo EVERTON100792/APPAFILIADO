@@ -1080,9 +1080,9 @@ const App: React.FC = () => {
   const refillProductList = (niche: string) => {
     setActiveItems(prev => {
       // Manter na tela APENAS itens que AINDA NÃO FORAM POSTADOS
+      // e o item que não é o selecionado atualmente se estivermos no meio de um processo (opcional)
       const currentUnpublished = prev.filter(p => 
-        !publicationHistory.some(ph => ph.product_id === p.id) && 
-        p.id !== selectedProduct?.id
+        !publicationHistory.some(ph => ph.product_id === p.id)
       );
 
       // Precisamos completar para ter 15 ativos na tela. 
@@ -1091,14 +1091,25 @@ const App: React.FC = () => {
       if (needed <= 0) return currentUnpublished;
 
       // Obtém produtos do pool infinito que não estão sendo mostrados
-      let availableSource = getInfinitePool(niche);
-      let available = availableSource.filter(p => !currentUnpublished.some(ai => ai.id === p.id));
+      const infinitePool = getInfinitePool(niche);
+      const currentlyShownIds = new Set(currentUnpublished.map(p => p.id));
+      const available = infinitePool.filter(p => !currentlyShownIds.has(p.id));
       
       // Filtra e randomiza os top items
-      const topAvailable = [...available].sort((a, b) => b.commission_pct - a.commission_pct).slice(0, Math.max(needed * 2, 20));
+      const topAvailable = [...available]
+        .sort((a, b) => (b.commission_pct || 0) - (a.commission_pct || 0))
+        .slice(0, Math.max(needed * 3, 30));
+        
       const shuffled = topAvailable.sort(() => Math.random() - 0.5);
       
-      return [...currentUnpublished, ...shuffled.slice(0, needed)];
+      const newItems = [...currentUnpublished, ...shuffled.slice(0, needed)];
+      
+      // Persistir o novo estado no Supabase para usuários logados
+      if (user?.id) {
+        saveScoutedProducts(newItems);
+      }
+      
+      return newItems;
     });
   };
 
@@ -1208,8 +1219,13 @@ const App: React.FC = () => {
   };
 
 
-  const unblock = (id: string) => {
-    deleteFromSupabase(id);
+  const unblock = async (id: string) => {
+    await deleteFromSupabase(id);
+    // Após deletar do histórico, o item fica elegível novamente.
+    // Damos um pequeno delay para o state do publicationHistory atualizar antes de dar o refill
+    setTimeout(() => {
+      refillProductList(activeNiche);
+    }, 500);
   };
 
 
@@ -1948,6 +1964,8 @@ const App: React.FC = () => {
       addLog('PROTOCOLO DE POSTAGEM FINALIZADO.', 'success');
       setAutomationFinished(true);
       showToast("CONCLUÍDO! VERIFIQUE A ABA ABERTA 🚀");
+      
+      // Forçar atualização do inventário para remover o item postado e trazer um novo
       refillProductList(activeNiche);
     }, 2500);
   };
@@ -2078,7 +2096,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden flex flex-col relative">
         <AnimatePresence mode="wait">
           {step === 'bio' && (
             <motion.div 
@@ -2337,7 +2355,7 @@ const App: React.FC = () => {
               key="list" 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="h-full flex flex-col overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-6 pb-40"
+              className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-6 pb-40"
             >
               {/* Pesquisa por Link da Shopee */}
               <form onSubmit={handleCustomLinkSubmit} className="relative group shrink-0 space-y-2">
@@ -3245,7 +3263,7 @@ const App: React.FC = () => {
               key="history" 
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              className="p-6 space-y-8 pb-32"
+              className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8 pb-40"
             >
               <div className="flex justify-between items-start">
                 <div className="space-y-2">
@@ -3281,7 +3299,7 @@ const App: React.FC = () => {
                         <div className="absolute inset-y-0 left-0 w-1.5 bg-accent" />
                         
                         <div className="space-y-2 min-w-0 pr-4">
-                          <h3 className="text-sm font-black uppercase text-slate-100 truncate italic tracking-tight">{item?.title || "SQUAD_ITEM_GEN_7"}</h3>
+                          <h3 className="text-sm font-black uppercase text-slate-100 truncate italic tracking-tight">{h.title || item?.title || "PRODUTO SINC"}</h3>
                           <div className="flex items-center gap-4">
                             <span className="text-[10px] text-accent font-black uppercase tracking-[0.2em]">{getTimeAgo(new Date(h.timestamp).getTime())}</span>
                             <div className="w-1 h-1 bg-white/10 rounded-full" />
