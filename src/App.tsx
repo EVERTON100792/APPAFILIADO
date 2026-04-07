@@ -1405,16 +1405,18 @@ const App: React.FC = () => {
           
           let score = 100;
 
-          // 0. Filtro Técnico Obrigatório (Technical Anchor)
+          // 0. Filtro Técnico Obrigatório (Technical Anchor) -> Agora é bônus/penalidade
           if (productAnchors.length > 0) {
             const hasAnyAnchor = productAnchors.some(anchor => text.includes(anchor.toLowerCase()));
-            if (!hasAnyAnchor) return null; 
+            if (hasAnyAnchor) score += 400;
+            else score -= 100;
           }
 
-          // 1. Ancoragem de Substantivos (Noun Anchor)
+          // 1. Ancoragem de Substantivos (Noun Anchor) -> Agora ponderada
           const anchorWord = coreWords[0]?.toLowerCase();
           const hasAnchor = anchorWord && text.includes(anchorWord);
-          if (!hasAnchor) return null; 
+          if (hasAnchor) score += 200;
+          else score -= 50;
 
           // 2. Relevância de Palavras-Chave (Density Match)
           let matchCount = 0;
@@ -1423,7 +1425,7 @@ const App: React.FC = () => {
           });
 
           const matchRatio = coreWords.length > 0 ? matchCount / coreWords.length : 0;
-          if (matchRatio < 0.25) return null; // Tolerância um pouco maior para ganhar volume
+          if (matchRatio < 0.15) return null; // Tolerância máxima para ganhar volume
           
           if (matchRatio >= 0.8) score += 600;
           else if (matchRatio >= 0.4) score += 300;
@@ -1443,7 +1445,7 @@ const App: React.FC = () => {
           if (hasMustHave || (hasPtBrKeywords && hasAccents)) {
             score *= 6.0; // Bônus massivo para criativos brasileiros (x6)
           } else if (isForeign || (!hasPtBrKeywords && !hasAccents)) {
-            score /= 15.0; // Penalidade extrema para vídeos gringos
+            score /= 8.0; // Penalidade reduzida (era 15) para vídeos gringos se forem virais
           }
 
           // 4. Qualidade e Viralização (Engajamento Mínimo de 8%)
@@ -1453,7 +1455,7 @@ const App: React.FC = () => {
           const shares = v.share_count || 0;
           const engagementRatio = views > 0 ? ((diggs + (comments * 6) + (shares * 10)) / views) * 100 : 0;
 
-          if (engagementRatio < 8) return null; 
+          if (engagementRatio < 4) return null; // Engajamento mínimo reduzido para 4%
 
           if (v.width && v.width >= 1080) score += 300;
           if (engagementRatio > 20) score += 400; 
@@ -1475,10 +1477,10 @@ const App: React.FC = () => {
             _score: score
           };
         })
-        .filter((v: any) => v !== null && v._score >= 400) // Threshold equilibrado
+        .filter((v: any) => v !== null && v._score >= 180) // Threshold reduzido para garantir entrega
         .sort((a: any, b: any) => b._score - a._score);
 
-      if (scored.length === 0) throw new Error('Não encontramos vídeos brasileiros de alta qualidade para este produto. Tente um termo mais simples.');
+      if (scored.length === 0) throw new Error('Não encontramos vídeos virais para este produto agora. Experimente usar um nome mais simples.');
 
       // Pool de 10 vídeos para garantir variedade no Swap
       const topScored = scored.slice(0, 10);
