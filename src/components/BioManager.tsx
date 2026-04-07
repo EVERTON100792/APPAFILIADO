@@ -335,33 +335,78 @@ export const BioManager: React.FC<{
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowCustomizer(false)}
-              className="fixed inset-0 bg-black/60 z-[199] lg:hidden"
+              className="fixed inset-0 bg-transparent z-[9998] lg:hidden"
             />
             <motion.div
-              initial={{ opacity: 0, x: 400 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 400 }}
+              initial={{ opacity: 0, y: 400 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 400 }}
               transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-              style={{ scrollbarWidth: 'thin', scrollbarColor: '#22c55e33 transparent' }}
-              className="fixed z-[200] bg-[#0a0a0a] overflow-y-auto
-                top-0 left-0 right-0 bottom-0
-                lg:top-4 lg:left-auto lg:bottom-4 lg:right-4 lg:w-[380px] lg:max-w-[calc(100vw-2rem)] lg:border lg:border-white/10 lg:rounded-3xl"
+              style={{ 
+                scrollbarWidth: 'thin', 
+                scrollbarColor: '#22c55e33 transparent',
+              }}
+              className="fixed z-[9999] bg-[#0a0a0a] border-t border-white/10 shadow-2xl flex flex-col
+                bottom-0 left-0 right-0 h-[65vh] rounded-t-[2.5rem]
+                lg:top-12 lg:right-12 lg:bottom-12 lg:left-auto lg:w-[420px] lg:h-auto lg:border-l lg:rounded-3xl"
             >
-              <div className="flex flex-col" style={{ minHeight: '100dvh', paddingTop: 'max(16px, env(safe-area-inset-top))', paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
-              {/* Header do Painel */}
-              <div className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/5 px-5 py-4 flex items-center justify-between shrink-0">
-                <button onClick={() => setShowCustomizer(false)} className="flex items-center gap-2 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg font-bold text-xs uppercase">
-                  <ArrowLeft size={14} />
-                  Voltar
-                </button>
-                <button onClick={() => setShowCustomizer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white transition-colors shrink-0">
-                  ✕
-                </button>
-              </div>
+              {/* Alça de arraste (apenas mobile) */}
+              <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-3 mb-1 lg:hidden" />
+              
+               {/* Preview da Loja (Destaque no Topo) */}
+               <div className="px-3 pt-3 pb-1 lg:hidden shrink-0">
+                 <div className="rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl h-[320px] relative transition-all duration-300 flex flex-col" style={{ backgroundColor: previewSettings.bg_color }}>
+                   {/* Scroll interno da prévia da loja */}
+                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4 pt-6">
+                     {previewSettings.profile_image && (
+                       <div className="mb-4 text-center">
+                         <img src={previewSettings.profile_image} alt="Preview" className="w-16 h-16 mx-auto rounded-full object-cover border-2 shadow-lg" style={{ borderColor: previewSettings.theme_color }} />
+                       </div>
+                     )}
+                     {previewSettings.header_style === 'bold' ? (
+                       <div className="p-3 rounded-xl text-center mb-3" style={{ background: `linear-gradient(135deg, ${previewSettings.theme_color}22, ${previewSettings.theme_color}11)`, border: `1px solid ${previewSettings.theme_color}33` }}>
+                         <p className="font-black text-xs tracking-tighter text-white uppercase">LOJA <span style={{ color: previewSettings.theme_color }}>@{storeSlug}</span></p>
+                       </div>
+                     ) : (
+                       <div className="text-center mb-3">
+                         <p className="font-black text-xs tracking-tighter text-white uppercase">@{storeSlug}</p>
+                         <div className="w-6 h-0.5 mx-auto mt-1" style={{ backgroundColor: previewSettings.theme_color }} />
+                       </div>
+                     )}
+                     <div className={previewSettings.layout_type === 'list' ? 'space-y-1.5' : 'grid grid-cols-2 gap-2'}>
+                       {items.length > 0 ? items.slice(0, 10).map((item: any) => (
+                         <div key={item.id} className="aspect-square rounded-xl overflow-hidden flex items-center justify-center bg-white/5 border border-white/5" style={{ borderRadius: previewSettings.card_radius }}>
+                           {item.image_url ? (
+                             <img src={item.image_url} alt={item.title} className="w-full h-full object-cover opacity-90" />
+                           ) : (
+                             <ShoppingBag size={14} className="opacity-20" style={{ color: previewSettings.theme_color }} />
+                           )}
+                         </div>
+                       )) : [1,2,3,4,5,6].map(i => (
+                         <div key={i} className="aspect-square rounded-xl flex items-center justify-center bg-white/5 border border-white/10" style={{ borderRadius: previewSettings.card_radius }}>
+                           <ShoppingBag size={14} className="opacity-10" style={{ color: previewSettings.theme_color }} />
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                 </div>
+               </div>
 
-              {/* Conteúdo */}
-              <div className="px-5 pb-8 pt-3 space-y-4 flex-1">
-              <div className="rounded-2xl overflow-hidden border border-white/10" style={{ backgroundColor: previewSettings.bg_color }}>
+               {/* Header Compacto (Abaixo da Prévia) */}
+               <div className="sticky top-0 z-10 bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/5 px-4 py-2.5 flex items-center justify-between shrink-0">
+                 <button onClick={() => setShowCustomizer(false)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg font-black text-[9px] uppercase transition-all shadow-lg active:scale-95">
+                   <ArrowLeft size={12} />
+                   VOLTAR
+                 </button>
+                 <button onClick={() => setShowCustomizer(false)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 text-slate-500 hover:text-white transition-colors shrink-0">
+                   ✕
+                 </button>
+               </div>
+
+               {/* Opções de Customização (Scrollable) */}
+               <div className="px-5 pb-10 pt-4 space-y-7 flex-1 overflow-y-auto custom-scrollbar">
+                 {/* Preview para Desktop */}
+                 <div className="hidden lg:block rounded-2xl overflow-hidden border border-white/10" style={{ backgroundColor: previewSettings.bg_color }}>
                 <div className="p-4 pt-6">
                   {previewSettings.profile_image && (
                     <div className="mb-4 text-center">
@@ -544,7 +589,6 @@ export const BioManager: React.FC<{
               </div>
               </div>
               </div>
-              </div>
             </motion.div>
           </>
         )}
@@ -569,7 +613,7 @@ export const BioManager: React.FC<{
 
       <motion.div
         initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-        className="glass-acid p-8 flex flex-col gap-6 relative overflow-hidden"
+        className="glass-acid p-4 sm:p-8 flex flex-col gap-4 sm:gap-6 relative overflow-hidden"
       >
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-[80px]" />
         

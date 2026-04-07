@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, ShieldCheck } from 'lucide-react';
+import { Clock, ShieldCheck, RefreshCcw } from 'lucide-react';
 
 interface TrialCountdownProps {
   remainingMs: number | null;
   isPro: boolean;
   variant?: 'compact' | 'large';
+  onRefresh?: () => void;
 }
 
-export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isPro, variant = 'compact' }) => {
+export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isPro, variant = 'compact', onRefresh }) => {
   const [timeLeft, setTimeLeft] = useState<string>('00:00:00');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const isExpiringSoon = Boolean(isPro && remainingMs !== null && remainingMs > 0 && remainingMs <= 3 * 24 * 60 * 60 * 1000);
+
+  const handleRefresh = async () => {
+    if (!onRefresh || isRefreshing) return;
+    setIsRefreshing(true);
+    await onRefresh();
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
 
   useEffect(() => {
     const updateTime = () => {
@@ -52,15 +61,32 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
           <span className={`${variant === 'large' ? 'text-sm' : 'text-[10px]'} font-black uppercase tracking-[0.22em] ${isExpiringSoon ? 'text-amber-200' : 'text-emerald-300'}`}>{isExpiringSoon ? 'PRO VENCE EM BREVE' : 'STATUS: PERFIL PRO'}</span>
           <span className={`${variant === 'large' ? 'text-[11px]' : 'text-[9px]'} ${isExpiringSoon ? 'text-amber-100/90' : 'text-emerald-200/80'} font-bold uppercase tracking-widest`}>Renova em {timeLeft}</span>
         </div>
+        {onRefresh && (
+          <button onClick={handleRefresh} className="relative ml-2 p-2 hover:bg-white/5 rounded-full transition-colors group">
+            <RefreshCcw size={16} className={`text-emerald-400/50 group-hover:text-emerald-400 transition-all ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
       </div>
     );
   }
 
   if (!remainingMs || remainingMs <= 0) {
     return (
-      <div className={`flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-2xl ${variant === 'large' ? 'px-8 py-4' : 'px-4 py-2'}`}>
-        <Clock size={variant === 'large' ? 24 : 14} className="text-red-400" />
-        <span className={`${variant === 'large' ? 'text-lg' : 'text-[10px]'} font-black uppercase tracking-[0.2em] text-red-400`}>TESTE EXPIRADO</span>
+      <div className={`relative group flex items-center gap-4 bg-red-500/5 backdrop-blur-xl border border-red-500/20 rounded-2xl overflow-hidden shadow-2xl shadow-red-500/5 ${variant === 'large' ? 'px-8 py-5' : 'px-4 py-3'}`}>
+        <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-transparent opacity-50" />
+        <div className="relative">
+          <Clock size={variant === 'large' ? 24 : 16} className="text-red-400 animate-pulse" />
+          <div className="absolute inset-0 bg-red-500 blur-md opacity-20 animate-pulse" />
+        </div>
+        <div className="relative flex flex-col">
+          <span className={`${variant === 'large' ? 'text-lg' : 'text-[11px]'} font-black uppercase tracking-[0.25em] text-red-400 italic`}>TESTE EXPIRADO</span>
+          <span className="text-[9px] font-bold text-red-300/60 uppercase tracking-widest">Renove para continuar usando</span>
+        </div>
+        {onRefresh && (
+          <button onClick={handleRefresh} className="relative ml-2 p-2 bg-red-500/10 hover:bg-red-500/20 rounded-full transition-all group active:scale-90">
+            <RefreshCcw size={16} className={`text-red-400 group-hover:rotate-180 transition-all duration-700 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
       </div>
     );
   }
@@ -82,6 +108,11 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
              <span className="text-6xl font-mono font-black text-white tracking-tighter tabular-nums drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
                {timeLeft}
              </span>
+             {onRefresh && (
+               <button onClick={handleRefresh} className="ml-4 p-4 bg-white/5 hover:bg-white/10 rounded-full transition-all active:scale-90 group">
+                 <RefreshCcw size={28} className={`text-accent opacity-50 group-hover:opacity-100 transition-all ${isRefreshing ? 'animate-spin' : ''}`} />
+               </button>
+             )}
           </div>
           <p className="text-[10px] font-bold text-accent uppercase tracking-[0.3em] mt-2">Sua licença de teste está ativa</p>
         </div>
@@ -103,10 +134,15 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">TESTE</span>
       </div>
       
-      <div className="flex items-baseline gap-1">
+      <div className="flex items-center gap-3">
         <span className="text-lg font-mono font-black text-white tracking-tighter tabular-nums">
           {timeLeft}
         </span>
+        {onRefresh && (
+          <button onClick={handleRefresh} className="p-1.5 hover:bg-white/5 rounded-full transition-colors group">
+            <RefreshCcw size={14} className={`text-accent opacity-40 group-hover:opacity-100 transition-all ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
       </div>
     </motion.div>
   );

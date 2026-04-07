@@ -28,7 +28,8 @@ import {
   Database,
   Unlock,
   Home,
-  Type
+  Type,
+  Clock
 } from 'lucide-react';
 
 
@@ -41,7 +42,7 @@ import type { ProcessingOptions } from './utils/VideoProcessor';
 import { BioStore } from './components/BioStore';
 import { BioManager } from './components/BioManager';
 import { LoginScreen } from './components/LoginScreen';
-import { StripeService } from './services/StripeService';
+import { HotmartService } from './services/HotmartService';
 import { TrialCountdown } from './components/TrialCountdown';
 import { AgentScouting } from './components/AgentScouting';
 // import { productDB } from './data/productDB';
@@ -76,34 +77,40 @@ function getSmartSearchName(title: string): string {
   // 1. Limpar caracteres especiais e lixo de marketplace agressivo
   let cleanTitle = title.split(/[-,\(\)\[\]|]/)[0]; 
   
-  // 2. Remover termos que poluem a busca e trazem resultados de baixa qualidade
+  // 2. Termos técnicos que NÃO podem ser removidos (Power Words)
+  const powerWords = ['levitação', 'magnética', 'magnético', 'usb', 'led', 'bluetooth', 'portátil', 'mini', 'inteligente', 'smart', 'flutuante', 'gamer', 'rgb'];
+  
+  // 3. Remover termos que poluem a busca e trazem resultados de baixa qualidade
   const marketJunk = [
     'promoção', 'oferta', 'queima', 'estoque', 'barato', 'shopee', 'link', 'bio', 
     'brasil', 'br', 'kit', 'conjunto', 'pacote', 'unidade', 'und', 'pcs', 'peças', 
     'peça', 'novo', 'nova', 'original', 'oficial', 'compre', 'aqui', 'clique', 
     'veja', 'olha', 'frete', 'grátis', 'pronta', 'entrega', 'envio', 'imediato',
     'atacado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio em 24h',
-    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu', 'casa', 'cozinha'
+    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu'
   ];
   
   const regexJunk = new RegExp(`\\b(${marketJunk.join('|')})\\b`, 'gi');
   cleanTitle = cleanTitle.replace(regexJunk, ' ').trim();
 
-  // 3. Remover emojis e caracteres não alfanuméricos
+  // 4. Remover emojis e caracteres não alfanuméricos
   cleanTitle = cleanTitle.replace(/[^\w\sÀ-ú0-9]/gi, ' ');
   
-  // 4. Filtrar palavras curtas e stop words
+  // 5. Filtrar palavras curtas e stop words, mas MANTER as power words
   const stopWords = new Set([
     'a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 
     'na', 'no', 'que', 'dos', 'das', 'seu', 'sua', 'pelo', 'pela', 'como', 'mais'
   ]);
   
-  let words = cleanTitle.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()));
+  let words = cleanTitle.split(/\s+/).filter(w => {
+    const low = w.toLowerCase();
+    return (w.length > 2 && !stopWords.has(low)) || powerWords.includes(low);
+  });
   
   if (words.length === 0) return title.substring(0, 30).trim();
 
-  // 5. Prioridade: Objeto Principal + Características (2 a 3 palavras)
-  return words.slice(0, 3).join(' ').trim();
+  // 6. Retornar até 5 palavras para precisão máxima em gadgets, em vez de apenas 3
+  return words.slice(0, 5).join(' ').trim();
 }
 
 function generateViralProductName(baseName: string): string {
@@ -138,6 +145,8 @@ const App: React.FC = () => {
 
   const [storeSlug, setStoreSlug] = useState('meu-link');
   const [storeReady, setStoreReady] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
 
   const isStoreConfigured = () => {
     const normalizedSlug = (storeSlug || '').toLowerCase();
@@ -270,25 +279,17 @@ const App: React.FC = () => {
       return;
     }
 
-    const ok = await StripeService.redirectToCheckout(supabase, STRIPE_PRICE_ID, user.id, user.email || '');
-    if (!ok) {
-      showToast('ERRO AO ABRIR O CHECKOUT STRIPE');
-      return;
-    }
-
-    showToast('REDIRECIONANDO PARA PAGAMENTO SEGURO...');
+    // URL do Checkout da Hotmart real
+    const url = "https://pay.hotmart.com/S105263156D?checkoutMode=10"; 
+    
+    setCheckoutUrl(url);
+    setIsCheckoutOpen(true);
+    showToast('ABRINDO CHECKOUT SEGURO...');
   };
 
   const handleManageSubscription = async () => {
-    if (!user) return;
-
-    const ok = await StripeService.openCustomerPortal(supabase, user.email || '');
-    if (!ok) {
-      showToast('ERRO AO ABRIR O PORTAL DE ASSINATURA');
-      return;
-    }
-
-    showToast('ABRINDO PORTAL DE ASSINATURA...');
+    window.location.href = "https://purchase.hotmart.com/";
+    showToast('ABRINDO PORTAL DE COMPRAS HOTMART...');
   };
 
   const handleLogout = async () => {
@@ -350,8 +351,8 @@ const App: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [videoResults] = useState<any[]>([]);
-  const [currentVideoIndex] = useState(0);
+  const [videoResults, setVideoResults] = useState<any[]>([]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [databaseProducts, setDatabaseProducts] = useState<any[]>([]);
   
   // ── SISTEMA DE ÁUDIO VIRAL ──
@@ -410,7 +411,7 @@ const App: React.FC = () => {
         setUser(activeUser);
         await applyUserAppState(activeUser);
         if (!isAdmin) {
-          const status = await StripeService.checkSubscriptionStatus(supabase, activeUser.id);
+          const status = await HotmartService.checkSubscriptionStatus(supabase, activeUser.id);
           setIsPro(status.isPro);
           setTrialExpired(status.trialExpired);
           setTrialRemaining(status.trialRemainingMs ?? null);
@@ -621,7 +622,7 @@ const App: React.FC = () => {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(15);
+      .order('created_at', { ascending: false });
     
     if (data && data.length > 0) {
       setActiveItems(data.map(item => ({
@@ -655,6 +656,71 @@ const App: React.FC = () => {
   const fetchProductsDB = async () => {
     const { data } = await supabase.from('products').select('*');
     if (data) setDatabaseProducts(data);
+  };
+
+  // Componente de Checkout Integrado
+  const CheckoutOverlay = () => {
+    const [iframeLoading, setIframeLoading] = useState(true);
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col overflow-hidden"
+      >
+        {/* Header do Checkout Otimizado */}
+        <div className="h-16 md:h-20 bg-slate-900/90 backdrop-blur-2xl border-b border-white/10 px-4 md:px-6 flex items-center justify-between shadow-2xl relative z-20">
+          <div className="flex items-center gap-2 md:gap-4">
+            <motion.button
+              whileHover={{ scale: 1.05, x: -2 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsCheckoutOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 md:px-5 md:py-3 bg-white/5 border border-white/10 rounded-xl text-white font-black uppercase text-[9px] md:text-[10px] tracking-widest hover:bg-white/10 transition-all group"
+            >
+              <ArrowLeft size={16} className="text-accent group-hover:-translate-x-1 transition-transform" />
+              <span className="hidden xs:inline">VOLTAR</span>
+              <span className="inline xs:hidden">VOLTAR</span>
+            </motion.button>
+
+            {!iframeLoading && (
+              <button 
+                onClick={() => window.open(checkoutUrl, '_blank')}
+                className="flex items-center gap-1 text-[8px] md:text-[9px] font-black uppercase tracking-tighter text-slate-400 hover:text-accent transition-colors border-l border-white/10 pl-4 h-8"
+              >
+                <Maximize2 size={12} />
+                <span className="hidden sm:inline">Problema ao carregar? Abrir em nova aba</span>
+                <span className="inline sm:hidden">ABRIR FORA</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col items-end">
+            <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-accent italic">Checkout Seguro</span>
+            <span className="text-[7px] md:text-[8px] font-bold text-slate-500 uppercase tracking-widest">Hotmart</span>
+          </div>
+        </div>
+
+        {/* Container do Iframe com Scroll Suave */}
+        <div className="flex-1 relative bg-white overflow-auto touch-pan-y">
+          {iframeLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-30 gap-4">
+              <div className="w-12 h-12 border-4 border-accent/20 border-t-accent rounded-full animate-spin" />
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 animate-pulse">Protegendo sua conexão...</p>
+            </div>
+          )}
+          
+          <iframe 
+            src={checkoutUrl}
+            className="w-full h-full min-h-screen border-none"
+            onLoad={() => setIframeLoading(false)}
+            title="Hotmart Checkout"
+            allow="payment"
+            scrolling="yes"
+          />
+        </div>
+      </motion.div>
+    );
   };
 
   // Componente de Bloqueio Premium (Paywall)
@@ -703,12 +769,25 @@ const App: React.FC = () => {
                 Já pagou? Clique para Sincronizar
               </button>
             )}
-            <button 
+            <motion.button 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setStep('home')}
-              className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-white transition-colors"
+              className="w-full py-4 bg-white/5 border border-white/10 text-white/60 font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2"
             >
+              <ArrowLeft size={16} />
               Voltar ao Início
-            </button>
+            </motion.button>
+            {trialRemaining !== null && !isPro && (
+              <div className="flex justify-center mt-4">
+                <TrialCountdown 
+                  remainingMs={trialRemaining} 
+                  isPro={false} 
+                  variant="compact" 
+                  onRefresh={checkAccess} 
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -721,10 +800,13 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <div className="mt-12 flex items-center gap-6 opacity-20 grayscale">
-           <img src="https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" alt="Stripe" className="h-5" />
-           <div className="w-px h-4 bg-white/20" />
-           <span className="text-[10px] font-black uppercase tracking-widest italic">Pagamento 100% Criptografado</span>
+        <div className="mt-12 flex items-center gap-6 opacity-30">
+           <div className="flex items-center gap-2">
+             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+             <span className="text-[10px] font-black uppercase tracking-widest italic text-white/50">Pagamento Seguro via Hotmart</span>
+           </div>
+           <div className="w-px h-4 bg-white/10" />
+           <span className="text-[10px] font-black uppercase tracking-widest italic text-white/30">Aesso Pro Vitalício*</span>
         </div>
       </motion.div>
     );
@@ -1024,7 +1106,9 @@ const App: React.FC = () => {
     setActiveNiche(niche);
     const infinitePool = getInfinitePool(niche);
     const shuffled = [...infinitePool].sort(() => Math.random() - 0.5);
-    const items = shuffled.slice(0, 15);
+    // Se for "Todos", mostra 50 itens para performance. Se for nicho específico, mostra 15.
+    const items = niche === 'Todos' ? shuffled.slice(0, 50) : shuffled.slice(0, 15);
+    
     setActiveItems(items);
     await saveScoutedProducts(items);
   };
@@ -1102,6 +1186,7 @@ const App: React.FC = () => {
     };
     
     setSelectedProduct(customProduct); 
+    setIsScanning(false);
     setStep('list');
     researchTikTok(customProduct);
     setCustomLink('');
@@ -1193,7 +1278,7 @@ const App: React.FC = () => {
     }
   };
 
-  const researchTikTok = async (product: any) => {
+  async function researchTikTok(product: any) {
     if (trialExpired && !hasActivePro) {
       showToast('SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.');
       return;
@@ -1214,89 +1299,75 @@ const App: React.FC = () => {
       
       if (coreWords.length === 0) throw new Error('Nome do produto incompleto');
 
+      // 1. Identificar Âncoras Técnicas (Power Words) que definem o produto
+      const powerWords = ['levitação', 'magnética', 'magnético', 'usb', 'led', 'bluetooth', 'portátil', 'mini', 'inteligente', 'smart', 'flutuante', 'gamer', 'rgb', 'projetor'];
+      const productAnchors = coreWords.filter(w => powerWords.includes(w.toLowerCase()));
+
       const nicheKeywords: Record<string, { positive: string[], negative: string[] }> = {
         'Cozinha': { 
-          positive: ['cozinha', 'comida', 'chef', 'receita', 'utilidade', 'casa', 'lar'],
-          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids', 'fitness'] 
+          positive: ['cozinha', 'comida', 'chef', 'receita', 'utilidade', 'casa', 'lar', 'utensilio', 'preparo', 'fritadeira', 'airfryer', 'organizador'],
+          negative: ['maquiagem', 'pc', 'gamer', 'pet', 'cachorro', 'bebe', 'kids', 'fitness', 'cosplay'] 
         },
         'Tecnologia': { 
-          positive: ['tech', 'gadget', 'unboxing', 'setup', 'pc', 'smartphone', 'eletronico'],
-          negative: ['cozinha', 'panela', 'maquiagem', 'bebe', 'infantil', 'pet'] 
+          positive: ['tech', 'gadget', 'unboxing', 'setup', 'pc', 'smartphone', 'eletronico', 'acessorio', 'inteligente', 'smart', 'bluetooth'],
+          negative: ['cozinha', 'panela', 'maquiagem', 'bebe', 'infantil', 'pet', 'limpeza'] 
         },
         'Beleza': { 
-          positive: ['make', 'maquiagem', 'skin', 'cabelo', 'beleza', 'beauty', 'tutorial'],
-          negative: ['ferramenta', 'carro', 'moto', 'gamer', 'tecnologia', 'comida'] 
+          positive: ['make', 'maquiagem', 'skin', 'cabelo', 'beleza', 'beauty', 'tutorial', 'cuidado', 'pele', 'rosto', 'cosmetico'],
+          negative: ['ferramenta', 'carro', 'moto', 'gamer', 'tecnologia', 'comida', 'pesca'] 
         },
         'Decoração': { 
-          positive: ['casa', 'decor', 'quarto', 'sala', 'iluminação', 'led', 'reforma'],
-          negative: ['maquiagem', 'carro', 'pet', 'comida'] 
+          positive: ['casa', 'decor', 'quarto', 'sala', 'iluminação', 'led', 'reforma', 'estilo', 'design', 'ambiente'],
+          negative: ['maquiagem', 'carro', 'pet', 'comida', 'eletronico'] 
         },
         'Pet': { 
-          positive: ['pet', 'gato', 'cachorro', 'dog', 'cat', 'animal', 'fofo'],
-          negative: ['maquiagem', 'cozinha', 'gamer'] 
+          positive: ['pet', 'gato', 'cachorro', 'dog', 'cat', 'animal', 'fofo', 'rastreador', 'brinquedo', 'coleira'],
+          negative: ['maquiagem', 'cozinha', 'gamer', 'carro'] 
         }
       };
 
       const currentNicheRules = nicheKeywords[productNiche] || { positive: [], negative: [] };
-
-      const searchKeywords = coreQuery;
       
+      // 2. Estratégias de Busca (Máxima Precisão: Título literal primeiro)
       const strategies = [
-        { query: searchKeywords, weight: 3.0 },
-        { query: `${searchKeywords} br`, weight: 2.5 },
-        { query: `${searchKeywords} shopee`, weight: 2.0 },
-        { query: `${searchKeywords} tiktok`, weight: 1.5 },
+        { query: product.title?.substring(0, 50) || coreQuery, weight: 4.0 }, 
+        { query: coreQuery, weight: 3.5 },
+        { query: `${coreQuery} shopee`, weight: 3.0 },
+        { query: `${coreQuery} achadinho`, weight: 2.0 },
       ];
 
-      const ptBrKeywords = ['achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 'promo', 'loja', 'casa', 'cozinha', 'comprinhas', 'melhor', 'perfeito', 'utilidades', 'organização', 'organizando', 'lar'];
-      const ptBrMustHave = ['shopee', 'brasil', 'achadinho', 'comprinha', 'link', 'bio', 'utilidade', 'loja', 'br', 'achei', 'achado'];
+      const ptBrKeywords = ['achei', 'comprei', 'chegou', 'olha', 'dica', 'shopee', 'brasil', 'br', 'testando', 'recomendo', 'unboxing', 'review', 'achadinho', 'oferta', 'promo', 'loja', 'casa', 'cozinha', 'comprinhas', 'melhor', 'perfeito', 'utilidades', 'organização', 'organizando', 'lar', 'recebidos', 'testei'];
+      const ptBrMustHave = ['shopee', 'brasil', 'achadinho', 'comprinha', 'link', 'bio', 'utilidade', 'loja', 'br', 'achei', 'achado', 'comprei'];
 
-      let allVideos: any[] = [];
-      setTreatingStatus('Consultando fontes e reunindo videos promissores...');
+      let rawVideos: any[] = [];
+      setTreatingStatus('Buscando em larga escala (Equilíbrio Perfeito)...');
       setTreatingProgress(28);
       
       for (const strategy of strategies) {
         const q = encodeURIComponent(strategy.query);
         try {
           const resp = await fetch(
-            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
-            { signal: AbortSignal.timeout(10000) }
+            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=50&cursor=0&region=BR`,
+            { signal: AbortSignal.timeout(15000) }
           );
           const json = await resp.json();
           if (json.data?.videos?.length > 0) {
-            allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: strategy.weight }))];
+            rawVideos = [...rawVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: strategy.weight }))];
           }
         } catch {}
       }
 
-      if (allVideos.length === 0) {
-        setTreatingStatus('Buscando em fontes alternativas...');
-        setTreatingProgress(40);
-        const fallbackQueries = [coreWords[0], `${coreWords[0]} viral`];
-        for (const fallbackQuery of fallbackQueries) {
-          const q = encodeURIComponent(fallbackQuery);
-          try {
-            const resp = await fetch(
-              `https://www.tikwm.com/api/feed/search?keywords=${q}&count=20&cursor=0&region=BR`,
-              { signal: AbortSignal.timeout(10000) }
-            );
-            const json = await resp.json();
-            if (json.data?.videos?.length > 0) {
-              allVideos = [...allVideos, ...json.data.videos.map((v: any) => ({ ...v, _queryWeight: 1.0 }))];
-            }
-          } catch {}
-        }
-      }
+      // Remover duplicatas
+      const uniqueVideosMap = new Map();
+      rawVideos.forEach(v => {
+        if (!uniqueVideosMap.has(v.video_id)) uniqueVideosMap.set(v.video_id, v);
+      });
+      const allVideos = Array.from(uniqueVideosMap.values());
 
-      if (allVideos.length === 0) throw new Error('Nenhum vídeo encontrado');
+      if (allVideos.length === 0) throw new Error('Nenhum vídeo nacional encontrado');
       
-      setTreatingStatus('Validando idioma, qualidade e engajamento real...');
+      setTreatingStatus('Aferindo relevância e idioma local...');
       setTreatingProgress(56);
-      setTreatingChecklist([
-        'Filtrando resultados em português do Brasil',
-        'Removendo videos com baixa relevância',
-        'Priorizando sinais de conversão e qualidade HD',
-      ]);
 
       const scored = allVideos
         .filter((v: any) => (v.play || v.wmplay) && v.duration > 3 && v.duration < 180)
@@ -1308,94 +1379,109 @@ const App: React.FC = () => {
           
           let score = 100;
 
+          // 0. Filtro Técnico Obrigatório (Technical Anchor)
+          if (productAnchors.length > 0) {
+            const hasAnyAnchor = productAnchors.some(anchor => text.includes(anchor.toLowerCase()));
+            if (!hasAnyAnchor) return null; 
+          }
+
+          // 1. Ancoragem de Substantivos (Noun Anchor)
+          const anchorWord = coreWords[0]?.toLowerCase();
+          const hasAnchor = anchorWord && text.includes(anchorWord);
+          if (!hasAnchor) return null; 
+
+          // 2. Relevância de Palavras-Chave (Density Match)
           let matchCount = 0;
           coreWords.forEach((word) => {
             if (text.includes(word.toLowerCase())) matchCount++;
           });
 
-          if (matchCount >= 2) score += 300; 
-          else if (matchCount === 1) score += 150;
+          const matchRatio = coreWords.length > 0 ? matchCount / coreWords.length : 0;
+          if (matchRatio < 0.25) return null; // Tolerância um pouco maior para ganhar volume
+          
+          if (matchRatio >= 0.8) score += 600;
+          else if (matchRatio >= 0.4) score += 300;
 
+          // 3. Trava de Idioma Brasileira (PT-BR) de Elite
           const hasPtBrKeywords = ptBrKeywords.some(w => text.includes(w));
           const hasMustHave = ptBrMustHave.some(w => text.includes(w));
+          const hasAccents = /[ãéíóúç]/i.test(text); 
+          
+          // Detecção de Inglês (Stop Words comuns)
+          const englishStopWords = ['the', 'and', 'for', 'with', 'your', 'this', 'that', 'from', 'best', 'finds', 'must', 'buy', 'now'];
+          const countsEnglish = englishStopWords.filter(w => text.includes(` ${w} `) || text.startsWith(`${w} `)).length;
+          
+          const foreignTerms = ['amazon find', 'link in bio', 'shop now', 'available on', 'aliexpress', 'temu', 'worldwide'];
+          const isForeign = foreignTerms.some(w => text.includes(w)) || (countsEnglish >= 2 && !hasAccents);
 
-          if (hasMustHave) score += 300;
-          if (hasPtBrKeywords) score += 100;
-          if (!hasPtBrKeywords && !hasMustHave) score -= 50;
+          if (hasMustHave || (hasPtBrKeywords && hasAccents)) {
+            score *= 6.0; // Bônus massivo para criativos brasileiros (x6)
+          } else if (isForeign || (!hasPtBrKeywords && !hasAccents)) {
+            score /= 15.0; // Penalidade extrema para vídeos gringos
+          }
 
-          if (v.width && v.width >= 1080) score += 150;
-          else if (v.width && v.width >= 720) score += 80;
-
+          // 4. Qualidade e Viralização (Engajamento Mínimo de 8%)
           const views = v.play_count || v.play || 0;
           const diggs = v.digg_count || 0;
           const comments = v.comment_count || 0;
           const shares = v.share_count || 0;
-          
-          const engagementRatio = views > 0 ? ((diggs + (comments * 4) + (shares * 6)) / views) * 100 : 0;
+          const engagementRatio = views > 0 ? ((diggs + (comments * 6) + (shares * 10)) / views) * 100 : 0;
 
-          if (engagementRatio > 18) score += 400; 
-          else if (engagementRatio > 12) score += 250;
-          else if (engagementRatio > 6) score += 100;
+          if (engagementRatio < 8) return null; 
 
-          if (views > 500000) score += 150;
-          else if (views > 100000) score += 80;
-          else if (views > 50000) score += 40;
+          if (v.width && v.width >= 1080) score += 300;
+          if (engagementRatio > 20) score += 400; 
 
-          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 15; });
-          currentNicheRules.negative.forEach(w => { if (text.includes(w)) score -= 80; });
+          // 5. Niche match
+          currentNicheRules.positive.forEach(w => { if (text.includes(w)) score += 50; });
+          currentNicheRules.negative.forEach(w => { if (text.includes(w)) return null; });
 
           score *= (v._queryWeight || 1.0);
           
-          const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
-          const finalUrl = v.play || v.wmplay;
-          const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(finalUrl)}`;
-
           return {
             id: v.video_id,
-            url: proxiedUrl,
+            originalUrl: v.play || v.wmplay,
             cover: v.cover,
             title: v.title,
             duration: v.duration,
             author: v.author?.nickname || 'Criador',
-            originalUrl: v.play || v.wmplay,
+            stats: { likes: diggs, shares: shares, comments: comments },
             _score: score
           };
         })
-        .filter((v: any) => v._score > 50)
+        .filter((v: any) => v !== null && v._score >= 400) // Threshold equilibrado
         .sort((a: any, b: any) => b._score - a._score);
 
-      if (scored.length === 0) throw new Error('Nenhum vídeo adequado encontrado');
+      if (scored.length === 0) throw new Error('Não encontramos vídeos brasileiros de alta qualidade para este produto. Tente um termo mais simples.');
 
-      setTreatingStatus('Processando melhor criativo...');
-      setTreatingProgress(65);
-      setTreatingChecklist(prev => [...prev, 'Selecionando vídeo de maior impacto']);
+      // Pool de 10 vídeos para garantir variedade no Swap
+      const topScored = scored.slice(0, 10);
+      setVideoResults(topScored);
+      setCurrentVideoIndex(0);
 
-      const bestVideo = scored[0];
+      setTreatingStatus('Processando melhor criativo selecionado...');
+      setTreatingProgress(75);
+      setTreatingChecklist(prev => [...prev, `Encontrados ${topScored.length} criativos de alto potencial`]);
+
+      const bestVideo = topScored[0];
+      if (!bestVideo) throw new Error('Falha ao carregar o melhor vídeo do pool');
+      
       const videoUrl = bestVideo.originalUrl;
-
-      setTreatingStatus('Baixando assets visuais...');
-      setTreatingProgress(85);
-      setTreatingChecklist(prev => [...prev, 'Preparando ambiente de edição']);
+      const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
+      const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(videoUrl)}`;
 
       const videoBlob = await fetch(videoUrl).then(r => r.blob()).catch(() => null);
-      
-      if (!videoBlob) {
-        throw new Error('Falha ao baixar video');
-      }
-
+      if (!videoBlob) throw new Error('Falha ao baixar video inicial');
       const videoObjectUrl = URL.createObjectURL(videoBlob);
       
       setVideoData({
         id: bestVideo.id,
-        url: videoObjectUrl,
+        url: videoObjectUrl, // Usamos o blob local para performance e estabilidade no editor
         thumbnail: bestVideo.cover || '',
         title: bestVideo.title || product.title,
         author: bestVideo.author,
-        stats: { 
-          likes: bestVideo.digg_count || 0, 
-          shares: bestVideo.share_count || 0, 
-          comments: bestVideo.comment_count || 0 
-        }
+        stats: bestVideo.stats,
+        proxiedUrl: proxiedUrl // Mantemos o proxy se necessário
       });
 
       if (product) {
@@ -1405,23 +1491,64 @@ const App: React.FC = () => {
 
       setTreatingStatus('Finalizando pipeline viral...');
       setTreatingProgress(100);
-      setTreatingChecklist(prev => [...prev, 'Pronto para editar']);
+      setTreatingChecklist(prev => [...prev, 'Ecossistema pronto']);
       
-      await new Promise(r => setTimeout(r, 800));
-      
+      await new Promise(r => setTimeout(r, 600));
       setStep('ready');
-      showToast('VIDEO SELECIONADO! 🎬');
+      showToast(`${topScored.length} VÍDEOS ENCONTRADOS! 🎬`);
       
     } catch (err: any) {
       console.error('Erro ao buscar TikTok:', err);
-      showToast('TENTE NOVAMENTE COM OUTRO PRODUTO');
+      showToast(err.message || 'TENTE NOVAMENTE COM OUTRO PRODUTO');
       setStep('list');
     }
-  };
+  }
 
-  const swapVideo = () => {
-    showToast("Trocando vídeo...");
-  };
+  async function swapVideo() {
+    if (!videoResults || videoResults.length <= 1) {
+      showToast("NÃO HÁ OUTROS VÍDEOS DISPONÍVEIS");
+      return;
+    }
+
+    const nextIndex = (currentVideoIndex + 1) % videoResults.length;
+    setCurrentVideoIndex(nextIndex);
+    const nextVideo = videoResults[nextIndex];
+    
+    setIsProcessing(true);
+    showToast(`Trocando para vídeo ${nextIndex + 1}/${videoResults.length}...`);
+    
+    try {
+      resetVideoEditor();
+      
+      // Carregar novo blob para o editor
+      const videoBlob = await fetch(nextVideo.originalUrl).then(r => r.blob()).catch(() => null);
+      if (!videoBlob) throw new Error('Falha ao baixar novo vídeo');
+      
+      const videoObjectUrl = URL.createObjectURL(videoBlob);
+      const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
+
+      setVideoData({
+        id: nextVideo.id,
+        url: videoObjectUrl,
+        thumbnail: nextVideo.cover || '',
+        title: nextVideo.title || selectedProduct?.title || 'Novo Vídeo',
+        author: nextVideo.author,
+        stats: nextVideo.stats,
+        proxiedUrl: `${VIDEO_PROXY}${encodeURIComponent(nextVideo.originalUrl)}`
+      });
+
+      if (selectedProduct) {
+        setCustomCopy(generateCreativeLegend(selectedProduct));
+        setVideoLegend(generateOverlayLegend(selectedProduct));
+      }
+      
+      showToast("VÍDEO ATUALIZADO! ✨");
+    } catch (err) {
+      showToast("ERRO AO TROCAR VÍDEO");
+    } finally {
+      setIsProcessing(false);
+    }
+  }
 
   const [downloadPreviewUrl, setDownloadPreviewUrl] = useState<string | null>(null);
 
@@ -1844,10 +1971,10 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="app-container overflow-hidden bg-slate-950 text-slate-50 font-inter">
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-50 font-inter overflow-hidden">
       <ScanningHUD active={isScanning} />
       
-      <header className="header px-3 py-3 sm:px-4 md:px-8 border-b border-white/5 bg-slate-950/50 backdrop-blur-3xl sticky top-0 z-[100]">
+      <header className="header border-b border-white/5 bg-slate-950/50 backdrop-blur-3xl z-[50] px-3 py-3 sm:px-4 md:px-8">
         <div className="flex items-start justify-between gap-3 sm:items-center">
         <div className="flex items-center gap-4 min-w-0">
           <div className="flex flex-col">
@@ -1905,7 +2032,7 @@ const App: React.FC = () => {
 
         <div className="mt-3 flex items-center gap-2 min-w-0">
           <div className="min-w-0 flex-1">
-            <TrialCountdown remainingMs={trialRemaining} isPro={hasActivePro} />
+            <TrialCountdown remainingMs={trialRemaining} isPro={hasActivePro} onRefresh={checkAccess} />
           </div>
           {hasActivePro ? (
             <div className="flex items-center gap-2 shrink-0">
@@ -1951,15 +2078,15 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <main className="content-area relative z-0">
+      <main className="flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           {step === 'bio' && (
             <motion.div 
               key="bio" 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              className="h-[calc(100vh-10rem)] overflow-y-auto p-4 md:p-8"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="h-full overflow-y-auto p-2 md:p-8"
             >
               <BioManager
                 user={user}
@@ -2008,7 +2135,7 @@ const App: React.FC = () => {
               {/* Large Countdown for Trial Users */}
               {!hasActivePro && trialRemaining !== null && (
                 <div className="relative z-10 scale-90 space-y-4">
-                  <TrialCountdown remainingMs={trialRemaining} isPro={false} variant="large" />
+                  <TrialCountdown remainingMs={trialRemaining} isPro={false} variant="large" onRefresh={checkAccess} />
                   <motion.button
                     whileHover={{ scale: 1.03, y: -2 }}
                     whileTap={{ scale: 0.97 }}
@@ -2115,12 +2242,12 @@ const App: React.FC = () => {
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
-              className="h-[calc(100vh-10rem)] overflow-y-auto p-4 md:p-8"
+              className="h-full flex flex-col overflow-y-auto custom-scrollbar p-4 md:p-8"
             >
-              <div className="max-w-md mx-auto space-y-8">
-                <div className="text-center space-y-2">
-                  <h3 className="text-xl font-black italic uppercase italic">CONFIGURAÇÃO DE <span className="text-accent">LINK</span></h3>
-                  <p className="text-[9px] text-dim uppercase font-bold tracking-widest">Defina seu slug único no ecossistema</p>
+              <div className="max-w-md mx-auto w-full space-y-10 pb-32">
+                <div className="text-center space-y-3">
+                  <h3 className="text-2xl font-black italic uppercase italic tracking-tighter">CONFIGURAÇÃO DE <span className="text-accent underline decoration-accent/20">LINK</span></h3>
+                  <p className="text-[10px] text-dim uppercase font-black tracking-[0.3em]">Defina seu slug único no ecossistema</p>
                 </div>
                 <BioManager
                   user={user}
@@ -2210,33 +2337,55 @@ const App: React.FC = () => {
               key="list" 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-6 space-y-5 pb-32"
+              className="h-full flex flex-col overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-6 pb-40"
             >
               {/* Pesquisa por Link da Shopee */}
-              <form onSubmit={handleCustomLinkSubmit} className="flex gap-2">
-                <input 
-                  type="text"
-                  value={customLink}
-                  onChange={(e) => setCustomLink(e.target.value)}
-                  placeholder="Cole o link ou o nome de um produto..."
-                  className="flex-1 bg-slate-900/80 border border-white/10 rounded-2xl px-4 py-3 text-[12px] text-white focus:outline-none focus:border-accent shadow-inner placeholder:text-white/30"
-                />
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  type="submit"
-                  className="bg-accent text-slate-950 px-5 rounded-xl font-black uppercase text-[10px] tracking-wider shrink-0 flex items-center justify-center gap-2 hover:bg-accent/80 transition-colors"
+              <form onSubmit={handleCustomLinkSubmit} className="relative group shrink-0 space-y-2">
+                <div className="absolute -inset-1 bg-accent/20 rounded-2xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity duration-500" />
+                <div className="relative flex items-center">
+                  <div className="flex-1 relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-accent transition-colors z-20" />
+                    <input 
+                      type="text"
+                      value={customLink}
+                      onChange={(e) => setCustomLink(e.target.value)}
+                      placeholder="Qual produto deseja buscar?"
+                      className="w-full bg-slate-950/80 border border-white/5 rounded-2xl pl-10 pr-24 py-3.5 text-[12px] text-white focus:outline-none focus:border-accent/40 shadow-2xl placeholder:text-white/20 transition-all font-medium relative z-10"
+                    />
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20">
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        type="submit"
+                        className="bg-accent text-slate-950 h-9 px-4 rounded-xl font-black uppercase text-[10px] tracking-tighter hover:brightness-110 shadow-xl shadow-accent/10 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        BUSCAR
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+                {/* Texto de Auxílio */}
+                <motion.div 
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 px-1 opacity-60"
                 >
-                  <Search size={14} /> BUSCAR
-                </motion.button>
+                  <div className="w-1 h-1 bg-accent rounded-full animate-pulse" />
+                  <p className="text-[9px] font-black text-accent uppercase tracking-widest italic">
+                    DICA: DIGITE E CLIQUE NO BOTÃO BUSCAR
+                  </p>
+                </motion.div>
               </form>
 
               {/* Header */}
-              <div className="flex justify-between items-center">
-                <div className="space-y-0.5">
-                  <h2 className="text-2xl font-black uppercase leading-none italic">Packs <span className="text-accent">Shopee</span></h2>
-                  <p className="text-[9px] text-dim font-black uppercase tracking-widest">Fotos e vídeos gerados pela SquadOS™</p>
+              <div className="flex justify-between items-center px-1">
+                <div className="space-y-1">
+                  <h2 className="text-3xl font-black uppercase leading-none italic tracking-tighter">Packs <span className="text-accent">Shopee</span></h2>
+                  <p className="text-[10px] text-dim font-black uppercase tracking-[0.3em] flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+                    FOTOS E VÍDEOS GERAIS
+                  </p>
                 </div>
-                <div className="bg-accent/10 border border-accent/30 text-accent text-[10px] px-3 py-1.5 font-black uppercase rounded-lg">
+                <div className="glass-acid px-4 py-2 border border-accent/20 text-accent text-[11px] font-black uppercase tracking-widest rounded-xl">
                    {activeItems.length} ATIVOS
                 </div>
               </div>
@@ -2245,74 +2394,105 @@ const App: React.FC = () => {
               <motion.button
                 whileTap={{ scale: 0.96 }}
                 onClick={refreshProducts}
-                className="w-full h-12 bg-accent/10 border border-accent/30 rounded-2xl flex items-center justify-center gap-3 text-accent text-[11px] font-black uppercase tracking-widest hover:bg-accent/20 transition-all"
+                className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center gap-3 text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] hover:bg-white/10 hover:border-accent/30 hover:text-accent transition-all group"
               >
-                <RefreshCcw size={15} />
-                Atualizar Produtos
+                <RefreshCcw size={16} className="group-hover:rotate-180 transition-transform duration-700" />
+                Sincronizar Acervo Viral
               </motion.button>
 
-              {/* Grade de Categorias 3 colunas com ícones */}
-              <div className="grid grid-cols-3 gap-2">
+              {/* Grade de Categorias Premium */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {niches.map(n => (
                   <motion.button
                     key={n.id}
                     whileTap={{ scale: 0.92 }}
                     onClick={() => handleNicheChange(n.id)}
-                    className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl border transition-all ${
+                    className={`flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] border transition-all duration-300 relative group overflow-hidden ${
                       activeNiche === n.id
-                        ? 'bg-accent border-accent text-slate-950 shadow-[0_4px_20px_rgba(6,182,212,0.3)]'
-                        : 'bg-slate-900/60 border-white/5 text-white/60 hover:border-white/20'
+                        ? 'bg-accent/10 border-accent/50 text-accent shadow-[0_8px_30px_rgba(6,182,212,0.15)] bg-gradient-to-br from-accent/5 to-transparent'
+                        : 'bg-slate-900/40 border-white/5 text-white/40 hover:border-white/20 hover:bg-white/5'
                     }`}
                   >
-                    <span className="text-2xl leading-none">{n.icon}</span>
-                    <span className={`text-[9px] font-black uppercase tracking-wider leading-none text-center ${
-                      activeNiche === n.id ? 'text-slate-950' : 'text-white/50'
-                    }`}>{n.label}</span>
+                    {activeNiche === n.id && (
+                      <motion.div layoutId="niche-glow" className="absolute inset-0 bg-accent/5 rounded-[1.5rem] pointer-events-none" />
+                    )}
+                    <span className={`text-2xl transition-transform duration-300 ${activeNiche === n.id ? 'scale-110' : 'group-hover:scale-110 grayscale-[0.5] group-hover:grayscale-0 opacity-60 group-hover:opacity-100'}`}>
+                      {n.icon}
+                    </span>
+                    <span className={`text-[10px] font-black uppercase tracking-widest leading-none text-center transition-colors ${
+                      activeNiche === n.id ? 'text-accent' : 'text-slate-600'
+                    }`}>
+                      {n.label}
+                    </span>
                   </motion.button>
                 ))}
               </div>
 
               {/* Lista de Produtos */}
               <div className="space-y-3">
-                {activeItems.map(p => {
+                {activeItems.map((p, i) => {
                   const isPublished = publicationHistory.some(h => h.product_id === p.id);
                   return (
                     <motion.div 
                       key={p.id} 
-                      whileHover={{ x: 4 }}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                      whileHover={{ x: 6 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`tech-card p-4 flex gap-4 items-center group relative overflow-hidden ${
-                        isPublished
-                          ? 'opacity-30 grayscale pointer-events-none'
-                          : 'cursor-pointer hover:border-accent/40'
-                      }`}
+                      className={`relative group ${isPublished ? 'opacity-40 grayscale pointer-events-none' : 'cursor-pointer'}`}
                       onClick={() => { setSelectedProduct(p); researchTikTok(p); }}
                     >
-                      <div className="w-14 h-14 rounded-2xl bg-slate-950 flex flex-col items-center justify-center border border-white/10 shrink-0 relative overflow-hidden">
-                        <div className="absolute inset-0 bg-accent/5" />
-                        <span className="text-base font-black text-accent italic relative z-10">%{p.commission_pct}</span>
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[8px] font-black uppercase tracking-widest text-accent/60 bg-accent/5 px-2 py-0.5 rounded border border-accent/10">{p.sales} VENDAS</span>
-                          {isPublished && <span className="text-[8px] font-black uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded">POSTADO</span>}
+                      <div className="absolute -inset-[1px] bg-gradient-to-r from-accent/20 via-transparent to-accent/5 rounded-[2.2rem] opacity-0 group-hover:opacity-100 transition-opacity blur-[1px]" />
+                      
+                      <div className="relative bg-slate-900/60 border border-white/5 rounded-[2rem] p-4 flex gap-5 items-center backdrop-blur-3xl transition-all group-hover:border-accent/30 group-hover:bg-slate-900/80 shadow-2xl shadow-black/40">
+                        {/* Badge de Comissão */}
+                        <div className="relative w-16 h-16 shrink-0">
+                          <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <div className="relative w-full h-full rounded-2xl bg-black/60 border border-accent/20 flex flex-col items-center justify-center overflow-hidden">
+                            <span className="text-[10px] font-black text-accent/60 uppercase leading-none mb-0.5 tracking-tighter">COM</span>
+                            <span className="text-xl font-black text-accent italic leading-none">{p.commission_pct}%</span>
+                            <div className="absolute inset-x-0 bottom-0 h-1 bg-accent/30" />
+                          </div>
                         </div>
-                        <h3 className="font-black text-sm uppercase truncate leading-none mb-1">{p.title}</h3>
-                        <p className="font-mono text-[10px] text-white/40">{p.price}</p>
-                      </div>
 
-                      <div className="flex flex-col gap-1.5 shrink-0">
-                        <div className="w-12 h-12 rounded-2xl border border-white/5 flex items-center justify-center group-hover:border-accent group-hover:bg-accent/5 transition-all">
-                          <ArrowRight size={18} className="group-hover:text-accent group-hover:translate-x-0.5 transition-all text-white/20" />
+                        {/* Info do Produto */}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                             <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+                               <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                               <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">{p.sales} VENDAS</span>
+                             </div>
+                             {isPublished && <span className="text-[8px] font-black uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded border border-white/5">POSTADO</span>}
+                          </div>
+                          
+                          <h3 className="font-black text-[13px] text-white/90 uppercase truncate leading-tight group-hover:text-white transition-colors">{p.title}</h3>
+                          
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs font-black text-emerald-400/80">{p.price}</span>
+                            <div className="w-1 h-1 rounded-full bg-slate-700" />
+                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">SQUAD SELECTION</span>
+                          </div>
                         </div>
-                        <button
-                          onClick={(e) => addToBio(p, e)}
-                          className="w-12 h-8 rounded-xl border border-accent/20 bg-accent/5 flex items-center justify-center hover:bg-accent hover:text-black text-accent transition-all"
-                          title="Publicar na minha Loja Bio"
-                        >
-                          <ShoppingBag size={14} />
-                        </button>
+
+                        {/* Ações Rápidas */}
+                        <div className="flex flex-col gap-2 shrink-0">
+                          <motion.div 
+                            whileHover={{ scale: 1.1 }}
+                            className="w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-slate-950 transition-all shadow-lg shadow-accent/5"
+                          >
+                            <ArrowRight size={20} />
+                          </motion.div>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => { e.stopPropagation(); addToBio(p, e); }}
+                            className="w-11 h-9 rounded-xl border border-white/5 bg-white/5 flex items-center justify-center text-white/40 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all active:scale-95"
+                            title="Publicar na minha Vitrine"
+                          >
+                            <ShoppingBag size={15} />
+                          </motion.button>
+                        </div>
                       </div>
                     </motion.div>
                   );
@@ -2419,28 +2599,28 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mb-3 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.42em] text-accent/70">Central de postagem</p>
-                  <div className="space-y-3 sm:flex sm:items-start sm:justify-between sm:gap-3 sm:space-y-0">
+                <div className="mb-2 space-y-1">
+                  <p className="text-[9px] font-black uppercase tracking-[0.42em] text-accent/70">Central de postagem</p>
+                  <div className="space-y-2 sm:flex sm:items-start sm:justify-between sm:gap-3 sm:space-y-0">
                     <div className="min-w-0 max-w-none sm:max-w-[240px]">
-                      <h2 className="text-[1.45rem] font-black italic uppercase leading-[0.92] tracking-tighter text-white sm:text-[1.8rem]">
+                      <h2 className="text-[1.15rem] font-black italic uppercase leading-[0.92] tracking-tighter text-white sm:text-[1.8rem]">
                         Criativo pronto para publicar
                       </h2>
-                      <p className="mt-1.5 text-[12px] text-slate-400 leading-relaxed sm:text-[13px] sm:max-w-[220px]">
-                        Revise o video, ajuste o estilo final e publique com a copia estrategica da sua oferta.
+                      <p className="mt-1 text-[11px] text-slate-400 leading-relaxed sm:text-[13px] sm:max-w-[220px]">
+                        Ajuste o estilo e publique sua oferta.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 rounded-2xl border border-white/6 bg-slate-900/55 px-3 py-2 shrink-0 self-start w-fit sm:text-right">
-                      <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_12px_rgba(6,182,212,0.8)]" />
+                    <div className="flex items-center gap-2 rounded-xl border border-white/6 bg-slate-900/55 px-2 py-1.5 shrink-0 self-start w-fit sm:text-right">
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_12px_rgba(6,182,212,0.8)]" />
                       <div>
-                        <p className="text-[8px] font-black uppercase tracking-[0.28em] text-slate-500">Modo</p>
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white">Creative Top V6</p>
+                        <p className="text-[7px] font-black uppercase tracking-[0.28em] text-slate-500 leading-none">Modo</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-white">Creative V6</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="video-preview-container !h-[220px] sm:!h-[260px] relative overflow-hidden rounded-[1.45rem] sm:rounded-[1.7rem] border border-white/8 shadow-[0_20px_50px_rgba(2,6,23,0.42)] bg-slate-950">
+                <div className="video-preview-container !h-[190px] sm:!h-[260px] relative overflow-hidden rounded-[1.45rem] sm:rounded-[1.7rem] border border-white/8 shadow-[0_20px_50px_rgba(2,6,23,0.42)] bg-slate-950">
                 {videoData?.url ? (
                   <>
                     <video 
@@ -3352,6 +3532,14 @@ const App: React.FC = () => {
             </button>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {trialExpired && !isPro && <LockScreen />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isCheckoutOpen && <CheckoutOverlay />}
       </AnimatePresence>
   </div>
 );
