@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft, Share2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { generateWhatsappMessage } from '../utils/shareUtils';
 
 interface BioItem {
   id: string;
@@ -165,41 +166,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     const settingsInterval = setInterval(loadSettings, 5000);
     return () => clearInterval(settingsInterval);
   }, [userId]);
-
-  const generateWhatsappMessage = (item: BioItem) => {
-    const hooks = [
-      "Gente, chocada com esse item! 😱",
-      "Olha esse achadinho que encontrei! ✨",
-      "Esse resolve minha vida total! 😍",
-      "Um dos meus favoritos ultimamente! 🔥",
-      "Vocês não têm noção da qualidade disso aqui! 💎",
-      "Achadinho de ouro hoje! 🚀"
-    ];
-
-    const calls = [
-      "Qualidade premium e super prático.",
-      "Melhor custo-benefício que já vi.",
-      "É aquele item que todo mundo precisa ter.",
-      "Acabou de chegar reposição, corre!",
-      "Super útil pro dia a dia, recomendo muito.",
-      "Design lindo e entrega tudo que promete."
-    ];
-
-    const ctas = [
-      "🛍️ COMPRE AQUI:",
-      "🛒 LINK OFICIAL:",
-      "👉 GARANTA O SEU:",
-      "🔗 CLIQUE PARA VER:",
-      "🚩 LINK PROMOCIONAL:"
-    ];
-
-    const random = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
-
-    const title = `🔥 ${item.title.toUpperCase()} 🔥`;
-    const priceText = item.price ? `💰 Apenas: ${item.price}\n` : "";
-    
-    return `${title}\n\n${random(hooks)}\n${random(calls)}\n\n${priceText}${random(ctas)} ${item.affiliate_link}\n\nSiga meu perfil para mais achados! ✨`;
-  };
 
   const handleShare = async (item: BioItem, e: React.MouseEvent) => {
     e.preventDefault();

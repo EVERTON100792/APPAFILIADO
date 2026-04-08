@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { generateViralProductName } from '../utils/viralNaming';
+import { generateWhatsappMessage } from '../utils/shareUtils';
 
 interface BioItem {
   id: string;
@@ -319,8 +320,8 @@ export const BioManager: React.FC<{
   };
 
   const handleShare = async (item: BioItem) => {
-    const shareTitle = `🔥 ${item.title.toUpperCase()} 🔥`;
-    const shareText = `Olha esse achadinho que encontrei! 😱\n\n✅ Qualidade Premium\n✅ Testado e Aprovado\n\n🛍️ COMPRE AQUI: ${item.affiliate_link}\n\nSiga meu perfil para mais achados! ✨`;
+    const shareText = generateWhatsappMessage(item);
+    const shareTitle = item.title.toUpperCase();
 
     if (navigator.share) {
       try {
