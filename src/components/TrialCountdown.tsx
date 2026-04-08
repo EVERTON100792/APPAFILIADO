@@ -28,17 +28,18 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
         return;
       }
 
-      if (isPro) {
-        const totalDays = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+      // Se for PRO e estiver expirando (> 24h), mostramos em formato de dias/horas
+      if (isPro && remainingMs > 24 * 60 * 60 * 1000) {
         const days = Math.floor(remainingMs / (1000 * 60 * 60 * 24));
         const hours = Math.floor((remainingMs / (1000 * 60 * 60)) % 24);
-        setTimeLeft(`${Math.max(totalDays, days)}d ${hours.toString().padStart(2, '0')}h`);
+        setTimeLeft(`${days}d ${hours.toString().padStart(2, '0')}h`);
         return;
       }
 
+      // Para Trial ou PRO nas últimas 24h, mostramos HH:MM:SS para gerar urgência
       const seconds = Math.floor((remainingMs / 1000) % 60);
       const minutes = Math.floor((remainingMs / (1000 * 60)) % 60);
-      const hours = Math.floor((remainingMs / (1000 * 60 * 60)) % 24);
+      const hours = Math.floor(remainingMs / (1000 * 60 * 60)); // Total de horas, pode passar de 24 se necessário mas aqui o limite é 24
 
       setTimeLeft(
         `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
@@ -59,7 +60,9 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
         </div>
         <div className="relative flex flex-col">
           <span className={`${variant === 'large' ? 'text-sm' : 'text-[10px]'} font-black uppercase tracking-[0.22em] ${isExpiringSoon ? 'text-amber-200' : 'text-emerald-300'}`}>{isExpiringSoon ? 'PRO VENCE EM BREVE' : 'STATUS: PERFIL PRO'}</span>
-          <span className={`${variant === 'large' ? 'text-[11px]' : 'text-[9px]'} ${isExpiringSoon ? 'text-amber-100/90' : 'text-emerald-200/80'} font-bold uppercase tracking-widest`}>Renova em {timeLeft}</span>
+          <span className={`${variant === 'large' ? 'text-[11px]' : 'text-[9px]'} ${isExpiringSoon ? 'text-amber-100/90' : 'text-emerald-200/80'} font-bold uppercase tracking-widest`}>
+            {isExpiringSoon ? `Expira em ${timeLeft}` : 'Ativo por tempo ilimitado'}
+          </span>
         </div>
         {onRefresh && (
           <button onClick={handleRefresh} className="relative ml-2 p-2 hover:bg-white/5 rounded-full transition-colors group">
@@ -69,6 +72,7 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
       </div>
     );
   }
+
 
   if (!remainingMs || remainingMs <= 0) {
     return (
@@ -102,10 +106,10 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
         <div className="relative flex flex-col items-center gap-2">
           <div className="flex items-center gap-3 mb-2">
             <Clock size={20} className="text-accent animate-pulse" />
-            <span className="text-xs font-black uppercase tracking-[0.4em] text-slate-500 italic">Teste em andamento</span>
+            <span className="text-xs font-black uppercase tracking-[0.4em] text-accent italic">Teste Grátis Ativo</span>
           </div>
           <div className="flex items-baseline gap-2">
-             <span className="text-6xl font-mono font-black text-white tracking-tighter tabular-nums drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+             <span className="text-6xl font-mono font-black text-white tracking-tighter tabular-nums drop-shadow-[0_0_20px_rgba(6,182,212,0.2)]">
                {timeLeft}
              </span>
              {onRefresh && (
@@ -114,7 +118,7 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
                </button>
              )}
           </div>
-          <p className="text-[10px] font-bold text-accent uppercase tracking-[0.3em] mt-2">Sua licença de teste está ativa</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Acesso ilimitado liberado por 24h</p>
         </div>
       </motion.div>
     );
@@ -131,7 +135,7 @@ export const TrialCountdown: React.FC<TrialCountdownProps> = ({ remainingMs, isP
           <Clock size={14} className="text-accent animate-pulse" />
           <div className="absolute inset-0 bg-accent blur-md opacity-10 animate-pulse" />
         </div>
-        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">TESTE</span>
+        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-accent">TESTE GRÁTIS</span>
       </div>
       
       <div className="flex items-center gap-3">

@@ -717,7 +717,7 @@ export const BioManager: React.FC<{
                   value={slugInput}
                   onChange={e => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''))}
                   placeholder="ex: meus-achadinhos"
-                  className="w-full bg-[#0a0a0a] border-2 border-emerald-500/30 rounded-2xl pl-12 pr-6 py-5 text-white font-mono font-bold focus:outline-none focus:border-emerald-500 transition-all text-base sm:text-sm relative z-10"
+                  className="w-full bg-emerald-950/20 border-2 border-emerald-500/30 rounded-2xl pl-12 pr-6 py-5 text-white font-mono font-bold focus:outline-none focus:border-emerald-400 focus:bg-emerald-950/40 shadow-inner shadow-emerald-900/20 transition-all text-base sm:text-sm relative z-10"
                   onKeyDown={e => e.key === 'Enter' && handleSaveSlug()}
                   autoFocus
                 />
@@ -822,7 +822,7 @@ export const BioManager: React.FC<{
                 <div className="relative group">
                   <Link size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
                   <input type="url" required placeholder="https://shope.ee/..." value={link} onChange={e => setLink(e.target.value)}
-                    className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-medium" />
+                    className="w-full bg-emerald-950/20 border-2 border-emerald-500/20 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-400 focus:bg-emerald-950/40 shadow-inner shadow-emerald-900/20 transition-all font-medium" />
                 </div>
               </div>
 
@@ -831,7 +831,7 @@ export const BioManager: React.FC<{
                 <div className="relative group">
                   <ImageIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
                   <input type="url" required placeholder="URL da foto do produto..." value={imageUrl} onChange={e => setImageUrl(e.target.value)}
-                    className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-medium" />
+                    className="w-full bg-emerald-950/20 border-2 border-emerald-500/20 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-400 focus:bg-emerald-950/40 shadow-inner shadow-emerald-900/20 transition-all font-medium" />
                 </div>
                 <div className="flex gap-2">
                   <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />

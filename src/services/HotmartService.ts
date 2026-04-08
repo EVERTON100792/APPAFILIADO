@@ -61,10 +61,16 @@ export const HotmartService = {
     }
 
     if (isProActive) {
+      // Para fins de demonstracao do fluxo de expiracao PRO solicitado pelo usuario,
+      // calculamos uma expiracao baseada em 30 dias se nao houver data especifica.
+      const subDuration = 30 * 24 * 60 * 60 * 1000;
+      const startedAt = data.trial_started_at || data.updated_at || new Date().toISOString();
+      const expirationDate = new Date(startedAt).getTime() + subDuration;
+      
       return {
         isPro: true,
         trialExpired: false,
-        trialRemainingMs: null, // Hotmart gerencia a renovacao mensal
+        trialRemainingMs: Math.max(0, expirationDate - now), 
       };
     }
 

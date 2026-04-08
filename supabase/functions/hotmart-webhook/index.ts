@@ -50,18 +50,18 @@ serve(async (req: Request) => {
       throw new Error("Email do comprador nao encontrado")
     }
 
-    // 3. Busca o ID do usuario pelo email
-    const { data: usersData, error: userError } = await supabaseAdmin.auth.admin.listUsers()
-    if (userError) throw userError
-
-    const user = usersData.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
-
-    if (!user) {
-      return new Response(JSON.stringify({ message: 'User not found' }), {
-        status: 200,
+    // 3. Busca o usuário diretamente pelo email (Alta Performance)
+    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserByEmail(email)
+    
+    if (userError) {
+      console.error(`Erro ao buscar usuário ${email}:`, userError.message)
+      return new Response(JSON.stringify({ message: 'User not found in Auth' }), {
+        status: 200, // Retornamos 200 para a Hotmart não ficar tentando reenviar se o usuário não existe
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+
+    const user = userData.user;
 
     // 4. Ativa ou Desativa o PRO
     const isApproved = ['APPROVED', 'COMPLETE'].includes(status)
