@@ -565,5 +565,6 @@ html {
   overflow-x: hidden;
   background-color: var(--bg-deep); /* Garante fundo sólido na transição */
   contain: paint; /* Isola a renderização para evitar flickering */
+  transform: translateZ(0); /* Força aceleração de hardware sem os bugs do will-change */
 }
 
