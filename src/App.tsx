@@ -43,7 +43,7 @@ import { LoginScreen } from "./components/LoginScreen";
 import { HotmartService } from "./services/HotmartService";
 import { TrialCountdown } from "./components/TrialCountdown";
 import { AgentScouting } from "./components/AgentScouting";
-// import { productDB } from './data/productDB';
+import { productDB } from './data/productDB';
 import {
   generateViralProductName,
   getSmartSearchName,
@@ -818,22 +818,73 @@ const App: React.FC = () => {
     { id: "Decoração", label: "Casa & Deco", icon: "🏠" },
     { id: "Pet", label: "Pet", icon: "🐾" },
   ];
+  const getProductScore = (product: any) => {
+    const salesStr = product.sales || "";
+    const comm = product.commission_pct || 0;
+    
+    let salesValue = 0;
+    if (typeof salesStr === 'number') {
+      salesValue = salesStr;
+    } else {
+      const match = typeof salesStr === 'string' ? salesStr.match(/[\d.]+/) : null;
+      if (match) {
+        let num = parseFloat(match[0]);
+        if (salesStr.toLowerCase().includes('k')) num *= 1000;
+        if (salesStr.toLowerCase().includes('m')) num *= 1000000;
+        salesValue = num;
+      }
+    }
+    // A ideia visual solicitada: trazer produtos focados nos mais vendidos + boa comissão
+    // Usamos um multiplicador: Vendas absolutas x Modificador de Comissão %
+    return salesValue * (1 + (comm / 100));
+  };
+
   const getInfinitePool = (niche: string) => {
+    // O usuário solicitou 100% da base de dados (Supabase).
+    // Nenhum fallback local de productDB deve ser usado aqui.
+    
+    const dbValid = databaseProducts && databaseProducts.length > 0 ? databaseProducts : [];
+
+    // Os produtos que vêm da base de dados podem ter a coluna como string (ex: commission: "25%"). 
+    // Precisamos normalizar para number (commission_pct) que a nossa lógica utiliza para o '.sort()'.
+    const normalizedPool = dbValid.map(p => {
+      let commissionValue = p.commission_pct;
+      if (commissionValue === undefined && typeof p.commission === 'string') {
+        const parsed = parseInt(p.commission.replace('%', ''), 10);
+        commissionValue = isNaN(parsed) ? 0 : parsed;
+      } else if (commissionValue === undefined) {
+        commissionValue = 0;
+      }
+      return {
+        ...p,
+        commission_pct: commissionValue
+      };
+    });
+
+    // Filtra pelo nicho ativo a partir apenas da base de dados real
     const staticPool =
       niche === "Todos"
-        ? databaseProducts
-        : databaseProducts.filter((p) => p.niche === niche);
-    return staticPool.filter(
+        ? normalizedPool
+        : normalizedPool.filter((p) => p.niche === niche);
+
+    // Retira os que já estão no histórico de publicação
+    const finalPool = staticPool.filter(
       (p) => !publicationHistory.some((ph) => ph.product_id === p.id),
     );
+
+    return finalPool;
   };
+
+  // Fetch central database independently ONCE on app load
+  useEffect(() => {
+    fetchProductsDB();
+  }, []);
 
   // Persistence
   useEffect(() => {
     if (isLoadingAuth || isHydratingApp || !user) return;
 
     fetchHistory();
-    fetchProductsDB();
     loadScoutedProducts();
 
     if (storeSlug === "meu-link" && !storeReady) {
@@ -1199,9 +1250,9 @@ const App: React.FC = () => {
         (p) => !currentlyShownIds.has(p.id),
       );
 
-      // Filtra e randomiza os top items
+      // Filtra e randomiza os top items cruzando Vendas + Comissão
       const topAvailable = [...available]
-        .sort((a, b) => (b.commission_pct || 0) - (a.commission_pct || 0))
+        .sort((a, b) => getProductScore(b) - getProductScore(a))
         .slice(0, Math.max(needed * 3, 30));
 
       const shuffled = topAvailable.sort(() => Math.random() - 0.5);
@@ -1335,9 +1386,9 @@ const App: React.FC = () => {
     // Busca pool infinito e garante sempre 30 opções frescas
     const infinitePool = getInfinitePool(activeNiche);
 
-    // Traz os que tem maior comissão primeiro para engajamento imediato, misturando levemente
+    // Seleciona os de ALTO IMPACTO (Mais Vendidos + Comissão Alta) de forma garantida
     const topItems = [...infinitePool]
-      .sort((a, b) => b.commission_pct - a.commission_pct)
+      .sort((a, b) => getProductScore(b) - getProductScore(a))
       .slice(0, 30);
     const shuffled = topItems.sort(() => Math.random() - 0.5);
 
