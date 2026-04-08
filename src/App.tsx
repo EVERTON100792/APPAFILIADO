@@ -258,6 +258,21 @@ const CheckoutOverlay: React.FC<CheckoutOverlayProps> = ({
   );
 };
 
+// Variantes Premium para Transição de Abas
+const stepVariants = {
+  initial: { opacity: 0, scale: 0.96, filter: "blur(10px)" },
+  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
+  exit: { opacity: 0, scale: 1.05, filter: "blur(10px)" },
+};
+
+const stepTransition = {
+  type: "spring",
+  stiffness: 260,
+  damping: 26,
+  mass: 1,
+  filter: { type: "tween", ease: "easeInOut", duration: 0.3 }, // Previne desfoque negativo (erro de console)
+};
+
 const App: React.FC = () => {
   const bioUserId = new URLSearchParams(window.location.search).get("loja");
   if (bioUserId) return <BioStore userId={bioUserId} />;
@@ -310,7 +325,7 @@ const App: React.FC = () => {
   const pendingMetadataRef = useRef<Record<string, any> | null>(null);
   const lastPersistedStepRef = useRef<Step | null>(null);
 
-  const updateUserMetadata = async (patch: Record<string, any>) => {
+  const updateUserMetadata = async (patch: Record<string, any>, silent = false) => {
     if (!user) return null;
 
     const currentMetadata = userMetadataRef.current || user.user_metadata || {};
@@ -325,9 +340,13 @@ const App: React.FC = () => {
 
     userMetadataRef.current = nextMetadata;
     pendingMetadataRef.current = nextMetadata;
-    setUser((prev: any) =>
-      prev ? { ...prev, user_metadata: nextMetadata } : prev,
-    );
+
+    // Se for silencioso, não chamamos setUser imediatamente para evitar flickering na UI
+    if (!silent) {
+      setUser((prev: any) =>
+        prev ? { ...prev, user_metadata: nextMetadata } : prev,
+      );
+    }
 
     if (metadataUpdateInFlightRef.current) {
       return user;
@@ -982,10 +1001,11 @@ const App: React.FC = () => {
 
     const timer = setTimeout(() => {
       lastPersistedStepRef.current = step;
+      // Usamos update silencioso para persistência de aba para evitar flickering
       void updateUserMetadata({
         last_step: step,
-      });
-    }, 400);
+      }, true);
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [step, user]);
@@ -2461,11 +2481,12 @@ const App: React.FC = () => {
     );
   }
 
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-50 font-inter overflow-hidden">
+    <div className="flex flex-col h-[100dvh] bg-slate-950 text-slate-50 font-inter overflow-hidden">
       <ScanningHUD active={isScanning} />
 
-      <header className="border-b border-white/5 bg-slate-950/60 backdrop-blur-3xl z-[100] px-6 py-4 sticky top-0 shadow-2xl space-y-4">
+      <header className="border-b border-white/5 bg-slate-950/60 backdrop-blur-3xl z-[100] px-6 py-4 sticky top-0 shadow-2xl space-y-4 min-h-[76px] sm:min-h-[80px]">
         <div className="flex items-center justify-between">
           <ViralSquadLogo size="sm" />
           
@@ -2560,14 +2581,16 @@ const App: React.FC = () => {
       </header>
 
 
-      <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-950">
-        <AnimatePresence mode="wait">
+      <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-950 contain-layout">
+        <AnimatePresence mode="popLayout">
           {step === "bio" && (
             <motion.div
               key="bio"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
               className="step-wrapper-standard overflow-y-auto p-4 md:p-8"
             >
               <BioManager
@@ -2582,9 +2605,11 @@ const App: React.FC = () => {
           {step === "home" && (
             <motion.div
               key="home"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
               className="step-wrapper-standard"
             >
               <div className="home-layout-perfect">
@@ -2685,9 +2710,11 @@ const App: React.FC = () => {
           {step === "onboarding_start" && (
             <motion.div
               key="onboarding_start"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.1 }}
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
               className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-8 text-center space-y-8"
             >
               <div className="relative">
@@ -2723,9 +2750,11 @@ const App: React.FC = () => {
           {step === "onboarding_config" && (
             <motion.div
               key="onboarding_config"
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
               className="h-full flex flex-col overflow-y-auto custom-scrollbar p-4 md:p-8"
             >
               <div className="max-w-md mx-auto w-full space-y-10 pb-32">
@@ -2754,9 +2783,11 @@ const App: React.FC = () => {
           {step === "onboarding_filtering" && (
             <motion.div
               key="onboarding_filtering"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
               className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-8 text-center space-y-12 relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_#020617_80%)] z-10" />
@@ -2839,9 +2870,11 @@ const App: React.FC = () => {
           {step === "agents_scouting" && (
             <motion.div
               key="agents_scouting"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
               className="step-wrapper-standard"
             >
               <AgentScouting
@@ -2858,9 +2891,12 @@ const App: React.FC = () => {
           {step === "list" && (
             <motion.div
               key="list"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-6 pb-40"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard p-4 sm:p-6 space-y-6 pb-40"
             >
               {/* Pesquisa por Link da Shopee */}
               <form
@@ -3084,9 +3120,11 @@ const App: React.FC = () => {
           {step === "plans" && (
             <motion.div
               key="plans"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
               className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-6 text-center space-y-8"
             >
               <div className="relative">
@@ -3176,9 +3214,12 @@ const App: React.FC = () => {
           {step === "treating" && (
             <motion.div
               key="treating"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="h-[calc(100vh-10rem)] flex flex-col items-center justify-center p-6"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard flex flex-col items-center justify-center p-6"
             >
               <div className="w-full max-w-md rounded-[2.25rem] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.94)_0%,rgba(2,6,23,0.98)_100%)] p-7 shadow-[0_30px_120px_rgba(2,6,23,0.8)] backdrop-blur-3xl">
                 <div className="flex flex-col items-center text-center gap-6">
@@ -3257,9 +3298,12 @@ const App: React.FC = () => {
           {step === "ready" && (
             <motion.div
               key="ready"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col h-[calc(100vh-5rem)] bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.08),transparent_30%),linear-gradient(180deg,#020617_0%,#020617_100%)]"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard flex flex-col bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.08),transparent_30%),linear-gradient(180deg,#020617_0%,#020617_100%)]"
             >
               {/* VÍDEO STICKY — sempre visível no topo ao rolar */}
               <div className="z-30 px-3 pt-safe shrink-0 bg-gradient-to-b from-slate-950 via-slate-950/94 to-transparent backdrop-blur-xl lg:sticky lg:top-0 sm:px-4">
@@ -3995,9 +4039,12 @@ const App: React.FC = () => {
           {step === "automation" && (
             <motion.div
               key="automation"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="h-[calc(100vh-10rem)] flex flex-col p-6 space-y-6"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard flex flex-col p-6 space-y-6"
             >
               <div className="flex items-center gap-4 px-2">
                 <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-white/10 flex items-center justify-center">
@@ -4175,9 +4222,12 @@ const App: React.FC = () => {
           {step === "history" && (
             <motion.div
               key="history"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8 pb-40"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard p-6 space-y-8 pb-40"
             >
               <div className="flex justify-between items-start">
                 <div className="space-y-2">

@@ -522,6 +522,7 @@ body {
 .text-metallic {
   background: var(--metallic-green);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
@@ -544,6 +545,14 @@ body {
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
+.contain-layout {
+  contain: layout;
+}
+
 .step-wrapper-standard {
   width: 100%;
   height: 100%;
@@ -552,4 +561,9 @@ body {
   position: absolute;
   top: 0;
   left: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: var(--bg-deep); /* Garante fundo sólido na transição */
+  contain: paint; /* Isola a renderização para evitar flickering */
 }
+
