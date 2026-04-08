@@ -46,6 +46,7 @@ import { HotmartService } from './services/HotmartService';
 import { TrialCountdown } from './components/TrialCountdown';
 import { AgentScouting } from './components/AgentScouting';
 // import { productDB } from './data/productDB';
+import { generateViralProductName, getSmartSearchName } from './utils/viralNaming';
 
 const STRIPE_PRICE_ID = 'price_1TIZKzKYzfLaHvnki5ZXmNG9';
 const STORE_PLACEHOLDER_SLUGS = ['', 'meu-link', 'admin', 'null', 'undefined', 'default', 'escolha-seu-link'];
@@ -71,74 +72,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-function getSmartSearchName(title: string): string {
-  if (!title) return '';
-  
-  // 1. Limpar caracteres especiais e lixo de marketplace agressivo
-  let cleanTitle = title.split(/[-,\(\)\[\]|]/)[0]; 
-  
-  // 2. Termos técnicos que NÃO podem ser removidos (Power Words)
-  const powerWords = ['levitação', 'magnética', 'magnético', 'usb', 'led', 'bluetooth', 'portátil', 'mini', 'inteligente', 'smart', 'flutuante', 'gamer', 'rgb'];
-  
-  // 3. Remover termos que poluem a busca e trazem resultados de baixa qualidade
-  const marketJunk = [
-    'promoção', 'oferta', 'queima', 'estoque', 'barato', 'shopee', 'link', 'bio', 
-    'brasil', 'br', 'kit', 'conjunto', 'pacote', 'unidade', 'und', 'pcs', 'peças', 
-    'peça', 'novo', 'nova', 'original', 'oficial', 'compre', 'aqui', 'clique', 
-    'veja', 'olha', 'frete', 'grátis', 'pronta', 'entrega', 'envio', 'imediato',
-    'atacado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio em 24h',
-    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu'
-  ];
-  
-  const regexJunk = new RegExp(`\\b(${marketJunk.join('|')})\\b`, 'gi');
-  cleanTitle = cleanTitle.replace(regexJunk, ' ').trim();
-
-  // 4. Remover emojis e caracteres não alfanuméricos
-  cleanTitle = cleanTitle.replace(/[^\w\sÀ-ú0-9]/gi, ' ');
-  
-  // 5. Filtrar palavras curtas e stop words, mas MANTER as power words
-  const stopWords = new Set([
-    'a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 
-    'na', 'no', 'que', 'dos', 'das', 'seu', 'sua', 'pelo', 'pela', 'como', 'mais'
-  ]);
-  
-  let words = cleanTitle.split(/\s+/).filter(w => {
-    const low = w.toLowerCase();
-    return (w.length > 2 && !stopWords.has(low)) || powerWords.includes(low);
-  });
-  
-  if (words.length === 0) return title.substring(0, 30).trim();
-
-  // 6. Retornar até 5 palavras para precisão máxima em gadgets, em vez de apenas 3
-  return words.slice(0, 5).join(' ').trim();
-}
-
-function generateViralProductName(baseName: string): string {
-  const clean = getSmartSearchName(baseName);
-  if (!clean) return baseName;
-
-  const prefixes = [
-    'O FAMOSO', 'A INCRÍVEL', 'CHEGOU!', 'MAIS VENDIDO 🏆', 'ACHADINHO DE HOJE 😱', 
-    'REVELADO!', 'VOCÊ PRECISA DISSO!', 'GENTE! OLHA ISSO', 'O SEGREDO DO LAR:', 
-    'O QUERIDINHO:', 'PRODUTO VIRAL 🔥', 'A MELHOR COMPRA:', 'JÁ QUERIA UM:',
-    'ESSE É DIFERENTE ✨', 'VIROU FEBRE!', 'O MELHOR ACHADO 💎', 'ISSO É GENIAL!',
-    'UTILIDADE PÚBLICA 🚨', 'MEU FAVORITO:', 'DICA DE AMIGA:', 'PROMOÇÃO RELÂMPAGO ⚡'
-  ];
-  
-  const suffixes = [
-    ' 🔥', ' ✨', ' (DÁ UMA OLHADA! 😱)', ' (O MELHOR QUE JÁ VI)', ' (OFERTA RELÂMPAGO ⚡)', 
-    ' (VOCÊ VAI AMAR!)', ' [RECOMENDO MUITO]', ' ✨ MELHOR ACHADO DO DIA', ' 💎 QUALIDADE PREMIUM',
-    ' - SÉRIO, É PERFEITO!', ' (MELHOR QUE O ORIGINAL)', ' (ACHADO DE OURO)', ' ✅ TESTADO E APROVADO'
-  ];
-
-  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-
-  const fullName = `${prefix} ${clean.toUpperCase()}${suffix}`;
-  
-  // Garantir que não seja excessivamente longo mas que seja impactante
-  return fullName.length > 80 ? `${prefix} ${clean.toUpperCase()} 🔥` : fullName;
-}
+// Viral naming utilities are now imported from ./utils/viralNaming
 
 // Step types for the main application navigation
 type Step = 'home' | 'scouting' | 'list' | 'ready' | 'treating' | 'automation' | 'history' | 'bio' | 'plans' | 'agents_scouting' | 'onboarding_start' | 'onboarding_config' | 'onboarding_filtering';

@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
   MousePointerClick, RefreshCcw, AtSign, Zap, ExternalLink, ShoppingBag, Globe,
-  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User, ArrowLeft, Share2
+  ShieldCheck, Lightbulb, Upload, Loader2, Palette, User, ArrowLeft, Share2, Sparkles
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { generateViralProductName } from '../utils/viralNaming';
 
 interface BioItem {
   id: string;
@@ -113,6 +114,16 @@ export const BioManager: React.FC<{
   const [previewSettings, setPreviewSettings] = useState<StoreSettings>(defaultSettings);
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const profileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleViralize = () => {
+    if (!title) {
+      showToast('Digite um nome primeiro!', 'info');
+      return;
+    }
+    const viralName = generateViralProductName(title).toUpperCase();
+    setTitle(viralName);
+    showToast('✨ NOME VIRALIZADO!', 'success');
+  };
 
     const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -259,31 +270,6 @@ export const BioManager: React.FC<{
       showToast('🛍️ Produto publicado na sua loja!', 'success');
     } else {
       showToast('❌ Erro ao publicar. Tente novamente.', 'error');
-    }
-  };
-
-  const handleSyncPrice = async (item: BioItem) => {
-    showToast('Sincronizando preço real...', 'info');
-    try {
-      // Usamos microlink como proxy para ler metadados sem ser bloqueado imediatamente
-      const response = await fetch(`https://api.microlink.io?url=${encodeURIComponent(item.affiliate_link)}&meta=true`);
-      const data = await response.json();
-      
-      // Procura padrões de preço no retorno
-      const text = `${data?.data?.title} ${data?.data?.description}`;
-      const priceMatch = text?.match(/R\$\s?(\d+([,.]\d+)?)/i)?.[0];
-      
-      if (priceMatch) {
-         const { error } = await supabase.from('bio_store').update({ price: priceMatch }).eq('id', item.id);
-         if (!error) {
-           showToast(`💰 Preço atualizado: ${priceMatch}`, 'success');
-           fetchItems();
-         }
-      } else {
-        showToast('Não conseguimos ler o preço automaticamente agora.', 'info');
-      }
-    } catch (e) {
-      showToast('Erro na conexão de sincronização.', 'error');
     }
   };
 
@@ -872,7 +858,12 @@ export const BioManager: React.FC<{
                 <div className="relative group">
                   <Type size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
                   <input type="text" required placeholder="Ex: Ring Light Pro 2 metros + Tripé 🔥" value={title} onChange={e => setTitle(e.target.value)}
-                    className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-bold" />
+                    className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-12 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-bold" />
+                  <button type="button" onClick={handleViralize}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-xl transition-all"
+                    title="Viralizar Nome ✨">
+                    <Sparkles size={14} />
+                  </button>
                 </div>
               </div>
 
@@ -949,10 +940,6 @@ export const BioManager: React.FC<{
                           <button onClick={() => handleShare(item)}
                             className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
                             <Share2 size={10} /> Compartilhar
-                          </button>
-                          <button onClick={() => handleSyncPrice(item)}
-                            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
-                            <RefreshCcw size={10} /> Sincronizar Preço
                           </button>
                         </div>
                         {item.price && (
