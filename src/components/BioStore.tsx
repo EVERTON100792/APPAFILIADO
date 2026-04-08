@@ -8,6 +8,7 @@ interface BioItem {
   title: string;
   image_url: string;
   affiliate_link: string;
+  price?: string;
 }
 
 interface StoreSettings {
@@ -165,12 +166,47 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     return () => clearInterval(settingsInterval);
   }, [userId]);
 
+  const generateWhatsappMessage = (item: BioItem) => {
+    const hooks = [
+      "Gente, chocada com esse item! 😱",
+      "Olha esse achadinho que encontrei! ✨",
+      "Esse resolve minha vida total! 😍",
+      "Um dos meus favoritos ultimamente! 🔥",
+      "Vocês não têm noção da qualidade disso aqui! 💎",
+      "Achadinho de ouro hoje! 🚀"
+    ];
+
+    const calls = [
+      "Qualidade premium e super prático.",
+      "Melhor custo-benefício que já vi.",
+      "É aquele item que todo mundo precisa ter.",
+      "Acabou de chegar reposição, corre!",
+      "Super útil pro dia a dia, recomendo muito.",
+      "Design lindo e entrega tudo que promete."
+    ];
+
+    const ctas = [
+      "🛍️ COMPRE AQUI:",
+      "🛒 LINK OFICIAL:",
+      "👉 GARANTA O SEU:",
+      "🔗 CLIQUE PARA VER:",
+      "🚩 LINK PROMOCIONAL:"
+    ];
+
+    const random = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+
+    const title = `🔥 ${item.title.toUpperCase()} 🔥`;
+    const priceText = item.price ? `💰 Apenas: ${item.price}\n` : "";
+    
+    return `${title}\n\n${random(hooks)}\n${random(calls)}\n\n${priceText}${random(ctas)} ${item.affiliate_link}\n\nSiga meu perfil para mais achados! ✨`;
+  };
+
   const handleShare = async (item: BioItem, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     const shareTitle = `🔥 ${item.title.toUpperCase()} 🔥`;
-    const shareText = `Olha esse achadinho que encontrei! 😱\n\n✅ Qualidade Premium\n✅ Testado e Aprovado\n\n🛍️ COMPRE AQUI: ${item.affiliate_link}\n\nSiga meu perfil para mais achados! ✨`;
+    const shareText = generateWhatsappMessage(item);
 
     if (navigator.share) {
       try {
@@ -350,7 +386,17 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
                     <OptimizedImage src={item.image_url} alt={item.title} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-bold leading-tight text-[13px] uppercase tracking-tight line-clamp-2">{item.title}</h3>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h3 className="text-white font-black uppercase text-[10px] tracking-wider truncate group-hover:text-emerald-400 transition-colors">
+                        {item.title}
+                      </h3>
+                      {item.price && (
+                        <span className="shrink-0 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm">
+                          {item.price}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-white/40 text-[8px] font-mono truncate">shope.ee/link_oficial</p>
                     <div className="flex items-center gap-3 mt-2">
                       <div className="flex items-center gap-1 text-[11px] font-black" style={{ color: themeColor }}>
                         RESGATAR <ArrowUpRight size={12} />
@@ -397,12 +443,18 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
                       </div>
                     </div>
                     
-                    <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                      <h3 className="text-white font-bold leading-tight line-clamp-2 text-[13px] opacity-90 group-hover:opacity-100 transition-opacity uppercase tracking-tight">
-                         {item.title}
-                      </h3>
-                      
-                      <div className="flex items-center justify-between mt-auto">
+                    <div className="p-3">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h3 className="text-white font-black uppercase text-[8px] tracking-[0.1em] truncate group-hover:text-emerald-400 transition-colors">
+                          {item.title}
+                        </h3>
+                        {item.price && (
+                          <span className="shrink-0 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[6px] font-black px-1 py-0.5 rounded">
+                            {item.price}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-1 text-[11px] font-black group-hover:opacity-80 transition-colors" style={{ color: themeColor }}>
                             RESGATAR <ArrowUpRight size={12} />

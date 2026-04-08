@@ -12,6 +12,7 @@ interface BioItem {
   title: string;
   image_url: string;
   affiliate_link: string;
+  price?: string;
 }
 
 interface StoreSettings {
@@ -93,6 +94,7 @@ export const BioManager: React.FC<{
   const [title, setTitle] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [link, setLink] = useState('');
+  const [price, setPrice] = useState('');
 
   const [storeSlug, setStoreSlug] = useState(() => initialStoreSlug || 'meu-link');
   const [slugInput, setSlugInput] = useState(storeSlug);
@@ -244,17 +246,44 @@ export const BioManager: React.FC<{
       user_id: storeSlug,
       title,
       image_url: imageUrl,
-      affiliate_link: link
+      affiliate_link: link,
+      price: price
     });
     setSaving(false);
     if (!error) {
       setTitle('');
       setImageUrl('');
       setLink('');
+      setPrice('');
       fetchItems();
       showToast('🛍️ Produto publicado na sua loja!', 'success');
     } else {
       showToast('❌ Erro ao publicar. Tente novamente.', 'error');
+    }
+  };
+
+  const handleSyncPrice = async (item: BioItem) => {
+    showToast('Sincronizando preço real...', 'info');
+    try {
+      // Usamos microlink como proxy para ler metadados sem ser bloqueado imediatamente
+      const response = await fetch(`https://api.microlink.io?url=${encodeURIComponent(item.affiliate_link)}&meta=true`);
+      const data = await response.json();
+      
+      // Procura padrões de preço no retorno
+      const text = `${data?.data?.title} ${data?.data?.description}`;
+      const priceMatch = text?.match(/R\$\s?(\d+([,.]\d+)?)/i)?.[0];
+      
+      if (priceMatch) {
+         const { error } = await supabase.from('bio_store').update({ price: priceMatch }).eq('id', item.id);
+         if (!error) {
+           showToast(`💰 Preço atualizado: ${priceMatch}`, 'success');
+           fetchItems();
+         }
+      } else {
+        showToast('Não conseguimos ler o preço automaticamente agora.', 'info');
+      }
+    } catch (e) {
+      showToast('Erro na conexão de sincronização.', 'error');
     }
   };
 
@@ -847,6 +876,15 @@ export const BioManager: React.FC<{
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase font-black tracking-widest text-emerald-500/70 ml-1">Preço Sugerido (Opcional)</label>
+                <div className="relative group">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 font-bold">R$</span>
+                  <input type="text" placeholder="Ex: 49,90" value={price} onChange={e => setPrice(e.target.value)}
+                    className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[13px] text-white focus:outline-none focus:border-emerald-500/50 transition-all font-bold" />
+                </div>
+              </div>
+
               <button type="submit" disabled={saving}
                 className="w-full py-5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black rounded-3xl text-sm font-black uppercase tracking-[0.2em] transition-all disabled:opacity-60 flex justify-center items-center gap-3 mt-4 shadow-[0_20px_40px_rgba(16,185,129,0.2)]">
                 {saving ? <RefreshCcw className="animate-spin" size={20} /> : <Zap size={20} fill="currentColor" />}
@@ -903,16 +941,25 @@ export const BioManager: React.FC<{
                          <span className="text-emerald-500 text-[9px] font-black uppercase tracking-widest">Online</span>
                        </div>
                         <h4 className="text-white font-bold text-xs leading-snug line-clamp-2 italic tracking-tight">{item.title}</h4>
-                       <div className="flex items-center gap-3">
-                         <a href={item.affiliate_link} target="_blank" rel="noopener noreferrer"
-                           className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
-                           <ExternalLink size={10} /> Ver na Shopee
-                         </a>
-                         <button onClick={() => handleShare(item)}
-                           className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
-                           <Share2 size={10} /> Compartilhar
-                         </button>
-                       </div>
+                        <div className="flex items-center gap-3">
+                          <a href={item.affiliate_link} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
+                            <ExternalLink size={10} /> Ver na Shopee
+                          </a>
+                          <button onClick={() => handleShare(item)}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-emerald-500/10 rounded-lg text-slate-500 hover:text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
+                            <Share2 size={10} /> Compartilhar
+                          </button>
+                          <button onClick={() => handleSyncPrice(item)}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg text-emerald-400 text-[10px] uppercase font-black tracking-widest transition-all">
+                            <RefreshCcw size={10} /> Sincronizar Preço
+                          </button>
+                        </div>
+                        {item.price && (
+                          <div className="inline-flex items-center px-3 py-1 bg-emerald-500/5 border border-emerald-500/20 rounded-lg text-emerald-400 text-[10px] font-black">
+                             💰 R$ {item.price.replace('R$', '').trim()}
+                          </div>
+                        )}
                     </div>
 
                     <button onClick={() => handleDelete(item.id)}

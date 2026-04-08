@@ -1286,7 +1286,8 @@ const App: React.FC = () => {
         user_id: targetSlug,
         title: generateViralProductName(p.title || p.query),
         image_url: p.image || p.cover || '',
-        affiliate_link: p.affiliate_link || p.url || ''
+        affiliate_link: p.affiliate_link || p.url || '',
+        price: p.price || ''
       };
 
       console.log('[addToBio] Inserting:', payload);
