@@ -13,7 +13,7 @@ export const TikTokConnectionIndicator: React.FC<TikTokConnectionIndicatorProps>
 
   // You must set this in your frontend environment variables or hardcode as requested
   const TIKTOK_CLIENT_KEY = "sbawcxdrytk259in36"; 
-  const REDIRECT_URI = typeof window !== 'undefined' ? `${window.location.origin}/` : '';
+  const REDIRECT_URI = "https://viralsquad.netlify.app";
 
   useEffect(() => {
     if (!userId) {
