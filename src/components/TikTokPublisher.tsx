@@ -39,11 +39,13 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
       if (videoUrl.startsWith('blob:')) {
         const response = await fetch(videoUrl);
         const blob = await response.blob();
+        const extension = blob.type.includes('mp4') ? 'mp4' : 'mp4';
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
-        a.download = 'video.mp4';
+        a.download = `video.${extension}`;
         a.click();
+        URL.revokeObjectURL(blobUrl);
       } else if (videoUrl.startsWith('http')) {
         window.open(videoUrl, '_blank');
       }
@@ -52,10 +54,10 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
       if (isMobile) {
         window.location.href = 'tiktok://';
         setTimeout(() => {
-          window.location.href = 'https://www.tiktok.com/upload';
+          window.location.href = 'https://www.tiktok.com/tiktokstudio/upload?from=webapp';
         }, 1500);
       } else {
-        window.open('https://www.tiktok.com/upload', '_blank');
+        window.open('https://www.tiktok.com/tiktokstudio/upload?from=webapp', '_blank');
       }
 
       setStatus({ type: 'success', msg: '✅ Legenda copiada! Vídeo baixando... TikTok aberto!' });
