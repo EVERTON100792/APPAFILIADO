@@ -108,7 +108,7 @@ export const TikTokConnectionIndicator: React.FC<TikTokConnectionIndicatorProps>
     const codeChallenge = await generateCodeChallenge(codeVerifier);
 
     const state = "tiktok_oauth_1234";
-    const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${TIKTOK_CLIENT_KEY}&response_type=code&scope=user.info.basic,video.publish&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+    const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${TIKTOK_CLIENT_KEY}&response_type=code&scope=user.info.basic,video.list,video.upload,video.publish&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
     window.location.href = authUrl;
   };
 
