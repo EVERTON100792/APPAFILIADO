@@ -44,6 +44,7 @@ import { HotmartService } from "./services/HotmartService";
 import { TrialCountdown } from "./components/TrialCountdown";
 import { AgentScouting } from "./components/AgentScouting";
 import { productDB } from './data/productDB';
+import { TikTokPublisher } from "./components/TikTokPublisher";
 import {
   generateViralProductName,
   getSmartSearchName,
@@ -4101,92 +4102,16 @@ const App: React.FC = () => {
                       animate={{ opacity: 1, scale: 1 }}
                       className="space-y-4"
                     >
-                      {!isMobile && (
-                        <div className="bg-accent/10 border-2 border-accent/20 p-5 rounded-[2.5rem] space-y-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-accent text-slate-950 flex items-center justify-center shadow-lg shadow-accent/20">
-                              <Zap size={22} fill="currentColor" />
-                            </div>
-                            <h3 className="text-xs font-black italic uppercase tracking-tighter">
-                              PROTOCOLO FINALIZADO
-                            </h3>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3">
-                            <div className="bg-slate-900/50 p-5 rounded-3xl border border-white/5 space-y-3">
-                              <div className="flex items-center gap-2 text-accent">
-                                <Download
-                                  size={16}
-                                  className="animate-bounce"
-                                />
-                                <p className="text-[11px] font-black uppercase tracking-widest">
-                                  COMO POSTAR NO PC:
-                                </p>
-                              </div>
-                              <div className="space-y-4">
-                                <div className="flex gap-4">
-                                  <span className="w-6 h-6 bg-white text-slate-950 rounded-full flex items-center justify-center text-xs font-black shrink-0">
-                                    1
-                                  </span>
-                                  <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
-                                    O vídeo já foi{" "}
-                                    <span className="text-accent font-black">
-                                      BAIXADO
-                                    </span>{" "}
-                                    para o seu computador.
-                                  </p>
-                                </div>
-                                <div className="flex gap-4">
-                                  <span className="w-6 h-6 bg-white text-slate-950 rounded-full flex items-center justify-center text-xs font-black shrink-0">
-                                    2
-                                  </span>
-                                  <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
-                                    Na aba do TikTok que abrimos, clique em{" "}
-                                    <span className="text-white font-black italic">
-                                      "SELECIONAR ARQUIVO"
-                                    </span>{" "}
-                                    e escolha o vídeo que acabou de baixar.
-                                  </p>
-                                </div>
-                                <div className="flex gap-4">
-                                  <span className="w-6 h-6 bg-white text-slate-950 rounded-full flex items-center justify-center text-xs font-black shrink-0">
-                                    3
-                                  </span>
-                                  <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
-                                    Clique no campo de legenda e aperte{" "}
-                                    <span className="text-green-400 font-black">
-                                      CTRL + V
-                                    </span>
-                                    . A legenda viral já está copiada!
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="pt-2 border-t border-white/5 mt-2">
-                                <p className="text-[9px] text-dim italic">
-                                  * Por segurança, nenhuma plataforma permite
-                                  que sites externos anexem arquivos 100%
-                                  sozinhos. Este é o fluxo mais rápido possível
-                                  permitido.
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            className="w-full h-12 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-accent hover:text-white transition-colors bg-accent/5"
-                            onClick={() =>
-                              window.open(
-                                getPlatformUrl(activePlatform),
-                                "_blank",
-                              )
-                            }
-                          >
-                            O PORTAL NÃO ABRIU? CLIQUE AQUI
-                          </motion.button>
-                        </div>
-                      )}
+                      <TikTokPublisher 
+                        userId={user?.id}
+                        videoUrl={downloadPreviewUrl || null} 
+                        caption={videoLegend}
+                        isPro={isPro}
+                        onSuccess={() => {
+                          setStep("list");
+                          setAutomationFinished(false);
+                        }}
+                      />
 
                       <div className="grid grid-cols-2 gap-4">
                         <motion.button
@@ -4351,43 +4276,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Alerta de Expiração Próxima (Banner Flutuante) */}
-      <AnimatePresence>
-        {showAccessBanner && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-24 left-1/2 -translate-x-1/2 z-[550] w-[calc(100%-2rem)] max-w-md"
-          >
-            <div
-              className={`p-4 rounded-2xl border backdrop-blur-3xl shadow-2xl flex items-center justify-between gap-4 ${isTrialExpiringSoon ? "bg-amber-500/10 border-amber-500/20" : "bg-red-500/10 border-red-500/20"}`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`p-2 rounded-xl scale-90 ${isTrialExpiringSoon ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"}`}
-                >
-                  <Clock size={18} className="animate-pulse" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-white">
-                    {isTrialExpiringSoon
-                      ? "SEU TESTE ESTA VENCENDO"
-                      : "ASSINATURA EXPIRANDO"}
-                  </p>
-                  <TrialCountdown remainingMs={trialRemaining} isPro={isPro} />
-                </div>
-              </div>
-              <button
-                onClick={handleUpgradeToPro}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${isTrialExpiringSoon ? "bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20" : "bg-red-500 text-white shadow-lg shadow-red-500/20"}`}
-              >
-                {isTrialExpiringSoon ? "GARANTIR PRO" : "RENOVAR"}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Alerta de Expiração Próxima (Banner Flutuante Removido para evitar duplicidade) */}
 
       <nav className="bottom-nav">
         {[
