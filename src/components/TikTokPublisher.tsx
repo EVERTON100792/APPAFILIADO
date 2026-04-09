@@ -37,12 +37,10 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
         document.body.removeChild(textarea);
       }
       
-      const videoLink = document.createElement('a');
-      videoLink.href = videoUrl;
-      videoLink.download = 'video.mp4';
-      document.body.appendChild(videoLink);
-      videoLink.click();
-      document.body.removeChild(videoLink);
+      const downloadWindow = window.open(
+        `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-download?video_url=${encodeURIComponent(videoUrl)}`,
+        '_blank'
+      );
 
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
