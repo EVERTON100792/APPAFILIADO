@@ -36,10 +36,17 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
         document.body.removeChild(textarea);
       }
       
-      const downloadWindow = window.open(
-        `https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-download?video_url=${encodeURIComponent(videoUrl)}`,
-        '_blank'
-      );
+      if (videoUrl.startsWith('blob:')) {
+        const response = await fetch(videoUrl);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = 'video.mp4';
+        a.click();
+      } else if (videoUrl.startsWith('http')) {
+        window.open(videoUrl, '_blank');
+      }
 
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (isMobile) {
