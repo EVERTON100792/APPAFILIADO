@@ -71,7 +71,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         source_info: {
-          source: "PULL_URL",
+          source: "PUSH_FILE",
           video_url: video_url,
           caption: caption || "",
         },

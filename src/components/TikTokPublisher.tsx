@@ -24,15 +24,37 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
     setStatus({ type: 'idle', msg: '' });
 
     try {
-      const { data, error } = await supabase.functions.invoke('tiktok-publish', {
-        body: { video_url: videoUrl, caption: caption }
-      });
+      try {
+        await navigator.clipboard.writeText(caption);
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = caption;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      
+      const videoLink = document.createElement('a');
+      videoLink.href = videoUrl;
+      videoLink.download = 'video.mp4';
+      document.body.appendChild(videoLink);
+      videoLink.click();
+      document.body.removeChild(videoLink);
 
-      if (error || (data && data.error)) {
-        throw new Error(data?.error || error?.message || "Failed to publish");
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.location.href = 'tiktok://';
+        setTimeout(() => {
+          window.location.href = 'https://www.tiktok.com/upload';
+        }, 1500);
+      } else {
+        window.open('https://www.tiktok.com/upload', '_blank');
       }
 
-      setStatus({ type: 'success', msg: 'Vídeo enviado para publicação no TikTok!' });
+      setStatus({ type: 'success', msg: '✅ Legenda copiada! Vídeo baixando... TikTok aberto!' });
       if (onSuccess) onSuccess();
     } catch (err: any) {
       setStatus({ type: 'error', msg: err.message });
