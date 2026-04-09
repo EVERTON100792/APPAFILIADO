@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { TikTokConnectionIndicator } from './TikTokConnectionIndicator';
 import { supabase } from '../supabaseClient';
-import { UploadCloud, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, Clock, CheckCircle2, AlertCircle, Loader2, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TikTokPublisherProps {
@@ -104,9 +103,8 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
           <h3 className="text-xl font-black text-white italic uppercase flex items-center gap-2">
             Upload Center
           </h3>
-          <p className="text-xs text-slate-400 mt-1">Conecte sua conta e faça envios automáticos para a plataforma.</p>
+          <p className="text-xs text-slate-400 mt-1">Baixe o vídeo e copie a legenda automaticamente.</p>
         </div>
-        <TikTokConnectionIndicator userId={userId} />
       </div>
 
       <div className="pt-2 border-t border-slate-800">
@@ -122,8 +120,8 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
             className={`flex-1 flex justify-center items-center gap-2 px-6 py-3 rounded-2xl font-bold uppercase text-xs tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed
               ${status.type === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xl hover:shadow-indigo-500/30'}`}
           >
-            {isPublishing && !isScheduling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-            Postar Agora (TikTok)
+            {isPublishing && !isScheduling ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            Baixar Vídeo + Copiar Legenda
           </motion.button>
 
           {/* SCHEDULE */}
