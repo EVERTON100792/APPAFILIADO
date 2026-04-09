@@ -12,7 +12,7 @@ export const TikTokConnectionIndicator: React.FC<TikTokConnectionIndicatorProps>
   const [isChecking, setIsChecking] = useState(true);
 
   // You must set this in your frontend environment variables or hardcode as requested
-  const TIKTOK_CLIENT_KEY = "sbawcxdrytk259in36"; 
+  const TIKTOK_CLIENT_KEY = "aw6iqh7pig16ptl4"; 
   const REDIRECT_URI = typeof window !== 'undefined' ? `${window.location.origin}/` : '';
 
   useEffect(() => {
