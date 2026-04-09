@@ -1912,10 +1912,9 @@ const App: React.FC = () => {
         "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
       const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(videoUrl)}`;
 
-      const videoBlob = await fetch(videoUrl)
+      const videoBlob = await fetch(proxiedUrl)
         .then((r) => r.blob())
-        .catch(() => null);
-      if (!videoBlob) throw new Error("Falha ao baixar video inicial");
+        .catch(() => fetch(videoUrl).then((r) => r.blob()));
       const videoObjectUrl = URL.createObjectURL(videoBlob);
 
       setVideoData({
