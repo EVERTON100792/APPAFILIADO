@@ -43,6 +43,7 @@ import { LoginScreen } from "./components/LoginScreen";
 import { HotmartService } from "./services/HotmartService";
 import { TrialCountdown } from "./components/TrialCountdown";
 import { AgentScouting } from "./components/AgentScouting";
+import { ShopeeHub } from "./components/ShopeeHub";
 import { productDB } from './data/productDB';
 import { TikTokPublisher } from "./components/TikTokPublisher";
 import {
@@ -153,6 +154,7 @@ type Step =
   | "bio"
   | "plans"
   | "agents_scouting"
+  | "shopee"
   | "onboarding_start"
   | "onboarding_config"
   | "onboarding_filtering";
@@ -3632,20 +3634,13 @@ const App: React.FC = () => {
 
                       <button
                         onClick={async () => {
-                          const metadataSlug =
-                            user?.user_metadata?.store_slug || "";
-                          const urlSlug =
-                            new URLSearchParams(window.location.search).get(
-                              "loja",
-                            ) || "";
-                          const targetSlug =
-                            metadataSlug && metadataSlug !== "meu-link"
-                              ? metadataSlug.toLowerCase()
-                              : urlSlug && urlSlug !== "meu-link"
-                                ? urlSlug.toLowerCase()
-                                : storeSlug && storeSlug !== "meu-link"
-                                  ? storeSlug.toLowerCase()
-                                  : "";
+                          const targetSlug = (
+                            user?.user_metadata?.store_slug || 
+                            storeSlug || 
+                            localStorage.getItem("bio_store_slug") || 
+                            new URLSearchParams(window.location.search).get("loja") ||
+                            ""
+                          ).toLowerCase();
 
                           if (!targetSlug) {
                             showToast("CONFIGURE SUA LOJA PRIMEIRO!");
@@ -4227,6 +4222,20 @@ const App: React.FC = () => {
               )}
             </motion.div>
           )}
+
+          {step === "shopee" && (
+            <motion.div
+              key="shopee"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard"
+            >
+              <ShopeeHub onShowToast={showToast} userStoreSlug={storeSlug} />
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
 
@@ -4292,8 +4301,14 @@ const App: React.FC = () => {
             active: step === "home",
           },
           {
+            id: "shopee",
+            label: "3. SHOPEE",
+            icon: Zap,
+            active: step === "shopee",
+          },
+          {
             id: "list",
-            label: "3. POSTAR",
+            label: "4. POSTAR",
             icon: Search,
             active: [
               "list",
@@ -4305,7 +4320,7 @@ const App: React.FC = () => {
           },
           {
             id: "history",
-            label: "4. CLOUD",
+            label: "5. CLOUD",
             icon: Database,
             active: step === "history",
           },

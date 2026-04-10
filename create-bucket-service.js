@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://vzydpqilvyjqjbhzgzhq.supabase.co';
-// Using the MCP key provided by the user
-const supabaseServiceKey = 'sbp_23894f30ad908d0505d14ab4b7590fa2b730177d';
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+// Using the service role key from environment
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 

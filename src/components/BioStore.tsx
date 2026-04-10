@@ -61,7 +61,7 @@ const OptimizedImage: React.FC<{ src: string; alt: string }> = ({ src, alt }) =>
       )}
 
       <motion.img
-        src={src}
+        src={error ? "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' rx='24' fill='%23070b16'/%3E%3Crect x='16' y='16' width='128' height='128' rx='22' fill='%2311172a' stroke='%2322c55e' stroke-opacity='.22'/%3E%3Cpath d='M54 102h52' stroke='%2322c55e' stroke-width='8' stroke-linecap='round'/%3E%3Cpath d='M80 52c-11 0-20 9-20 20v9h40v-9c0-11-9-20-20-20Z' fill='none' stroke='%23e5e7eb' stroke-width='8' stroke-linejoin='round'/%3E%3Ccircle cx='80' cy='81' r='6' fill='%2322c55e'/%3E%3C/svg%3E" : src}
         alt={alt}
         initial={{ opacity: 0 }}
         animate={{ opacity: loaded ? 1 : 0 }}
@@ -87,14 +87,12 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     setError(null);
     
     const fetchData = async () => {
+      // Fetch specifically for this user_id
       const { data: itemsData, error: itemsError } = await supabase
         .from('bio_store')
         .select('*')
+        .eq('user_id', cleanId)
         .order('created_at', { ascending: false });
-      
-      const filteredData = itemsData?.filter(item => 
-        item.user_id?.toLowerCase() === cleanId
-      ) || [];
       
       let settingsData: any = null;
       try {
@@ -109,7 +107,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       }
       
       console.log('[BioStore] Fetch result:', { 
-        items: filteredData.length, 
+        items: itemsData?.length || 0, 
         settings: settingsData,
         cleanId 
       });
@@ -117,7 +115,9 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       if (itemsError) {
         setError(itemsError.message);
       }
-      setItems(filteredData);
+      if (itemsData) {
+        setItems(itemsData);
+      }
       
       if (settingsData) {
         setSettings(prev => ({ ...prev, ...settingsData }));
@@ -127,11 +127,17 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     
     fetchData();
 
-    const pollInterval = setInterval(fetchData, 3000);
+    // Reatualizar ao focar a aba ou em intervalo
+    const pollInterval = setInterval(fetchData, 8000); 
 
     const channel = supabase
       .channel('bio_store_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bio_store' }, () => fetchData())
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'bio_store',
+        filter: `user_id=eq.${cleanId}` 
+      }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -172,7 +178,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     e.stopPropagation();
 
     const shareTitle = `🔥 ${item.title.toUpperCase()} 🔥`;
-    const shareText = generateWhatsappMessage(item);
+    const shareText = generateWhatsappMessage(item, userId);
 
     if (navigator.share) {
       try {

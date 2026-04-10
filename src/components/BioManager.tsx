@@ -427,7 +427,7 @@ export const BioManager: React.FC<{
                        {items.length > 0 ? items.slice(0, 10).map((item: any) => (
                          <div key={item.id} className="aspect-square rounded-xl overflow-hidden flex items-center justify-center bg-white/5 border border-white/5" style={{ borderRadius: previewSettings.card_radius }}>
                            {item.image_url ? (
-                             <img src={item.image_url} alt={item.title} className="w-full h-full object-cover opacity-90" />
+                             <img src={item.image_url} alt={item.title} className="w-full h-full object-cover opacity-90" onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_THUMBNAIL; }} />
                            ) : (
                              <ShoppingBag size={14} className="opacity-20" style={{ color: previewSettings.theme_color }} />
                            )}
@@ -482,7 +482,12 @@ export const BioManager: React.FC<{
                     {items.length > 0 ? items.slice(0, 4).map((item: any) => (
                       <div key={item.id} className="aspect-square rounded-lg overflow-hidden flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.06)`, borderRadius: previewSettings.card_radius }}>
                         {item.image_url ? (
-                          <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+                          <img 
+                            src={item.image_url} 
+                            alt={item.title} 
+                            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_THUMBNAIL; }}
+                            className="w-full h-full object-cover" 
+                          />
                         ) : (
                           <ShoppingBag size={14} className="opacity-20" style={{ color: previewSettings.theme_color }} />
                         )}
