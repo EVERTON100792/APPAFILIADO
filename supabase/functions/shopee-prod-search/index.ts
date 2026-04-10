@@ -123,14 +123,18 @@ serve(async (req: Request) => {
     // FALLBACK LOGIC: If Link Generation failed, build a Universal Tracking Link manually
     let finalData = result.data || result;
     
+    // Check if we have a user identity for tracking
+    const trackingId = params.user_shopee_id || appId;
+    
     if (action === "generate_links" && (!finalData.urlGenerate || finalData.errors)) {
-      console.log("[Shopee] GraphQL urlGenerate failed/empty. Applying Universal Link Fallback.");
+      console.log(`[Shopee] GraphQL urlGenerate failed/empty. Applying Universal Link Fallback with trackingId: ${trackingId}`);
       const links = params.link_list.map((url: string) => {
         // Universal Link pattern for Shopee Brazil Affiliate
-        // UTM Source 'an_{appId}' is the standard tracking for Shopee Affiliate Network
-        const encodedUrl = encodeURIComponent(url);
+        // UTM Source 'an_{trackingId}' is the standard tracking for Shopee Affiliate Network
+        const cleanUrl = url.split('?')[0];
+        const encodedUrl = encodeURIComponent(cleanUrl);
         return {
-          shortLink: `https://shopee.com.br/m/universal-link?url=${encodedUrl}&utm_campaign=-&utm_content=viral_squad&utm_medium=affiliates&utm_source=an_${appId}`,
+          shortLink: `https://shopee.com.br/m/universal-link?url=${encodedUrl}&utm_campaign=viral_squad&utm_content=viral_squad&utm_medium=affiliates&utm_source=an_${trackingId}&af_siteid=an_${trackingId}`,
           originLink: url,
           is_fallback: true
         };

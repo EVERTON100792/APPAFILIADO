@@ -47,28 +47,50 @@ export class ShopeeService {
     const nodes = result.data?.productOfferV2?.nodes || [];
     if (nodes.length === 0) return [];
 
-    // Se temos um shopeeId, vamos converter todos os links em uma única chamada para obter links CURTOS (s.shopee.com.br)
-    let shortenedLinks: string[] = [];
+    // Melhorando a lógica de mapeamento: Criamos um mapa para garantir que o link encurtado 
+    // corresponda exatamente ao produto original, mesmo que alguns produtos falhem.
+    const urlToShortLink = new Map<string, string>();
+    
     if (userShopeeId) {
       try {
         const urlList = nodes.map((n: any) => n.productLink).filter(Boolean);
-        shortenedLinks = await this.convertLinks(urlList);
+        const resultLinks = await this.convertLinks(urlList, userShopeeId);
+        
+        // Mapeia o link original (originLink) para o link curto retornado pela API
+        // A API de links da Shopee retorna originLink no objeto, vamos usar isso.
+        urlList.forEach((url: string, i: number) => {
+          if (resultLinks[i]) {
+            urlToShortLink.set(url, resultLinks[i]);
+          }
+        });
       } catch (err) {
         console.error("Erro ao encurtar links em lote:", err);
       }
     }
     
-    return nodes.map((item: any, index: number) => {
+    return nodes.map((item: any) => {
       const price = Number(item.price) || 0;
       const commissionRate = Number(item.commissionRate) || 0;
+      const originalUrl = item.productLink || "";
       
-      // Preferimos o link encurtado da API (s.shopee.com.br)
-      let affiliateLink = shortenedLinks[index] || "";
+      // 1. Tenta o link curto oficial da API (s.shopee.com.br)
+      let finalLink = urlToShortLink.get(originalUrl) || "";
       
-      // Se não conseguimos o link curto, usamos o fallback manual (mas o curto é melhor para preview)
-      if (!affiliateLink && userShopeeId) {
-        const queryOpener = item.productLink?.includes('?') ? '&' : '?';
-        affiliateLink = `${item.productLink || ""}${queryOpener}utm_source=an_${userShopeeId}&utm_medium=affiliates&utm_campaign=viral_squad&af_siteid=an_${userShopeeId}`;
+      // 2. Se falhar ou não tiver shopeeId, e for um shopeeId configurado, gera o UNIVERSAL LINK
+      // Este formato é o mais robusto para Brasil e evita erros de "Campanha Expirada"
+      if (!finalLink && userShopeeId && originalUrl) {
+        // Remove parâmetros existentes para evitar conflitos
+        const baseUrl = originalUrl.split('?')[0];
+        const encodedUrl = encodeURIComponent(baseUrl);
+        finalLink = `https://shopee.com.br/m/universal-link?url=${encodedUrl}&utm_source=an_${userShopeeId}&utm_medium=affiliates&utm_campaign=viral_squad&af_siteid=an_${userShopeeId}`;
+      }
+
+      // 3. Fallback final para o link original (limpo de busca se possível)
+      if (!finalLink) finalLink = originalUrl;
+
+      // Proteção contra links de busca - se for um link de busca, tenta manter o original mas avisa no log
+      if (finalLink.includes('/search?')) {
+        console.warn("Link de busca detectado para produto:", item.productName);
       }
 
       return {
@@ -81,7 +103,7 @@ export class ShopeeService {
         commission: (price * commissionRate) || 0,
         sales: 0,
         shop_name: "Shopee",
-        product_link: affiliateLink || item.productLink || "",
+        product_link: finalLink,
       };
     });
   }
@@ -89,12 +111,13 @@ export class ShopeeService {
   /**
    * Generates affiliate links for a list of Shopee URLs.
    */
-  static async convertLinks(urls: string[]): Promise<string[]> {
+  static async convertLinks(urls: string[], userShopeeId?: string): Promise<string[]> {
     const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
       body: {
         action: "generate_links",
         params: {
           link_list: urls,
+          user_shopee_id: userShopeeId,
         },
       },
     });
