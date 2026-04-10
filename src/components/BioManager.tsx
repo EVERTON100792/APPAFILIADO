@@ -218,6 +218,10 @@ export const BioManager: React.FC<{
 
   const fetchItems = async () => {
     setLoading(true);
+    const { data, error } = await supabase.from('bio_store')
+      .select('*').eq('user_id', storeSlug)
+      .order('created_at', { ascending: false });
+
     if (error) showToast('Erro ao carregar produtos', 'error');
     if (data) {
       // Tenta obter o ID da Shopee do usuário (Metadata ou Profile)
@@ -229,7 +233,7 @@ export const BioManager: React.FC<{
       }
       
       // Higienizar links em tempo real para visualização/compartilhamento
-      const sanitizedItems = data.map(item => ({
+      const sanitizedItems = data.map((item: BioItem) => ({
         ...item,
         affiliate_link: sanitizeShopeeLink(item.affiliate_link, shopeeId)
       }));
