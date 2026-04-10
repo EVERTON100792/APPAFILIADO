@@ -79,10 +79,14 @@ export class ShopeeService {
       
       // 3. Se não temos link curto, gera o LINK DIRETO Robusto (Formato de Alta Conversão)
       if (!finalLink && userShopeeId && originalUrl) {
-        // Tenta extrair shopId e itemId da URL original se já não estiverem no objeto product
         const shopId = product?.shop_id;
         const itemId = product?.item_id;
         finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
+      }
+
+      // 4. HIGIENIZAÇÃO OBRIGATÓRIA: Garante que NENHUM link saia com parâmetros expirados
+      if (finalLink && userShopeeId) {
+        finalLink = sanitizeShopeeLink(finalLink, userShopeeId);
       }
 
       // 4. Fallback final
