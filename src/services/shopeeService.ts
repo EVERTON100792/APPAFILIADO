@@ -77,14 +77,12 @@ export class ShopeeService {
       // 1. Tenta o link curto oficial da API (s.shopee.com.br)
       let finalLink = urlToShortLink.get(originalUrl) || "";
       
-      // 2. HIGIENIZAÇÃO: Se o link vier da Edge Function com parametros inválidos, nós consertamos aqui
-      if (finalLink && userShopeeId) {
-        finalLink = sanitizeShopeeLink(finalLink, userShopeeId);
-      }
-
-      // 3. Se não temos link curto, gera o UNIVERSAL LINK Robusto
+      // 3. Se não temos link curto, gera o LINK DIRETO Robusto (Formato de Alta Conversão)
       if (!finalLink && userShopeeId && originalUrl) {
-        finalLink = createUniversalLink(originalUrl, userShopeeId);
+        // Tenta extrair shopId e itemId da URL original se já não estiverem no objeto product
+        const shopId = product?.shop_id;
+        const itemId = product?.item_id;
+        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
       }
 
       // 4. Fallback final
