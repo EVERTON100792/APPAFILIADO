@@ -75,9 +75,13 @@ export class ShopeeService {
       const originalUrl = item.productLink || "";
       let finalLink = "";
       
+      // Tenta capturar os IDs em qualquer formato que a API mandar (itemId ou item_id)
+      const itemId = item.itemId || item.item_id || 0;
+      const shopId = item.shopId || item.shop_id || 0;
+
       // 1. Prioridade: Se temos os IDs de Loja e Item, geramos o LINK DIRETO (Alta Estabilidade)
-      if (userShopeeId && item.shopId && item.itemId) {
-        finalLink = createUniversalLink(originalUrl, userShopeeId, item.shopId, item.itemId);
+      if (userShopeeId && shopId && itemId) {
+        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
       } 
       // 2. Fallback: Se não temos IDs, mas temos o link curto da API (s.shopee.com.br)
       else if (urlToShortLink.get(originalUrl)) {
@@ -97,10 +101,10 @@ export class ShopeeService {
       if (!finalLink) finalLink = originalUrl;
 
       return {
-        item_id: item.itemId || Math.random(),
-        shop_id: item.shopId || 0,
-        item_name: item.productName || "Produto Shopee",
-        item_image: item.imageUrl || "",
+        item_id: itemId || Math.random(),
+        shop_id: shopId,
+        item_name: item.productName || item.item_name || "Produto Shopee",
+        item_image: item.imageUrl || item.item_image || "",
         price: price, 
         commission_rate: commissionRate * 100,
         commission: (price * commissionRate) || 0,
