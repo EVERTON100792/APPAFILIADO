@@ -220,8 +220,13 @@ export const BioManager: React.FC<{
     setLoading(true);
     if (error) showToast('Erro ao carregar produtos', 'error');
     if (data) {
-      // Obter o ID da Shopee do usuário se disponível
-      const shopeeId = user?.user_metadata?.shopee_id;
+      // Tenta obter o ID da Shopee do usuário (Metadata ou Profile)
+      let shopeeId = user?.user_metadata?.shopee_id;
+      
+      if (!shopeeId && user) {
+        const { data: profile } = await supabase.from('profiles').select('shopee_id').eq('id', user.id).single();
+        if (profile?.shopee_id) shopeeId = profile.shopee_id;
+      }
       
       // Higienizar links em tempo real para visualização/compartilhamento
       const sanitizedItems = data.map(item => ({

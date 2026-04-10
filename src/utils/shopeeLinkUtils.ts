@@ -9,9 +9,15 @@ export const sanitizeShopeeLink = (link: string, userShopeeId: string | undefine
 
   let sanitized = link;
 
-  // 1. Corrige o erro crítico de campanha expirada (utm_campaign=-)
-  if (sanitized.includes('utm_campaign=-')) {
-    sanitized = sanitized.replace('utm_campaign=-', 'utm_campaign=viral_squad');
+  // 1. Corrige o erro crítico de campanha expirada
+  if (sanitized.includes('utm_campaign=')) {
+    // Removemos qualquer parâmetro de campanha para evitar o erro 'Expirada'
+    sanitized = sanitized.replace(/([&?])utm_campaign=[^&]+/, '');
+  }
+  
+  // Remove o /m/ se existir na URL universal para usar a versão mais compatível
+  if (sanitized.includes('shopee.com.br/m/universal-link')) {
+    sanitized = sanitized.replace('shopee.com.br/m/universal-link', 'shopee.com.br/universal-link');
   }
 
   // 2. Garante que o utm_source seja an_[ID] e não contenha o '-'
@@ -32,12 +38,9 @@ export const sanitizeShopeeLink = (link: string, userShopeeId: string | undefine
     sanitized += `${separator}af_siteid=an_${userShopeeId}`;
   }
 
-  // 4. Garante utm_medium e utm_campaign se estiverem ausentes
+  // 4. Garante utm_medium se estiver ausente
   if (!sanitized.includes('utm_medium=')) {
     sanitized += `&utm_medium=affiliates`;
-  }
-  if (!sanitized.includes('utm_campaign=')) {
-    sanitized += `&utm_campaign=viral_squad`;
   }
 
   return sanitized;
@@ -45,9 +48,12 @@ export const sanitizeShopeeLink = (link: string, userShopeeId: string | undefine
 
 /**
  * Converte um link de produto puro em um Universal Link robusto.
+ * Usamos o formato direto 'shopee.com.br/universal-link' sem o /m/ e sem campanha 
+ * para evitar o erro de 'Campanha Expirada' do Shopee Brasil.
  */
 export const createUniversalLink = (productUrl: string, userShopeeId: string): string => {
   const baseUrl = productUrl.split('?')[0];
   const encodedUrl = encodeURIComponent(baseUrl);
-  return `https://shopee.com.br/m/universal-link?url=${encodedUrl}&utm_source=an_${userShopeeId}&utm_medium=affiliates&utm_campaign=viral_squad&af_siteid=an_${userShopeeId}`;
+  // Removido o /m/ e removido o utm_campaign
+  return `https://shopee.com.br/universal-link?url=${encodedUrl}&utm_source=an_${userShopeeId}&utm_medium=affiliates&af_siteid=an_${userShopeeId}`;
 };

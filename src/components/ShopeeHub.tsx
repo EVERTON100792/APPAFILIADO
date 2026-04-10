@@ -112,11 +112,14 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       if (!user) return;
 
       const { error } = await supabase
-        .from("profiles")
-        .update({ shopee_id: id })
-        .eq("id", user.id);
-
       if (error) throw error;
+
+      // ATUALIZAÇÃO CRÍTICA: Salva também no user_metadata para acesso instantâneo em todo o app
+      const { error: authError } = await supabase.auth.updateUser({
+        data: { shopee_id: id }
+      });
+
+      if (authError) console.error("Erro ao atualizar metadata:", authError);
       
       setUserShopeeId(id);
       setShowSettings(false);
