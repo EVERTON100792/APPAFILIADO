@@ -32,7 +32,7 @@ import {
   Clock,
 } from "lucide-react";
 
-import { supabase } from "./supabaseClient";
+import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoProcessor } from "./utils/VideoProcessor";
@@ -2474,18 +2474,30 @@ const App: React.FC = () => {
   }
   if (!user) {
     return (
-      <LoginScreen
-        onLoginSuccess={(loggedUser) => {
-          setUser(loggedUser);
-          checkAccess(loggedUser);
-        }}
-      />
+      <>
+        {!isSupabaseConfigured && (
+          <div className="fixed top-0 left-0 right-0 bg-red-600 text-white p-4 text-center text-[11px] font-black uppercase tracking-[0.2em] z-[10000] shadow-2xl border-b border-white/20">
+            ⚠️ ERRO CRÍTICO: CHAVES DO SUPABASE NÃO CONFIGURADAS NO NETLIFY! O LOGIN NÃO VAI FUNCIONAR.
+          </div>
+        )}
+        <LoginScreen
+          onLoginSuccess={(loggedUser) => {
+            setUser(loggedUser);
+            checkAccess(loggedUser);
+          }}
+        />
+      </>
     );
   }
 
 
   return (
     <div className="flex flex-col h-[100dvh] bg-slate-950 text-slate-50 font-inter overflow-hidden">
+      {!isSupabaseConfigured && (
+        <div className="bg-red-600 text-white p-2 text-center text-[9px] font-black uppercase tracking-widest z-[1000] relative">
+          ⚠️ CONFIGURAÇÃO SUPABASE AUSENTE (NETLIFY SETTINGS)
+        </div>
+      )}
       <ScanningHUD active={isScanning} />
 
       <header className="border-b border-white/5 bg-slate-950/60 backdrop-blur-3xl z-[100] px-6 py-4 sticky top-0 shadow-2xl space-y-4 min-h-[76px] sm:min-h-[80px]">
