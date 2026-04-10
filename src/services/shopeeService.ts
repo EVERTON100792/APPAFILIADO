@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { sanitizeShopeeLink, createUniversalLink } from "../utils/shopeeLinkUtils";
 
 export interface ShopeeProduct {
   item_id: number;
@@ -76,22 +77,18 @@ export class ShopeeService {
       // 1. Tenta o link curto oficial da API (s.shopee.com.br)
       let finalLink = urlToShortLink.get(originalUrl) || "";
       
-      // 2. Se falhar ou não tiver shopeeId, e for um shopeeId configurado, gera o UNIVERSAL LINK
-      // Este formato é o mais robusto para Brasil e evita erros de "Campanha Expirada"
+      // 2. HIGIENIZAÇÃO: Se o link vier da Edge Function com parametros inválidos, nós consertamos aqui
+      if (finalLink && userShopeeId) {
+        finalLink = sanitizeShopeeLink(finalLink, userShopeeId);
+      }
+
+      // 3. Se não temos link curto, gera o UNIVERSAL LINK Robusto
       if (!finalLink && userShopeeId && originalUrl) {
-        // Remove parâmetros existentes para evitar conflitos
-        const baseUrl = originalUrl.split('?')[0];
-        const encodedUrl = encodeURIComponent(baseUrl);
-        finalLink = `https://shopee.com.br/m/universal-link?url=${encodedUrl}&utm_source=an_${userShopeeId}&utm_medium=affiliates&utm_campaign=viral_squad&af_siteid=an_${userShopeeId}`;
+        finalLink = createUniversalLink(originalUrl, userShopeeId);
       }
 
-      // 3. Fallback final para o link original (limpo de busca se possível)
+      // 4. Fallback final
       if (!finalLink) finalLink = originalUrl;
-
-      // Proteção contra links de busca - se for um link de busca, tenta manter o original mas avisa no log
-      if (finalLink.includes('/search?')) {
-        console.warn("Link de busca detectado para produto:", item.productName);
-      }
 
       return {
         item_id: item.itemId || Math.random(),

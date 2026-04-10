@@ -8,6 +8,7 @@ import {
 import { supabase } from '../supabaseClient';
 import { generateViralProductName } from '../utils/viralNaming';
 import { generateWhatsappMessage } from '../utils/shareUtils';
+import { sanitizeShopeeLink } from '../utils/shopeeLinkUtils';
 
 interface BioItem {
   id: string;
@@ -217,11 +218,18 @@ export const BioManager: React.FC<{
 
   const fetchItems = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('bio_store')
-      .select('*').eq('user_id', storeSlug)
-      .order('created_at', { ascending: false });
     if (error) showToast('Erro ao carregar produtos', 'error');
-    if (data) setItems(data);
+    if (data) {
+      // Obter o ID da Shopee do usuário se disponível
+      const shopeeId = user?.user_metadata?.shopee_id;
+      
+      // Higienizar links em tempo real para visualização/compartilhamento
+      const sanitizedItems = data.map(item => ({
+        ...item,
+        affiliate_link: sanitizeShopeeLink(item.affiliate_link, shopeeId)
+      }));
+      setItems(sanitizedItems);
+    }
     setLoading(false);
   };
 
@@ -253,12 +261,14 @@ export const BioManager: React.FC<{
       showToast('⚠️ Preencha todos os campos!', 'error');
       return;
     }
-    setSaving(true);
+    const shopeeId = user?.user_metadata?.shopee_id;
+    const sanitizedLink = sanitizeShopeeLink(link, shopeeId);
+
     const { error } = await supabase.from('bio_store').insert({
       user_id: storeSlug,
       title,
       image_url: imageUrl,
-      affiliate_link: link,
+      affiliate_link: sanitizedLink,
       price: price
     });
     setSaving(false);

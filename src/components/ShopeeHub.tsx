@@ -23,6 +23,7 @@ import { supabase } from "../supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShopeeService } from "../services/shopeeService";
 import type { ShopeeProduct } from "../services/shopeeService";
+import { sanitizeShopeeLink } from "../utils/shopeeLinkUtils";
 
 interface ShopeeHubProps {
   onShowToast: (msg: string) => void;
@@ -170,11 +171,13 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       const meta = user.user_metadata || {};
       const targetSlug = (meta.store_slug || userStoreSlug || localStorage.getItem("bio_store_slug") || "meu-link").toLowerCase();
 
+      const sanitizedLink = sanitizeShopeeLink(product.product_link, userShopeeId || undefined);
+
       const { error } = await supabase.from("bio_store").insert({
         user_id: targetSlug, 
         title: product.item_name,
         image_url: product.item_image,
-        affiliate_link: product.product_link,
+        affiliate_link: sanitizedLink,
         price: (Number(product.price) || 0).toFixed(2)
       });
 
@@ -188,15 +191,17 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
   const shareWhatsApp = (product: ShopeeProduct) => {
     const price = (Number(product.price) || 0).toFixed(2);
+    const sanitizedLink = sanitizeShopeeLink(product.product_link, userShopeeId || undefined);
+    
     // Link ISOLADO no topo é o segredo para a foto aparecer no WhatsApp Web/PC
-    const message = `${product.product_link}
+    const message = `${sanitizedLink}
     
 🔥 *ACHADINHO ABSURDO!* 🔥
 
 📦 *${product.item_name}*
 💰 *Por apenas: R$ ${price}* 💰
 
-👉 *COMPRE AQUI COM MEU LINK:* ${product.product_link}
+👉 *COMPRE AQUI COM MEU LINK:* ${sanitizedLink}
 
 ⚠️ *O estoque voa! Aproveite logo!*`;
 
