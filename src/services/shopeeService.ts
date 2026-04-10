@@ -74,17 +74,20 @@ export class ShopeeService {
       const commissionRate = Number(item.commissionRate) || 0;
       const originalUrl = item.productLink || "";
       
-      // 1. Tenta o link curto oficial da API (s.shopee.com.br)
-      let finalLink = urlToShortLink.get(originalUrl) || "";
-      
-      // 3. Se não temos link curto, gera o LINK DIRETO Robusto (Formato de Alta Conversão)
-      if (!finalLink && userShopeeId && originalUrl) {
-        const shopId = product?.shop_id;
-        const itemId = product?.item_id;
-        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
+      // 1. Prioridade: Se temos os IDs de Loja e Item, geramos o LINK DIRETO (Alta Estabilidade)
+      if (userShopeeId && product?.shop_id && product?.item_id) {
+        finalLink = createUniversalLink(originalUrl, userShopeeId, product.shop_id, product.item_id);
+      } 
+      // 2. Fallback: Se não temos IDs, mas temos o link curto da API (s.shopee.com.br)
+      else if (urlToShortLink.get(originalUrl)) {
+        finalLink = urlToShortLink.get(originalUrl) || "";
+      }
+      // 3. Fallback Final: Apenas limpa o link original
+      else {
+        finalLink = originalUrl;
       }
 
-      // 4. HIGIENIZAÇÃO OBRIGATÓRIA: Garante que NENHUM link saia com parâmetros expirados
+      // 4. HIGIENIZAÇÃO OBRIGATÓRIA: Garante que NENHUM link saia sujo
       if (finalLink && userShopeeId) {
         finalLink = sanitizeShopeeLink(finalLink, userShopeeId);
       }
