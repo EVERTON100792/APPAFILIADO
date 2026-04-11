@@ -7,6 +7,8 @@ export interface ShopeeProduct {
   item_name: string;
   item_image: string;
   price: number;
+  original_price: number;
+  discount: number;
   commission_rate: number;
   commission: number;
   sales: number;
@@ -20,7 +22,8 @@ export interface ShopeeSearchFilters {
   min_commission?: number;
   min_price?: number;
   max_price?: number;
-  sort_by?: "sales" | "price" | "commission";
+  sort_by?: "sales" | "price" | "commission" | number;
+  list_type?: number;
 }
 
 export class ShopeeService {
@@ -28,14 +31,18 @@ export class ShopeeService {
    * Searches for products on Shopee using the Edge Function proxy.
    */
   static async searchProducts(filters: ShopeeSearchFilters, userShopeeId?: string): Promise<ShopeeProduct[]> {
+    let shopeeSort = filters.sort_by === "sales" ? 3 : 2;
+    if (typeof filters.sort_by === "number") shopeeSort = filters.sort_by;
+
     const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
       body: {
         action: "search_products",
         params: {
-          keyword: filters.keyword || "", // Empty keyword = Trending
+          keyword: filters.keyword || "",
           page_size: 20,
           page_number: 1,
-          sort_by: filters.sort_by || "sales",
+          sort_by: shopeeSort,
+          list_type: filters.list_type || 0,
         },
       },
     });
@@ -45,11 +52,11 @@ export class ShopeeService {
       throw error || new Error(result?.error || result?.errors?.[0]?.message || "Erro na busca da Shopee");
     }
 
-    const nodes = result.data?.productOfferV2?.nodes || [];
+    console.log("Shopee search raw result:", result);
+    const nodes = result.data?.nodes || result.data?.productOfferV2?.nodes || [];
+    console.log(`Found ${nodes.length} nodes`);
     if (nodes.length === 0) return [];
 
-    // Melhorando a lógica de mapeamento: Criamos um mapa para garantir que o link encurtado 
-    // corresponda exatamente ao produto original, mesmo que alguns produtos falhem.
     const urlToShortLink = new Map<string, string>();
     
     if (userShopeeId) {
@@ -57,8 +64,6 @@ export class ShopeeService {
         const urlList = nodes.map((n: any) => n.productLink).filter(Boolean);
         const resultLinks = await this.convertLinks(urlList, userShopeeId);
         
-        // Mapeia o link original (originLink) para o link curto retornado pela API
-        // A API de links da Shopee retorna originLink no objeto, vamos usar isso.
         urlList.forEach((url: string, i: number) => {
           if (resultLinks[i]) {
             urlToShortLink.set(url, resultLinks[i]);
@@ -70,46 +75,51 @@ export class ShopeeService {
     }
     
     return nodes.map((item: any) => {
-      const price = Number(item.price) || 0;
+      let price = Number(item.price) || 0;
+      let originalPrice = Number(item.originalPrice) || Number(item.price_before_discount) || price;
+
+      // HEURISTIC: Fix Shopee API v2 scale issue (100x too high for some international items)
+      // If the integer part has 5+ digits (>= 10.000,00), it's almost certainly scaled by 100
+      if (price >= 10000) {
+        price = price / 100;
+        if (originalPrice >= 10000) originalPrice = originalPrice / 100;
+      }
+      
       const commissionRate = Number(item.commissionRate) || 0;
       const originalUrl = item.productLink || "";
       let finalLink = "";
       
-      // Tenta capturar os IDs em qualquer formato que a API mandar (itemId ou item_id)
       const itemId = item.itemId || item.item_id || 0;
       const shopId = item.shopId || item.shop_id || 0;
 
-      // 1. Prioridade: Se temos os IDs de Loja e Item, geramos o LINK DIRETO (Alta Estabilidade)
-      if (userShopeeId && shopId && itemId) {
-        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
-      } 
-      // 2. Fallback: Se não temos IDs, mas temos o link curto da API (s.shopee.com.br)
-      else if (urlToShortLink.get(originalUrl)) {
+      if (urlToShortLink.get(originalUrl)) {
         finalLink = urlToShortLink.get(originalUrl) || "";
       }
-      // 3. Fallback Final: Apenas limpa o link original
+      else if (userShopeeId) {
+        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
+      }
       else {
         finalLink = originalUrl;
       }
 
-      // 4. HIGIENIZAÇÃO OBRIGATÓRIA: Garante que NENHUM link saia sujo
       if (finalLink && userShopeeId) {
         finalLink = sanitizeShopeeLink(finalLink, userShopeeId);
       }
 
-      // 5. Fallback final caso tudo falhe
       if (!finalLink) finalLink = originalUrl;
 
       return {
         item_id: itemId || Math.random(),
         shop_id: shopId,
-        item_name: item.productName || item.item_name || "Produto Shopee",
-        item_image: item.imageUrl || item.item_image || "",
+        item_name: item.productName || item.product_name || item.item_name || "Produto Shopee",
+        item_image: item.imageUrl || item.image_url || item.item_image || "",
         price: price, 
-        commission_rate: commissionRate * 100,
+        original_price: originalPrice,
+        discount: Number(item.discount) || 0,
+        commission_rate: Math.round(commissionRate * 100),
         commission: (price * commissionRate) || 0,
-        sales: 0,
-        shop_name: "Shopee",
+        sales: Number(item.sales) || Number(item.sold) || 0,
+        shop_name: item.shop_name || item.shopName || "Shopee",
         product_link: finalLink,
       };
     });
@@ -134,10 +144,8 @@ export class ShopeeService {
       throw error || new Error(result?.error || result?.errors?.[0]?.message || "Erro ao converter link");
     }
 
-    // GraphQL v1 returns data: { urlGenerate: [...] } or { generate_link: [...] }
     const urlResult = result.data?.urlGenerate || result.data?.generate_link || result.data?.generateLink;
     const links = Array.isArray(urlResult) ? urlResult : [urlResult].filter(Boolean);
     return links.map((l: any) => l.short_link || l.shortLink || l.originLink || l.origin_link).filter(Boolean);
   }
-
 }

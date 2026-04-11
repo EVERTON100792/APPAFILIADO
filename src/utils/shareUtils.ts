@@ -7,20 +7,24 @@ interface ShareItem {
 export const generateWhatsappMessage = (item: ShareItem, storeSlug?: string) => {
   const priceDisplay = item.price ? `💰 *VALOR: R$ ${item.price.toString().replace('R$', '').trim()}* 💰` : "";
   
-  const storeLink = storeSlug ? `\n\n🛍️ *VEJA MAIS NA MINHA VITRINE:* \nhttps://appafiliado.netlify.app/?loja=${storeSlug}` : "";
+  const storeLink = storeSlug ? `\n\n🛍️ *CONFIRA MINHA BIO PARA MAIS ACHADINHOS:* \nhttps://appafiliado.netlify.app/?loja=${storeSlug}` : "";
 
-  // Link ISOLADO no topo é o segredo para a foto aparecer no WhatsApp Web/PC
+  // Link isolado no topo para gerar o Card de Pré Visualização no WhatsApp
   const message = `${item.affiliate_link}
     
-🔥 *${item.title.toUpperCase()}* 🔥
-${priceDisplay}
-✅ *Oportunidade Única*
-✅ *Qualidade Garantida*
+✨ *ACHADINHO SELECIONADO PRA VOCÊ!* ✨
 
-👉 *COMPRE AQUI:*
+📦 *${item.title.toUpperCase()}*
+${priceDisplay}
+
+✅ *Produto Verificado*
+✅ *Melhor Preço do Dia*
+✅ *Oferta por Tempo Limitado*
+
+👇 *RESGATE SUA OFERTA AQUI:*
 ${item.affiliate_link}${storeLink}
 
-Siga meu perfil para não perder os próximos achadinhos! ✨`;
+⚠️ *Atenção: Os estoques da Shopee costumam esgotar rápido. Aproveite agora!*`;
 
   return message;
 };

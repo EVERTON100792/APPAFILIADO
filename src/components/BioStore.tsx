@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft, Share2 } from 'lucide-react';
+import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft, Share2, Check, Tag, Flame, Clock, ArrowRight } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { generateWhatsappMessage } from '../utils/shareUtils';
+import { sanitizeShopeeLink } from '../utils/shopeeLinkUtils';
 
 interface BioItem {
   id: string;
@@ -87,7 +88,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     setError(null);
     
     const fetchData = async () => {
-      // Fetch specifically for this user_id
       const { data: itemsData, error: itemsError } = await supabase
         .from('bio_store')
         .select('*')
@@ -116,7 +116,10 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
         setError(itemsError.message);
       }
       if (itemsData) {
-        setItems(itemsData);
+        setItems(itemsData.map((item: BioItem) => ({
+          ...item,
+          affiliate_link: sanitizeShopeeLink(item.affiliate_link, undefined),
+        })));
       }
       
       if (settingsData) {
@@ -126,9 +129,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     };
     
     fetchData();
-
-    // Reatualizar ao focar a aba ou em intervalo
-    const pollInterval = setInterval(fetchData, 8000); 
 
     const channel = supabase
       .channel('bio_store_changes')
@@ -141,7 +141,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       .subscribe();
 
     return () => {
-      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, [userId]);
@@ -168,9 +167,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       }
     };
     loadSettings();
-
-    const settingsInterval = setInterval(loadSettings, 5000);
-    return () => clearInterval(settingsInterval);
+    return () => {};
   }, [userId]);
 
   const handleShare = async (item: BioItem, e: React.MouseEvent) => {
@@ -192,7 +189,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
           files: [file],
         });
       } catch (err) {
-        // Fallback para compartilhamento de texto se falhar com arquivo ou não suportar files
         try {
           await navigator.share({
             title: shareTitle,
@@ -206,7 +202,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
         }
       }
     } else {
-      // Fallback para wa.me se navigator.share não existir
       const encodedText = encodeURIComponent(`${shareTitle}\n\n${shareText}`);
       window.open(`https://wa.me/?text=${encodedText}`, '_blank');
     }
@@ -241,28 +236,31 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   }
 
   return (
-    <div className={`min-h-screen text-slate-200 ${fontClass} pb-32 relative overflow-y-auto overflow-x-hidden`} style={{ backgroundColor: bgColor, color: settings.text_color }}>
-      <div className="noise-overlay" />
+    <div className={`min-h-screen text-slate-200 ${fontClass} pb-32 relative overflow-y-auto overflow-x-hidden`} style={{ backgroundColor: '#000000', color: settings.text_color }}>
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/10 via-transparent to-transparent" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full blur-[150px] opacity-30" style={{ backgroundColor: themeColor }} />
+        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full blur-[120px] opacity-20" style={{ backgroundColor: themeColor }} />
+      </div>
       
       {settings.show_watermark && (
-        <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden opacity-[0.03] flex items-center justify-center select-none">
+        <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden opacity-[0.015] flex items-center justify-center select-none">
           <h1 className="text-[40vw] text-display leading-none rotate-12">SHOPEE</h1>
         </div>
       )}
 
-      <div className="max-w-md mx-auto pt-16 px-6 relative z-10" style={{ paddingTop: 'calc(4rem + var(--safe-top))' }}>
+      <div className="max-w-md mx-auto pt-12 px-5 relative z-10" style={{ paddingTop: 'calc(3rem + var(--safe-top))' }}>
         
         <div className="fixed top-4 left-4 z-50">
           <button
             onClick={() => window.location.href = '/'}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider shadow-lg transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider backdrop-blur-xl transition-all border border-white/10"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={16} />
             Voltar
           </button>
         </div>
         
-        {/* Profile Image */}
         {settings.profile_image && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
@@ -277,7 +275,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
           </motion.div>
         )}
 
-        {/* Header */}
         {settings.header_style === 'minimal' ? (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -299,44 +296,68 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
             </h1>
           </motion.div>
         ) : (
-          <motion.div 
-            initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}
-            className="mb-16 relative"
+<motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="mb-10 relative"
           >
-            <div className="flex items-end gap-2 mb-2">
-              <span className="text-display text-5xl leading-none" style={{ color: themeColor }}>LOJA</span>
-              <div className="h-0.5 w-12 mb-2" style={{ backgroundColor: `${themeColor}33` }} />
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-white font-black text-2xl tracking-tighter uppercase leading-none flex flex-wrap gap-2">
-                 {userId.includes('_') ? (
-                   <>
-                     {userId.split('_')[0]} <span style={{ color: themeColor }} className="italic font-mono">_{userId.split('_').slice(1).join('_')}</span>
-                   </>
-                 ) : userId.includes('-') ? (
-                   <>
-                     {userId.split('-')[0]} <span style={{ color: themeColor }} className="italic font-mono">-{userId.split('-').slice(1).join('-')}</span>
-                   </>
-                 ) : (
-                   <>
-                     LOJA <span style={{ color: themeColor }} className="italic font-mono">@{userId}</span>
-                   </>
-                 )}
-              </h1>
-              <p className="text-slate-500 mt-4 text-[11px] font-bold uppercase tracking-widest leading-relaxed max-w-[200px]">
-                Seleção exclusiva de produtos virais testados.
-              </p>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-4 py-2 rounded-full" style={{ backgroundColor: `${themeColor}20`, border: `1px solid ${themeColor}40` }}>
+                  <span className="w-2 h-2 rounded-full animate-pulse shadow-[0_0_10px_currentColor]" style={{ backgroundColor: themeColor, boxShadow: `0 0 10px ${themeColor}` }} />
+                  <span className="text-[8px] font-black uppercase tracking-widest" style={{ color: themeColor }}>Ao Vivo</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                <ShoppingBag size={12} className="text-white/60" />
+                <span className="text-[8px] font-bold text-white/60 uppercase">{items.length} produtos</span>
+              </div>
             </div>
 
-            <div className="absolute top-0 right-0">
-               <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg" style={{ backgroundColor: `${themeColor}15`, border: `1px solid ${themeColor}33`, boxShadow: `0 0 40px ${themeColor}22` }}>
-                  <Sparkles size={20} style={{ color: themeColor }} className="animate-pulse" />
-               </div>
+            <h1 className="text-white font-black text-4xl tracking-tighter uppercase leading-[0.9] mb-3">
+               {userId.includes('_') ? (
+                  <>
+                    <span>{userId.split('_')[0]}</span>
+                    <span className="italic" style={{ color: themeColor }}>_{userId.split('_').slice(1).join('_')}</span>
+                  </>
+               ) : userId.includes('-') ? (
+                  <>
+                    <span>{userId.split('-')[0]}</span>
+                    <span className="italic" style={{ color: themeColor }}>-{userId.split('-').slice(1).join('-')}</span>
+                  </>
+               ) : (
+                  <span style={{ color: themeColor }}>@{userId}</span>
+               )}
+            </h1>
+
+            <p className="text-white/50 text-xs font-medium leading-relaxed mb-6">
+              ⚡ Seleção <span className="font-bold text-white" style={{ color: themeColor }}>exclusiva</span> de produtos virais testados e approvalados pela nossa triagem rigorosa.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2 text-white/50 text-[9px] font-bold uppercase tracking-wider">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}20` }}>
+                  <Check size={10} style={{ color: themeColor }} />
+                </div>
+                <span>Originais</span>
+              </div>
+              <div className="w-px h-4 bg-white/10" />
+              <div className="flex items-center gap-2 text-white/50 text-[9px] font-bold uppercase tracking-wider">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}20` }}>
+                  <Zap size={10} style={{ color: themeColor }} />
+                </div>
+                <span>Flash</span>
+              </div>
+              <div className="w-px h-4 bg-white/10" />
+              <div className="flex items-center gap-2 text-white/50 text-[9px] font-bold uppercase tracking-wider">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}20` }}>
+                  <Sparkles size={10} style={{ color: themeColor }} />
+                </div>
+                <span>Premium</span>
+              </div>
             </div>
           </motion.div>
         )}
 
-        {/* Grid */}
         {settings.layout_type === 'list' ? (
           <div className="space-y-4">
             <AnimatePresence mode="popLayout">
@@ -386,65 +407,84 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
             </AnimatePresence>
           </div>
         ) : (
-          <div className={settings.layout_type === 'masonry' ? 'columns-2 gap-3 space-y-3' : 'fragment-grid'}>
+<div className="grid grid-cols-2 gap-4">
             <AnimatePresence mode="popLayout">
               {items.map((item, i) => {
-                const isLarge = settings.layout_type === 'grid' && i % 5 === 0;
-                const rotation = (i % 2 === 0 ? 1 : -1) * (Math.random() * 2);
-
+                const priceValue = item.price ? parseFloat(item.price.replace('R$', '').replace(',', '.')) : 0;
+                const hasDiscount = priceValue > 0;
+                const originalPrice = hasDiscount ? priceValue * 1.5 : priceValue;
+                const discountPercent = hasDiscount ? 30 : 0;
+ 
                 return (
                   <motion.a
                     href={item.affiliate_link}
                     target="_blank"
                     rel="noopener noreferrer"
                     key={item.id}
-                    initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1, rotate: rotation }}
-                    transition={{ type: 'spring', stiffness: 100, damping: 15, delay: i * 0.05 }}
-                    whileHover={{ scale: 1.05, rotate: 0, zIndex: 20 }}
-                    whileTap={{ scale: 0.95 }}
-                    className={`group relative flex flex-col overflow-hidden transition-all duration-300 ${isLarge ? 'item-span-2' : ''} ${settings.layout_type === 'masonry' ? 'break-inside-avoid mb-3' : ''}`}
-                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.06)`, borderRadius: cardRadius }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 100, damping: 15, delay: i * 0.08 }}
+                    whileHover={{ y: -4 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="group relative flex flex-col overflow-hidden transition-all duration-300"
+                    style={{ backgroundColor: '#0a0a0a', borderRadius: '1.25rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.6)' }}
                   >
-                    <div className={`relative w-full ${isLarge ? 'aspect-[16/9]' : 'aspect-square'} overflow-hidden`} style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                    <div className="relative w-full aspect-[3/4] overflow-hidden" style={{ backgroundColor: '#080808' }}>
                       <OptimizedImage src={item.image_url} alt={item.title} />
-                      <div className="absolute inset-0" style={{ background: `linear-gradient(to top, rgba(0,0,0,0.8), transparent, transparent)`, opacity: 0.6 }} />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
                       
-                      <div className="absolute top-3 left-3 px-2 py-1 text-black text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 shadow-xl" style={{ backgroundColor: themeColor }}>
-                        <Zap size={8} fill="currentColor" /> Viral Info
+                      <div className="absolute top-2 left-2">
+                        <div className="px-2.5 py-1 text-white text-[7px] font-black uppercase tracking-widest rounded-md flex items-center gap-1" style={{ backgroundColor: themeColor, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                          <Zap size={8} className="fill-current" /> SELEÇÃO
+                        </div>
+                      </div>
+
+                      {hasDiscount && (
+                        <div className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white text-[7px] font-black uppercase tracking-widest rounded-md flex items-center gap-1 animate-pulse">
+                          <Tag size={8} /> -{ discountPercent }%
+                        </div>
+                      )}
+
+                      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black to-transparent">
+                        <div className="flex items-center gap-1.5 text-white/70 text-[8px] font-medium">
+                          <Flame size={10} className="animate-pulse" />
+                          <span className="tracking-wide">Estoque LIMITADO</span>
+                        </div>
                       </div>
                     </div>
                     
-                    <div className="p-3">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <h3 className="text-white font-black uppercase text-[8px] tracking-[0.1em] truncate group-hover:text-emerald-400 transition-colors">
-                          {item.title}
-                        </h3>
-                        {item.price && (
-                          <span className="shrink-0 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[6px] font-black px-1 py-0.5 rounded">
-                            {item.price}
+                    <div className="p-3 flex flex-col gap-2">
+                      <h3 className="text-white font-semibold text-[9px] uppercase tracking-wide line-clamp-2 leading-tight">
+                        {item.title}
+                      </h3>
+
+                      <div className="flex items-end justify-between">
+                        <div className="flex flex-col">
+                          {hasDiscount && (
+                            <span className="text-white/40 text-[8px] line-through font-medium">
+                              R$ {originalPrice.toFixed(2).replace('.', ',')}
+                            </span>
+                          )}
+                          <span className="text-white text-lg font-black tracking-tight">
+                            {item.price || 'R$ 0,00'}
                           </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-1 text-[11px] font-black group-hover:opacity-80 transition-colors" style={{ color: themeColor }}>
-                            RESGATAR <ArrowUpRight size={12} />
-                          </div>
-                          <button 
-                            onClick={(e) => handleShare(item, e)}
-                            className="flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-white transition-colors"
-                          >
-                            <Share2 size={12} /> COMPARTILHAR
-                          </button>
-                        </div>
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 group-hover:text-black" style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                          <ShoppingBag size={14} />
                         </div>
                       </div>
+
+                      <div className="flex items-center gap-1">
+                        <div className="flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-white text-[9px] font-black uppercase tracking-wider transition-all" style={{ backgroundColor: themeColor }}>
+                          Comprar <ArrowRight size={11} />
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={(e) => handleShare(item, e)}
+                        className="w-full py-2 rounded-lg flex items-center justify-center gap-1.5 text-white/40 text-[8px] font-bold uppercase tracking-wider hover:text-white transition-colors"
+                        style={{ border: '1px dashed rgba(255,255,255,0.08)' }}
+                      >
+                        <Share2 size={12} /> Indicar
+                      </button>
                     </div>
-                    
-                    <div className="absolute inset-0 transition-all duration-500" style={{ border: `1px solid transparent` }} />
                   </motion.a>
                 );
               })}
@@ -465,7 +505,6 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
            </motion.div>
         )}
         
-        {/* Footer */}
         <motion.div 
            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
            className="mt-24 pt-12 text-center flex flex-col items-center gap-4"

@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ShopeeRequest {
-  action: "search_products" | "generate_links";
+  action: "search_products" | "generate_links" | "get_item_detail";
   params: any;
 }
 
@@ -22,7 +22,7 @@ async function generateV1Signature(appId: string, secret: string, timestamp: num
   const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
   
   return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
+    .map((b) => b.toString(16).padStart(2, '0'))
     .join("");
 }
 
@@ -38,7 +38,7 @@ serve(async (req: Request) => {
     // @ts-ignore
     const secret = Deno.env.get("SHOPEE_SECRET") || "L4EDLOK2VQMQOZIPKLZPLSP7QTBEWFGK";
     
-    console.log(`[Shopee] v1 Triggering ${req.method} with AppID: ${appId}`);
+    console.log(`[Shopee] v1 Triggering ${req.method} with Action: ${req.url}`);
 
     const bodyStr = await req.text();
     if (!bodyStr) throw new Error("Empty request body");
@@ -60,16 +60,20 @@ serve(async (req: Request) => {
         }
       `;
     } else if (action === "search_products") {
+      const listType = params.list_type || 0;
+      
       graphqlQuery = `
-        query productOfferV2($keyword: String, $page: Int, $limit: Int) {
-          productOfferV2(keyword: $keyword, page: $page, limit: $limit, listType: 0, sortType: 2) {
+        query productOfferV2($keyword: String, $page: Int, $limit: Int, $listType: Int, $sortType: Int) {
+          productOfferV2(keyword: $keyword, page: $page, limit: $limit, listType: $listType, sortType: $sortType) {
             nodes {
               itemId
+              shopId
               productName
               productLink
               imageUrl
               price
               commissionRate
+              sales
             }
           }
         }
@@ -77,7 +81,9 @@ serve(async (req: Request) => {
       variables = {
         keyword: params.keyword || "",
         page: params.page_number || 1,
-        limit: params.page_size || 20
+        limit: params.page_size || 20,
+        listType: listType,
+        sortType: params.sort_by || 2
       };
     } else if (action === "generate_links") {
       graphqlQuery = `
@@ -91,8 +97,39 @@ serve(async (req: Request) => {
       variables = {
         urlList: params.link_list || []
       };
+    } else if (action === "get_item_detail") {
+      const { item_id, shop_id } = params;
+      if (!item_id || !shop_id) throw new Error("Missing item_id or shop_id");
+      
+      const detailUrl = `https://shopee.com.br/api/v4/item/get?itemid=${item_id}&shopid=${shop_id}`;
+      console.log(`[Shopee] Fetching public item detail: ${detailUrl}`);
+      
+      const response = await fetch(detailUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+      
+      const responseText = await response.text();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (e) {
+        result = { error: "Non-JSON response", message: responseText };
+      }
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        data: result.data || result,
+        status: response.status 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     } else {
-      throw new Error("Invalid action");
+      throw new Error(`Invalid action: ${action}`);
     }
 
     const payload = JSON.stringify({ query: graphqlQuery, variables });
@@ -130,11 +167,9 @@ serve(async (req: Request) => {
       console.log(`[Shopee] GraphQL urlGenerate failed/empty. Applying Universal Link Fallback with trackingId: ${trackingId}`);
       const links = params.link_list.map((url: string) => {
         // Universal Link pattern for Shopee Brazil Affiliate
-        // UTM Source 'an_{trackingId}' is the standard tracking for Shopee Affiliate Network
         const cleanUrl = url.split('?')[0];
-        const encodedUrl = encodeURIComponent(cleanUrl);
         return {
-          shortLink: `https://shopee.com.br/m/universal-link?url=${encodedUrl}&utm_campaign=viral_squad&utm_content=viral_squad&utm_medium=affiliates&utm_source=an_${trackingId}&af_siteid=an_${trackingId}`,
+          shortLink: `${cleanUrl}?utm_source=an_${trackingId}&utm_medium=affiliates&af_siteid=an_${trackingId}`,
           originLink: url,
           is_fallback: true
         };
@@ -142,10 +177,15 @@ serve(async (req: Request) => {
       finalData = { urlGenerate: links };
     }
     
+    // Flatten data for easier access and ensure success flag
+    const searchData = finalData.productOfferV2 || finalData;
+    
+    console.log(`[Shopee] Returning success. Nodes found: ${searchData?.nodes?.length || 0}`);
+
     return new Response(JSON.stringify({ 
-      success: true, // We return success: true because the fallback works
+      success: true, 
       status: response.status, 
-      data: finalData,
+      data: searchData,
       errors: result.errors
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -165,7 +205,3 @@ serve(async (req: Request) => {
     );
   }
 });
-
-
-
-

@@ -1249,8 +1249,12 @@ const App: React.FC = () => {
   };
 
   const goBackToList = () => {
-    setStep("list");
+    setStep("shopee");
     setAutomationFinished(false);
+  };
+
+  const goBackToShopee = () => {
+    setStep("shopee");
   };
 
   const refillProductList = (niche: string) => {
@@ -1519,6 +1523,9 @@ const App: React.FC = () => {
       showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
       return;
     }
+    // FIX: Define o produto selecionado imediatamente para evitar o estado "CARREGANDO..."
+    setSelectedProduct(product);
+    
     resetVideoEditor();
     setStep("treating");
     setTreatingStatus("Mapeando sinais de demanda e criativos virais...");
@@ -1730,25 +1737,30 @@ const App: React.FC = () => {
       setTreatingStatus("Buscando em larga escala (Equilíbrio Perfeito)...");
       setTreatingProgress(28);
 
-      for (const strategy of strategies) {
-        const q = encodeURIComponent(strategy.query);
-        try {
-          const resp = await fetch(
-            `https://www.tikwm.com/api/feed/search?keywords=${q}&count=50&cursor=0&region=BR`,
-            { signal: AbortSignal.timeout(15000) },
-          );
-          const json = await resp.json();
-          if (json.data?.videos?.length > 0) {
-            rawVideos = [
-              ...rawVideos,
-              ...json.data.videos.map((v: any) => ({
+      // PERFORMANCE FIX: Executar buscas em paralelo usando Promise.all
+      const results = await Promise.all(
+        strategies.map(async (strategy) => {
+          const q = encodeURIComponent(strategy.query);
+          try {
+            const resp = await fetch(
+              `https://www.tikwm.com/api/feed/search?keywords=${q}&count=50&cursor=0&region=BR`,
+              { signal: AbortSignal.timeout(15000) },
+            );
+            const json = await resp.json();
+            if (json.data?.videos?.length > 0) {
+              return json.data.videos.map((v: any) => ({
                 ...v,
                 _queryWeight: strategy.weight,
-              })),
-            ];
+              }));
+            }
+          } catch (e) {
+            console.warn(`Erro na estratégia ${strategy.query}:`, e);
           }
-        } catch {}
-      }
+          return [];
+        })
+      );
+
+      rawVideos = results.flat();
 
       // Remover duplicatas
       const uniqueVideosMap = new Map();
@@ -3325,7 +3337,7 @@ const App: React.FC = () => {
                   <div className="flex items-center justify-between mb-2">
                     <motion.button
                       whileTap={{ scale: 0.9 }}
-                      onClick={goBackToList}
+                      onClick={goBackToShopee}
                       className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
                     >
                       <ArrowLeft size={16} />
@@ -4245,7 +4257,11 @@ const App: React.FC = () => {
               transition={stepTransition}
               className="step-wrapper-standard"
             >
-              <ShopeeHub onShowToast={showToast} userStoreSlug={storeSlug} />
+              <ShopeeHub 
+                onShowToast={showToast} 
+                userStoreSlug={storeSlug} 
+                onViralize={(p) => researchTikTok({ ...p, title: p.item_name })}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -4319,20 +4335,8 @@ const App: React.FC = () => {
             active: step === "shopee",
           },
           {
-            id: "list",
-            label: "4. POSTAR",
-            icon: Search,
-            active: [
-              "list",
-              "scouting",
-              "ready",
-              "treating",
-              "automation",
-            ].includes(step),
-          },
-          {
             id: "history",
-            label: "5. CLOUD",
+            label: "4. CLOUD",
             icon: Database,
             active: step === "history",
           },

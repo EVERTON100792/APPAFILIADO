@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Link, Image as ImageIcon, Type, Copy, Check,
@@ -398,26 +399,29 @@ export const BioManager: React.FC<{
       <div className="noise-overlay" />
 
       {/* Painel Fixo Lateral de Personalização */}
-      <AnimatePresence>
-        {showCustomizer && user && (
-          <>
+      {showCustomizer && user && createPortal(
+        <div className="fixed inset-0 z-[99999] pointer-events-none flex items-end lg:items-center lg:justify-end">
+          <AnimatePresence>
             <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              key="customizer-overlay"
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
               onClick={() => setShowCustomizer(false)}
-              className="fixed inset-0 bg-transparent z-[9998] lg:hidden"
+              className="absolute inset-0 bg-black/80 backdrop-blur-md pointer-events-auto"
             />
             <motion.div
-              initial={{ opacity: 0, y: 400 }}
+              key="customizer-panel"
+              initial={{ opacity: 0, y: 1000 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 400 }}
+              exit={{ opacity: 0, y: 1000 }}
               transition={{ type: 'spring', stiffness: 200, damping: 30 }}
               style={{ 
                 scrollbarWidth: 'thin', 
                 scrollbarColor: '#22c55e33 transparent',
               }}
-              className="fixed z-[9999] bg-[#0a0a0a] border-t border-white/10 shadow-2xl flex flex-col
-                bottom-0 left-0 right-0 h-[65vh] rounded-t-[2.5rem]
-                lg:top-12 lg:right-12 lg:bottom-12 lg:left-auto lg:w-[420px] lg:h-auto lg:border-l lg:rounded-3xl"
+              className="relative w-full h-[92vh] bg-[#0a0a0a] border-t border-white/10 shadow-2xl flex flex-col pointer-events-auto rounded-t-[2.5rem] overflow-hidden
+                lg:h-[90vh] lg:mr-12 lg:w-[420px] lg:border-l lg:rounded-3xl"
             >
               {/* Alça de arraste (apenas mobile) */}
               <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-3 mb-1 lg:hidden" />
@@ -664,9 +668,10 @@ export const BioManager: React.FC<{
               </div>
               </div>
             </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </div>,
+        document.body
+      )}
 
       <div className="fixed top-6 right-6 z-[300] flex flex-col gap-2 items-end pointer-events-none">
         <AnimatePresence>

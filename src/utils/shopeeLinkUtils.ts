@@ -5,21 +5,36 @@
 
 export const sanitizeShopeeLink = (link: string, userShopeeId: string | undefined): string => {
   if (!link) return link;
-  if (!userShopeeId) return link;
 
   let sanitized = link;
+
+  if (sanitized.includes('shopee.com.br/universal-link') || sanitized.includes('shopee.com.br/m/universal-link')) {
+    try {
+      const parsedUrl = new URL(sanitized);
+      const originalProductUrl = parsedUrl.searchParams.get('url');
+
+      if (originalProductUrl) {
+        sanitized = decodeURIComponent(originalProductUrl);
+      }
+    } catch {
+      sanitized = sanitized
+        .replace('https://shopee.com.br/m/universal-link?url=', '')
+        .replace('https://shopee.com.br/universal-link?url=', '');
+    }
+  }
+
+  if (!userShopeeId) return sanitized;
 
   // 1. Corrige o erro crítico de campanha expirada
   if (sanitized.includes('utm_campaign=')) {
     // Removemos qualquer parâmetro de campanha para evitar o erro 'Expirada'
     sanitized = sanitized.replace(/([&?])utm_campaign=[^&]+/, '');
   }
-  
-  // Remove o /m/ se existir na URL universal para usar a versão mais compatível
-  if (sanitized.includes('shopee.com.br/m/universal-link')) {
-    sanitized = sanitized.replace('shopee.com.br/m/universal-link', 'shopee.com.br/universal-link');
-  }
 
+  if (sanitized.includes('utm_content=')) {
+    sanitized = sanitized.replace(/([&?])utm_content=[^&]+/, '');
+  }
+  
   // 2. Garante que o utm_source seja an_[ID] e não contenha o '-'
   if (!sanitized.includes('utm_source=an_')) {
     // Se já tem utm_source mas está errado, tentamos substituir ou adicionar
@@ -48,18 +63,14 @@ export const sanitizeShopeeLink = (link: string, userShopeeId: string | undefine
 };
 
 /**
- * Converte um link de produto ou parâmetros de ID em um Link Direto com Rastreio.
- * Usamos o formato direto 'shopee.com.br/product/SHOP_ID/ITEM_ID' com UTMs
- * para garantir que o App abra no produto e a comissão seja computada sem erros de redirecionamento.
+ * Converte uma URL de produto em um link de afiliado universal da Shopee.
+ * Preservamos a URL original do produto dentro do parâmetro `url` para evitar
+ * redirecionamentos para a home da Shopee.
  */
 export const createUniversalLink = (productUrl: string, userShopeeId: string, shopId?: number | string, itemId?: number | string): string => {
-  // Se temos os IDs, geramos o link direto, que é o mais estável que existe
-  if (shopId && itemId) {
-    return `https://shopee.com.br/product/${shopId}/${itemId}?utm_source=an_${userShopeeId}&utm_medium=affiliates&af_siteid=an_${userShopeeId}`;
-  }
+  const directProductUrl = shopId && itemId
+    ? `https://shopee.com.br/product/${shopId}/${itemId}`
+    : productUrl.split('?')[0];
 
-  // Fallback: Se só temos a URL, tentamos apenas anexar os parâmetros de rastreio nela diretamente
-  const baseUrl = productUrl.split('?')[0];
-  const separator = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${separator}utm_source=an_${userShopeeId}&utm_medium=affiliates&af_siteid=an_${userShopeeId}`;
+  return `${directProductUrl}?utm_source=an_${userShopeeId}&utm_medium=affiliates&af_siteid=an_${userShopeeId}`;
 };
