@@ -7,6 +7,8 @@ export interface ShopeeProduct {
   item_name: string;
   item_image: string;
   price: number;
+  price_before_discount?: number;
+  discount?: string;
   commission_rate: number;
   commission: number;
   sales: number;
@@ -32,10 +34,11 @@ export class ShopeeService {
       body: {
         action: "search_products",
         params: {
-          keyword: filters.keyword || "", // Empty keyword = Trending
-          page_size: 20,
+          keyword: filters.keyword || "", 
+          page_size: 50,
           page_number: 1,
           sort_by: filters.sort_by || "sales",
+          user_shopee_id: userShopeeId
         },
       },
     });
@@ -48,8 +51,6 @@ export class ShopeeService {
     const nodes = result.data?.productOfferV2?.nodes || [];
     if (nodes.length === 0) return [];
 
-    // Melhorando a lógica de mapeamento: Criamos um mapa para garantir que o link encurtado 
-    // corresponda exatamente ao produto original, mesmo que alguns produtos falhem.
     const urlToShortLink = new Map<string, string>();
     
     if (userShopeeId) {
@@ -57,8 +58,6 @@ export class ShopeeService {
         const urlList = nodes.map((n: any) => n.productLink).filter(Boolean);
         const resultLinks = await this.convertLinks(urlList, userShopeeId);
         
-        // Mapeia o link original (originLink) para o link curto retornado pela API
-        // A API de links da Shopee retorna originLink no objeto, vamos usar isso.
         urlList.forEach((url: string, i: number) => {
           if (resultLinks[i]) {
             urlToShortLink.set(url, resultLinks[i]);
@@ -71,33 +70,29 @@ export class ShopeeService {
     
     return nodes.map((item: any) => {
       const price = Number(item.price) || 0;
+      const priceBeforeDiscount = Number(item.priceBeforeDiscount) || 0;
+      const discount = item.discount || "";
       const commissionRate = Number(item.commissionRate) || 0;
       const originalUrl = item.productLink || "";
       let finalLink = "";
       
-      // Tenta capturar os IDs em qualquer formato que a API mandar (itemId ou item_id)
       const itemId = item.itemId || item.item_id || 0;
       const shopId = item.shopId || item.shop_id || 0;
 
-      // 1. Prioridade: Se temos os IDs de Loja e Item, geramos o LINK DIRETO (Alta Estabilidade)
-      if (userShopeeId && shopId && itemId) {
-        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
-      } 
-      // 2. Fallback: Se não temos IDs, mas temos o link curto da API (s.shopee.com.br)
-      else if (urlToShortLink.get(originalUrl)) {
+      if (urlToShortLink.get(originalUrl)) {
         finalLink = urlToShortLink.get(originalUrl) || "";
       }
-      // 3. Fallback Final: Apenas limpa o link original
+      else if (userShopeeId) {
+        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
+      }
       else {
         finalLink = originalUrl;
       }
 
-      // 4. HIGIENIZAÇÃO OBRIGATÓRIA: Garante que NENHUM link saia sujo
       if (finalLink && userShopeeId) {
         finalLink = sanitizeShopeeLink(finalLink, userShopeeId);
       }
 
-      // 5. Fallback final caso tudo falhe
       if (!finalLink) finalLink = originalUrl;
 
       return {
@@ -106,7 +101,9 @@ export class ShopeeService {
         item_name: item.productName || item.item_name || "Produto Shopee",
         item_image: item.imageUrl || item.item_image || "",
         price: price, 
-        commission_rate: commissionRate * 100,
+        price_before_discount: priceBeforeDiscount,
+        discount: discount,
+        commission_rate: Math.round(commissionRate * 100),
         commission: (price * commissionRate) || 0,
         sales: 0,
         shop_name: "Shopee",
@@ -134,10 +131,8 @@ export class ShopeeService {
       throw error || new Error(result?.error || result?.errors?.[0]?.message || "Erro ao converter link");
     }
 
-    // GraphQL v1 returns data: { urlGenerate: [...] } or { generate_link: [...] }
     const urlResult = result.data?.urlGenerate || result.data?.generate_link || result.data?.generateLink;
     const links = Array.isArray(urlResult) ? urlResult : [urlResult].filter(Boolean);
     return links.map((l: any) => l.short_link || l.shortLink || l.originLink || l.origin_link).filter(Boolean);
   }
-
 }

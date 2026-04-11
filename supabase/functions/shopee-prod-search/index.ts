@@ -132,9 +132,8 @@ serve(async (req: Request) => {
         // Universal Link pattern for Shopee Brazil Affiliate
         // UTM Source 'an_{trackingId}' is the standard tracking for Shopee Affiliate Network
         const cleanUrl = url.split('?')[0];
-        const encodedUrl = encodeURIComponent(cleanUrl);
         return {
-          shortLink: `https://shopee.com.br/m/universal-link?url=${encodedUrl}&utm_campaign=viral_squad&utm_content=viral_squad&utm_medium=affiliates&utm_source=an_${trackingId}&af_siteid=an_${trackingId}`,
+          shortLink: `${cleanUrl}?utm_source=an_${trackingId}&utm_medium=affiliates&af_siteid=an_${trackingId}`,
           originLink: url,
           is_fallback: true
         };
