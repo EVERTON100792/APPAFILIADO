@@ -7,8 +7,8 @@ export interface ShopeeProduct {
   item_name: string;
   item_image: string;
   price: number;
-  original_price: number;
-  discount: number;
+  price_before_discount?: number;
+  discount?: string | number;
   commission_rate: number;
   commission: number;
   sales: number;
@@ -38,11 +38,11 @@ export class ShopeeService {
       body: {
         action: "search_products",
         params: {
-          keyword: filters.keyword || "",
-          page_size: 20,
+          keyword: filters.keyword?.trim() || "", 
+          page_size: 50,
           page_number: 1,
-          sort_by: shopeeSort,
-          list_type: filters.list_type || 0,
+          sort_by: filters.sort_by || "sales",
+          user_shopee_id: userShopeeId
         },
       },
     });
@@ -76,13 +76,14 @@ export class ShopeeService {
     
     return nodes.map((item: any) => {
       let price = Number(item.price) || 0;
-      let originalPrice = Number(item.originalPrice) || Number(item.price_before_discount) || price;
+      let priceBeforeDiscount = Number(item.priceBeforeDiscount) || Number(item.price_before_discount) || price;
+      const discount = item.discount || "";
 
       // HEURISTIC: Fix Shopee API v2 scale issue (100x too high for some international items)
       // If the integer part has 5+ digits (>= 10.000,00), it's almost certainly scaled by 100
       if (price >= 10000) {
         price = price / 100;
-        if (originalPrice >= 10000) originalPrice = originalPrice / 100;
+        if (priceBeforeDiscount >= 10000) priceBeforeDiscount = priceBeforeDiscount / 100;
       }
       
       const commissionRate = Number(item.commissionRate) || 0;
@@ -114,8 +115,8 @@ export class ShopeeService {
         item_name: item.productName || item.product_name || item.item_name || "Produto Shopee",
         item_image: item.imageUrl || item.image_url || item.item_image || "",
         price: price, 
-        original_price: originalPrice,
-        discount: Number(item.discount) || 0,
+        price_before_discount: priceBeforeDiscount,
+        discount: discount,
         commission_rate: Math.round(commissionRate * 100),
         commission: (price * commissionRate) || 0,
         sales: Number(item.sales) || Number(item.sold) || 0,

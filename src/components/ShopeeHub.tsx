@@ -13,7 +13,10 @@ import {
   Rocket,
   Flame,
   Award,
-  CircleDollarSign
+  CircleDollarSign,
+  Store,
+  Clock,
+  ChevronRight
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,27 +24,95 @@ import { ShopeeService } from "../services/shopeeService";
 import type { ShopeeProduct } from "../services/shopeeService";
 import { sanitizeShopeeLink, createUniversalLink } from "../utils/shopeeLinkUtils";
 import { generateWhatsappMessage } from "../utils/shareUtils";
+import {
+  adaptShopeeProductToCampaign,
+  type CampaignProduct,
+  type CreativeMode,
+  type ProductSnapshot,
+} from "../utils/shopeeIntelligence";
 
 interface ShopeeHubProps {
   onShowToast: (msg: string) => void;
   userStoreSlug?: string;
+  onSelectProduct?: (product: CampaignProduct, mode: CreativeMode) => void;
   onViralize?: (product: any) => void;
+  onGoBack?: () => void;
 }
 
 const FALLBACK_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' rx='24' fill='%23070b16'/%3E%3Crect x='16' y='16' width='128' height='128' rx='22' fill='%2311172a' stroke='%2322c55e' stroke-opacity='.22'/%3E%3Cpath d='M54 102h52' stroke='%2322c55e' stroke-width='8' stroke-linecap='round'/%3E%3Cpath d='M80 52c-11 0-20 9-20 20v9h40v-9c0-11-9-20-20-20Z' fill='none' stroke='%23e5e7eb' stroke-width='8' stroke-linejoin='round'/%3E%3Ccircle cx='80' cy='81' r='6' fill='%2322c55e'/%3E%3C/svg%3E";
 
 type TabType = "all" | "top_day" | "top_week" | "lightning" | "50off";
 
-export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug: propStoreSlug, onViralize }) => {
+export const ShopeeHub: React.FC<ShopeeHubProps> = ({ 
+  onShowToast, 
+  userStoreSlug: propStoreSlug, 
+  onSelectProduct, 
+  onViralize,
+  onGoBack 
+}) => {
   const [keyword, setKeyword] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [products, setProducts] = useState<ShopeeProduct[]>([]);
+  const [minCommission, setMinCommission] = useState<number>(0);
+  const [minPrice, setMinPrice] = useState<number>(0);
+  const [products, setProducts] = useState<CampaignProduct[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [userShopeeId, setUserShopeeId] = useState<string | null>(null);
   const [userStoreSlug, setUserStoreSlug] = useState<string>(propStoreSlug || "meu-link");
   const [showSettings, setShowSettings] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [activeNiche, setActiveNiche] = useState<string | null>(null);
+  const [activeCollection, setActiveCollection] = useState<string>("Todas");
+
+  const [snapshots, setSnapshots] = useState<Record<string, ProductSnapshot>>({});
+
+  const saveSnapshotsToDb = async (nextSnapshots: Record<string, ProductSnapshot>) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("product_snapshots")
+        .upsert({ 
+          user_id: user.id, 
+          data: nextSnapshots,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      setSnapshots(nextSnapshots);
+    } catch (err) {
+      console.error("[ShopeeHub] Erro ao salvar snapshots no Supabase:", err);
+    }
+  };
+
+  const hydrateProducts = (rawProducts: ShopeeProduct[], searchKeyword: string) => {
+    const nextSnapshots: Record<string, ProductSnapshot> = { ...snapshots };
+
+    console.log("[ShopeeHub] hydrateProducts received:", rawProducts.length, "products");
+
+    if (rawProducts.length === 0) {
+      setProducts([]);
+      return;
+    }
+
+    const adapted = rawProducts.map((product) => {
+      const key = `${product.shop_id}_${product.item_id}`;
+      const previous = snapshots[key];
+      const campaignProduct = adaptShopeeProductToCampaign(product, searchKeyword, previous);
+
+      nextSnapshots[key] = {
+        price: Number(product.price) || 0,
+        commissionRate: Number(product.commission_rate) || 0,
+        capturedAt: new Date().toISOString(),
+      };
+
+      return campaignProduct;
+    });
+
+    saveSnapshotsToDb(nextSnapshots);
+    console.log("[ShopeeHub] Setting products:", adapted.length, "collections:", [...new Set(adapted.map(p => p.intelligence?.storeCollection))]);
+    setProducts(adapted);
+  };
 
   const tabs: {id: TabType, label: string, icon: any}[] = [
     { id: "all", label: "Explorar", icon: Search },
@@ -62,22 +133,37 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     { id: "sport", name: "Esportes", icon: "🏃", keyword: "fitness academia" },
   ];
 
-  // Fetch user profile
+  // Fetch user profile, shopee_id, storeSlug and snapshots
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const { data } = await supabase
+          // Get profile data primarily from profiles table
+          const { data: profile } = await supabase
             .from("profiles")
-            .select("shopee_id")
+            .select("store_slug, shopee_id")
             .eq("id", user.id)
-            .single();
+            .maybeSingle();
           
-          if (data?.shopee_id) setUserShopeeId(data.shopee_id);
+          if (profile?.shopee_id) {
+            setUserShopeeId(profile.shopee_id);
+          }
+
           const meta = user.user_metadata || {};
-          const slug = meta.store_slug || localStorage.getItem("bio_store_slug") || "meu-link";
+          const slug = profile?.store_slug || meta.store_slug || "meu-link";
           setUserStoreSlug(slug.toLowerCase());
+
+          // Load snapshots from DB
+          const { data: snapshotData } = await supabase
+            .from("product_snapshots")
+            .select("data")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          
+          if (snapshotData?.data) {
+            setSnapshots(snapshotData.data as Record<string, ProductSnapshot>);
+          }
         }
       } catch (err) {
         console.error("Error fetching profile:", err);
@@ -140,7 +226,13 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         });
       }
 
-      setProducts(results);
+      hydrateProducts(results, searchKeyword.trim());
+      
+      if (results.length === 0) {
+        onShowToast("❌ NENHUM PRODUTO ENCONTRADO");
+      } else {
+        if (searchKeyword) onShowToast(`✅ ${results.length} PRODUTOS ENCONTRADOS`);
+      }
     } catch (err) {
       console.error("ERRO SHOPEE:", err);
       onShowToast("❌ ERRO NA CONEXÃO COM SHOPEE");
@@ -149,15 +241,17 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     }
   };
 
-  const addToVitrine = async (product: ShopeeProduct) => {
+  const addToVitrine = async (product: CampaignProduct) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         onShowToast("⚠️ FAÇA LOGIN PARA ADICIONAR!");
         return;
       }
-      const meta = user.user_metadata || {};
-      const targetSlug = (meta.store_slug || userStoreSlug || localStorage.getItem("bio_store_slug") || "meu-link").toLowerCase();
+
+      // IMPORTANTE: Sincronia de Slug - Priorizar fonte mais fresca (prop) depois metadata
+      const targetSlug = String(userStoreSlug || user.user_metadata?.store_slug || "meu-link").toLowerCase();
+
       const sanitizedLink = sanitizeShopeeLink(product.product_link, userShopeeId || undefined);
 
       const { error } = await supabase.from("bio_store").insert({
@@ -165,7 +259,9 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         title: product.item_name,
         image_url: product.item_image,
         affiliate_link: sanitizedLink,
-        price: (Number(product.price) || 0).toFixed(2)
+        price: (product.price_value || 0).toFixed(2).replace('.', ','),
+        price_before_discount: product.price_before_discount?.toFixed(2).replace('.', ','),
+        discount: product.discount
       });
 
       if (error) throw error;
@@ -175,9 +271,9 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     }
   };
 
-  const shareWhatsApp = async (product: ShopeeProduct) => {
+  const shareWhatsApp = async (product: CampaignProduct) => {
     try {
-      const price = (Number(product.price) || 0).toFixed(2);
+      const price = (product.price_value || 0).toFixed(2);
       const sanitizedLink = sanitizeShopeeLink(product.product_link, userShopeeId || undefined);
       
       const shareTitle = `✨ ACHADINHO SELECIONADO ✨`;
@@ -215,18 +311,102 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     }
   };
 
+  const triggerCreativeFlow = (product: CampaignProduct, mode: CreativeMode) => {
+    if (onSelectProduct) {
+      onSelectProduct(product, mode);
+    } else if (onViralize) {
+      onViralize(product);
+    } else {
+      onShowToast("Fluxo criativo ainda indisponivel nesta tela.");
+    }
+  };
+
+  const handleSaveSettings = async (id: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        onShowToast("Você precisa estar logado!");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        data: { shopee_id: id }
+      });
+
+      if (error) throw error;
+
+      setUserShopeeId(id);
+      onShowToast("ID Shopee atualizado! 🚀");
+      setShowSettings(false);
+    } catch (err: any) {
+      console.error("[ShopeeHub] Erro ao salvar configs:", err);
+      onShowToast("Erro ao salvar: " + err.message);
+    }
+  };
+
+  const collectionColorMap: Record<string, string> = {
+    "Top do Dia": "text-emerald-400 border-emerald-500/20 bg-emerald-500/10",
+    "Impulso": "text-cyan-300 border-cyan-400/20 bg-cyan-400/10",
+    "Ticket Premium": "text-amber-300 border-amber-400/20 bg-amber-400/10",
+    "Escala": "text-fuchsia-300 border-fuchsia-400/20 bg-fuchsia-400/10",
+    "Ofertas Relâmpago": "text-[#EE4D2D] border-[#EE4D2D]/20 bg-[#EE4D2D]/10",
+  };
+
+  const collectionOptions = ["Todas", "Ofertas Relâmpago", "Top do Dia", "Impulso", "Ticket Premium", "Escala"];
+  
+  let visibleProducts: CampaignProduct[] = [];
+  
+  if (activeCollection === "Todas") {
+    visibleProducts = products;
+  } else {
+    for (const p of products) {
+      const col = String(p.intelligence?.storeCollection || "");
+      if (activeCollection === "Top do Dia") {
+        if (col.toLowerCase().includes("top") || (p.intelligence?.score && p.intelligence.score > 60)) {
+          visibleProducts.push(p);
+        }
+      } else if (activeCollection === "Impulso" && col.toLowerCase().includes("impulso")) {
+        visibleProducts.push(p);
+      } else if (activeCollection === "Ticket Premium" && col.toLowerCase().includes("ticket")) {
+        visibleProducts.push(p);
+      } else if (activeCollection === "Escala" && col.toLowerCase().includes("escala")) {
+        visibleProducts.push(p);
+      } else if (activeCollection === "Ofertas Relâmpago") {
+        if (p.discount || (p.price_before_discount && p.price_before_discount > p.price_value)) {
+          visibleProducts.push(p);
+        } else if (p.intelligence?.score && p.intelligence.score > 80) {
+          visibleProducts.push(p);
+        }
+      }
+    }
+    if (visibleProducts.length === 0 && products.length > 0) {
+      visibleProducts = [...products]
+        .sort((a, b) => (b.intelligence?.score || 0) - (a.intelligence?.score || 0))
+        .slice(0, 10);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5 p-4 pb-24">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="text-3xl font-black italic text-metallic uppercase leading-none tracking-tighter">
-            SHOPEE <span className="text-white">HUB</span>
-          </h2>
+        <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
-            <p className="text-[9px] font-black text-emerald-400/80 tracking-[0.2em] uppercase">Mecanismo de Conversão Pro</p>
+            {onGoBack && (
+              <button 
+                onClick={onGoBack}
+                className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white transition-all mr-1"
+              >
+                <ChevronRight className="rotate-180" size={16} />
+              </button>
+            )}
+            <h2 className="text-3xl font-black italic text-metallic uppercase leading-none tracking-tighter">
+              SHOPEE <span className="text-white">HUB</span>
+            </h2>
           </div>
+          <p className="text-[10px] font-black text-emerald-400/80 tracking-[0.2em] uppercase">
+            Ferramentas Pro de Afiliado
+          </p>
         </div>
         
         <button 
@@ -295,112 +475,140 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         </div>
       )}
 
+      {/* Vitrines Automaticas */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Store size={12} /> Vitrines Automáticas
+          </h3>
+        </div>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar px-1 pb-1">
+          {collectionOptions.map((collection) => (
+            <button
+              key={collection}
+              onClick={() => setActiveCollection(collection)}
+              className={`shrink-0 h-8 px-3 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${activeCollection === collection ? "bg-white text-slate-950 border-white" : "bg-slate-900/50 border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
+            >
+              {collection}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Results Header */}
       <div className="flex items-center justify-between mt-2">
-        <h3 className="text-[10px] font-black text-white/50 uppercase tracking-widest flex items-center gap-2">
+        <h3 className="text-[10px] font-black text-white/50 uppercase tracking-widest flex items-center gap-2 px-1">
           {activeTab === "all" ? (keyword ? `Busca: ${keyword}` : "🔥 Tendências") : tabs.find(t => t.id === activeTab)?.label}
           <div className="w-1 h-1 bg-emerald-500 rounded-full animate-ping" />
         </h3>
-        <span className="text-[8px] font-bold text-white/20 uppercase">{products.length} itens</span>
+        <span className="text-[8px] font-bold text-white/20 uppercase">{visibleProducts.length} itens</span>
       </div>
 
       {/* Product Grid */}
       <div className="grid grid-cols-2 gap-3.5">
-        {products.map((product) => {
-          const hasDiscount = product.discount > 0 && product.original_price > product.price;
-          
-          return (
-            <motion.div
-              layout
-              key={product.item_id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="tech-card p-2 flex flex-col gap-3 group border-white/5 hover:border-emerald-500/30 transition-all bg-slate-900/20"
-            >
-              {/* Image & Badges */}
-              <div className="aspect-square rounded-xl overflow-hidden relative border border-white/10 bg-slate-950">
-                <img
-                  src={product.item_image}
-                  alt={product.item_name}
-                  onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-90 group-hover:opacity-100"
-                />
-                
-                {/* Commission Badge - Top Left */}
-                <div className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[9px] font-black px-2 py-0.5 rounded-md shadow-lg z-10 flex items-center gap-1">
-                  <Percent size={10} strokeWidth={4} /> {product.commission_rate}%
-                </div>
-
-                {/* Discount Badge - Bottom Right */}
-                {hasDiscount && (
-                  <div className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded-md shadow-lg z-10 animate-pulse">
-                    {product.discount}% OFF
+        <AnimatePresence mode="popLayout">
+          {visibleProducts.map((product) => {
+            const hasDiscount = (product.discount ? true : false) || (product.price_before_discount && product.price_before_discount > product.price_value);
+            
+            return (
+              <motion.div
+                layout
+                key={`${product.shop_id}_${product.item_id}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="tech-card p-2 flex flex-col gap-3 group border-white/5 hover:border-emerald-500/30 transition-all bg-slate-900/20"
+              >
+                {/* Image & Badges */}
+                <div className="aspect-square rounded-xl overflow-hidden relative border border-white/10 bg-slate-950" onClick={() => triggerCreativeFlow(product, "viral")}>
+                  <img
+                    src={product.item_image}
+                    alt={product.item_name}
+                    onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-90 group-hover:opacity-100"
+                  />
+                  
+                  {/* Collection Badge - Top Left */}
+                  <div className={`absolute top-1 left-1 text-[7px] font-black px-1.5 py-0.5 rounded border z-10 ${collectionColorMap[product.intelligence?.storeCollection || ""] || "text-white border-white/10 bg-black/40"}`}>
+                    {product.intelligence?.storeCollection || "Achadinho"}
                   </div>
-                )}
-              </div>
-              
-              <div className="flex flex-col gap-1.5 px-1">
-                <h4 className="text-[10px] font-bold text-white/90 line-clamp-2 leading-snug h-7">
-                  {product.item_name}
-                </h4>
-                
-                <div className="flex flex-col gap-0.5">
+
+                  {/* Commission Badge - Top Right */}
+                  <div className="absolute top-1 right-1 bg-emerald-500 text-slate-950 text-[9px] font-black px-2 py-0.5 rounded-md shadow-lg z-10 flex items-center gap-1">
+                    <Percent size={10} strokeWidth={4} /> {product.commission_rate}%
+                  </div>
+
+                  {/* Discount Badge - Bottom Right */}
                   {hasDiscount && (
-                    <span className="text-[9px] text-white/20 line-through font-bold">
-                      R$ {product.original_price.toFixed(2)}
-                    </span>
+                    <div className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded-md shadow-lg z-10 animate-pulse">
+                      {product.discount || "SALE"}
+                    </div>
                   )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-black text-white">
-                      R$ {product.price.toFixed(2)}
-                    </span>
-                    <span className="text-[9px] font-black text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">
-                      +R$ {product.commission.toFixed(2)}
-                    </span>
+                </div>
+                
+                <div className="flex flex-col gap-1.5 px-1">
+                  <h4 className="text-[10px] font-bold text-white/90 line-clamp-2 leading-snug h-7">
+                    {product.item_name}
+                  </h4>
+                  
+                  <div className="flex flex-col gap-0.5">
+                    {hasDiscount && (
+                      <span className="text-[9px] text-white/20 line-through font-bold">
+                        R$ {product.price_before_discount?.toFixed(2)}
+                      </span>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-black text-white">
+                        R$ {product.price_value?.toFixed(2)}
+                      </span>
+                      <span className="text-[9px] font-black text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">
+                        +R$ {product.commission_value?.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                {/* VIP Action: VIRAL */}
-                <button
-                  onClick={() => onViralize?.({ title: product.item_name, ...product })}
-                  className="w-full h-10 bg-emerald-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 group"
-                >
-                  <Rocket size={14} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                  VIRAL
-                </button>
-
-                {/* Utilities Row */}
-                <div className="flex items-center gap-2 mt-1">
-                  <button 
-                    onClick={() => addToVitrine(product)}
-                    className="flex-1 h-9 bg-slate-950 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-white/40 hover:text-white hover:border-white/20 transition-all"
-                    title="Adicionar à Vitrine"
+                  {/* VIP Action: VIRAL */}
+                  <button
+                    onClick={() => triggerCreativeFlow(product, "viral")}
+                    className="w-full h-10 bg-emerald-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 group"
                   >
-                    <Plus size={14} /> <span className="text-[8px] font-black uppercase">Loja</span>
+                    <Rocket size={14} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                    VIRAL
                   </button>
-                  <button 
-                    onClick={() => shareWhatsApp(product)}
-                    className="flex-1 h-9 bg-[#25D366]/5 border border-[#25D366]/10 rounded-xl flex items-center justify-center gap-2 text-[#25D366]/60 hover:bg-[#25D366] hover:text-white transition-all shadow-xl"
+
+                  {/* Utilities Row */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <button 
+                      onClick={() => addToVitrine(product)}
+                      className="flex-1 h-9 bg-slate-950 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-white/40 hover:text-white hover:border-white/20 transition-all"
+                      title="Adicionar à Vitrine"
+                    >
+                      <Plus size={14} /> <span className="text-[8px] font-black uppercase">Loja</span>
+                    </button>
+                    <button 
+                      onClick={() => shareWhatsApp(product)}
+                      className="flex-1 h-9 bg-[#25D366]/5 border border-[#25D366]/10 rounded-xl flex items-center justify-center gap-2 text-[#25D366]/60 hover:bg-[#25D366] hover:text-white transition-all shadow-xl"
+                    >
+                      <MessageCircle size={14} /> <span className="text-[8px] font-black uppercase">Zap</span>
+                    </button>
+                  </div>
+
+                  {/* Affiliate Link */}
+                  <button
+                    onClick={() => userShopeeId ? window.open(sanitizeShopeeLink(product.product_link, userShopeeId), "_blank") : setShowSettings(true)}
+                    className="w-full h-8 border border-white/5 bg-slate-950/50 rounded-lg mt-1 text-[8px] font-black text-white/30 hover:text-white hover:bg-slate-900 transition-all uppercase flex items-center justify-center gap-1.5"
                   >
-                    <MessageCircle size={14} /> <span className="text-[8px] font-black uppercase">Zap</span>
+                    {userShopeeId ? "Abrir Link Original" : "Configurar ID"}
                   </button>
                 </div>
-
-                {/* Affiliate Link */}
-                <button
-                  onClick={() => userShopeeId ? window.open(sanitizeShopeeLink(product.product_link, userShopeeId), "_blank") : setShowSettings(true)}
-                  className="w-full h-8 border border-white/5 bg-slate-950/50 rounded-lg mt-1 text-[8px] font-black text-white/30 hover:text-white hover:bg-slate-900 transition-all uppercase flex items-center justify-center gap-1.5"
-                >
-                  {userShopeeId ? "Abrir Link Original" : "Configurar ID"}
-                </button>
-              </div>
-            </motion.div>
-          );
-        })}
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
 
       {/* Empty State */}
-      {products.length === 0 && !isSearching && (
+      {visibleProducts.length === 0 && !isSearching && (
         <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-30">
           <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center border border-white/10">
             <ShoppingBag size={24} />
@@ -444,9 +652,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                       const input = document.getElementById('shopee_id_input') as HTMLInputElement;
                       const val = input.value.trim();
                       if (val) {
-                        setUserShopeeId(val);
-                        setShowSettings(false);
-                        onShowToast("✅ ID ATUALIZADO!");
+                        handleSaveSettings(val);
                       }
                     }}
                     className="btn-premium w-full h-14 text-[11px] shadow-emerald-500/20"

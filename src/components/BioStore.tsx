@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft, Share2, Check, Tag, Flame, Clock, ArrowRight } from 'lucide-react';
+import { ShoppingBag, Zap, ArrowUpRight, Sparkles, ArrowLeft, Share2, Check, Tag, Flame, Clock, ArrowRight, ChevronRight } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { generateWhatsappMessage } from '../utils/shareUtils';
 import { sanitizeShopeeLink } from '../utils/shopeeLinkUtils';
+
+interface BioStoreProps {
+  userId: string;
+  onGoBack?: () => void;
+}
 
 interface BioItem {
   id: string;
@@ -11,6 +16,8 @@ interface BioItem {
   image_url: string;
   affiliate_link: string;
   price?: string;
+  price_before_discount?: string;
+  discount?: string;
 }
 
 interface StoreSettings {
@@ -76,7 +83,7 @@ const OptimizedImage: React.FC<{ src: string; alt: string }> = ({ src, alt }) =>
   );
 };
 
-export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
+export const BioStore: React.FC<BioStoreProps> = ({ userId, onGoBack }) => {
   const [items, setItems] = useState<BioItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
@@ -249,273 +256,229 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
         </div>
       )}
 
-      <div className="max-w-md mx-auto pt-12 px-5 relative z-10" style={{ paddingTop: 'calc(3rem + var(--safe-top))' }}>
+      {/* Modern Header Section */}
+      <div className="max-w-md mx-auto pt-16 px-6 relative z-10" style={{ paddingTop: 'calc(2rem + var(--safe-top))' }}>
         
-        <div className="fixed top-4 left-4 z-50">
-          <button
-            onClick={() => window.location.href = '/'}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider backdrop-blur-xl transition-all border border-white/10"
-          >
-            <ArrowLeft size={16} />
-            Voltar
-          </button>
-        </div>
-        
-        {settings.profile_image && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
-            className="mb-8 text-center"
-          >
-            <img 
-              src={settings.profile_image} 
-              alt="Foto de perfil" 
-              className="w-24 h-24 mx-auto rounded-full object-cover border-4"
-              style={{ borderColor: themeColor }}
-            />
-          </motion.div>
+        {onGoBack && (
+          <div className="fixed top-4 left-4 z-50">
+            <button
+              onClick={onGoBack}
+              className="flex items-center gap-2 px-4 py-2 rounded-full premium-glass hover:bg-emerald-500 hover:text-black font-bold text-[10px] uppercase tracking-wider shadow-lg transition-all"
+            >
+              <ArrowLeft size={16} />
+              Voltar ao App
+            </button>
+          </div>
         )}
-
-        {settings.header_style === 'minimal' ? (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="mb-12 text-center"
-          >
-            <h1 className="text-white font-black text-3xl tracking-tighter">
-              @{userId}
-            </h1>
-            <div className="w-12 h-0.5 mx-auto my-3" style={{ backgroundColor: themeColor }} />
-          </motion.div>
-        ) : settings.header_style === 'bold' ? (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-            className="mb-16 p-6 rounded-3xl text-center"
-            style={{ background: `linear-gradient(135deg, ${themeColor}22, ${themeColor}11)`, border: `1px solid ${themeColor}33` }}
-          >
-            <h1 className="text-white font-black text-4xl tracking-tighter uppercase">
-              LOJA <span style={{ color: themeColor }}>@{userId}</span>
-            </h1>
-          </motion.div>
-        ) : (
-<motion.div 
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="mb-10 relative"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-4 py-2 rounded-full" style={{ backgroundColor: `${themeColor}20`, border: `1px solid ${themeColor}40` }}>
-                  <span className="w-2 h-2 rounded-full animate-pulse shadow-[0_0_10px_currentColor]" style={{ backgroundColor: themeColor, boxShadow: `0 0 10px ${themeColor}` }} />
-                  <span className="text-[8px] font-black uppercase tracking-widest" style={{ color: themeColor }}>Ao Vivo</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                <ShoppingBag size={12} className="text-white/60" />
-                <span className="text-[8px] font-bold text-white/60 uppercase">{items.length} produtos</span>
-              </div>
+        
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }} 
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-12 relative"
+        >
+          <div className="flex flex-col items-center text-center">
+            <div className="mb-6 flex flex-col items-center gap-1">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                STATUS: OPERACIONAL
+              </span>
             </div>
 
-            <h1 className="text-white font-black text-4xl tracking-tighter uppercase leading-[0.9] mb-3">
-               {userId.includes('_') ? (
-                  <>
-                    <span>{userId.split('_')[0]}</span>
-                    <span className="italic" style={{ color: themeColor }}>_{userId.split('_').slice(1).join('_')}</span>
-                  </>
-               ) : userId.includes('-') ? (
-                  <>
-                    <span>{userId.split('-')[0]}</span>
-                    <span className="italic" style={{ color: themeColor }}>-{userId.split('-').slice(1).join('-')}</span>
-                  </>
-               ) : (
-                  <span style={{ color: themeColor }}>@{userId}</span>
-               )}
-            </h1>
-
-            <p className="text-white/50 text-xs font-medium leading-relaxed mb-6">
-              ⚡ Seleção <span className="font-bold text-white" style={{ color: themeColor }}>exclusiva</span> de produtos virais testados e approvalados pela nossa triagem rigorosa.
+            {settings.profile_image ? (
+              <div className="relative mb-6">
+                <motion.img 
+                  initial={{ scale: 0.8 }} animate={{ scale: 1 }}
+                  src={settings.profile_image} 
+                  alt="Profile" 
+                  className="w-24 h-24 mx-auto rounded-full object-cover border-4 shadow-2xl"
+                  style={{ borderColor: themeColor }}
+                />
+                <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white rounded-full p-1.5 shadow-lg border-2 border-black">
+                  <Zap size={12} fill="currentColor" />
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6 w-20 h-20 mx-auto rounded-full flex items-center justify-center premium-glass" style={{ borderColor: `${themeColor}44` }}>
+                <ShoppingBag size={32} style={{ color: themeColor }} />
+              </div>
+            )}
+            
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-3xl font-black tracking-tighter text-white lowercase">
+                {userId}
+              </h1>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black px-2 py-0.5 rounded-full tracking-widest">
+                PRO
+              </div>
+              <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-3 h-3 text-white fill-current"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 px-4 py-1.5 rounded-full premium-glass-light mb-8">
+              <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest" style={{ color: themeColor }}>
+                <Sparkles size={10} /> Curadoria Oficial
+              </span>
+              <div className="w-1 h-1 rounded-full bg-slate-700" />
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                {items.length} Ofertas Ativas
+              </span>
+            </div>
+            
+            <p className="max-w-[280px] mx-auto text-slate-400 text-[11px] leading-relaxed font-medium">
+              Links oficiais e seguros da Shopee. <br/>
+              <span className="text-white font-bold mt-2 inline-block">Toque no produto para garantir o menor preço.</span>
             </p>
+          </div>
+        </motion.div>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2 text-white/50 text-[9px] font-bold uppercase tracking-wider">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}20` }}>
-                  <Check size={10} style={{ color: themeColor }} />
-                </div>
-                <span>Originais</span>
-              </div>
-              <div className="w-px h-4 bg-white/10" />
-              <div className="flex items-center gap-2 text-white/50 text-[9px] font-bold uppercase tracking-wider">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}20` }}>
-                  <Zap size={10} style={{ color: themeColor }} />
-                </div>
-                <span>Flash</span>
-              </div>
-              <div className="w-px h-4 bg-white/10" />
-              <div className="flex items-center gap-2 text-white/50 text-[9px] font-bold uppercase tracking-wider">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}20` }}>
-                  <Sparkles size={10} style={{ color: themeColor }} />
-                </div>
-                <span>Premium</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {/* Product Layout */}
+        <div className={settings.layout_type === 'list' ? 'space-y-4' : 'fragment-grid'}>
+          <AnimatePresence mode="popLayout">
+            {items.map((item, i) => {
+              const rotation = (i % 2 === 0 ? 0.5 : -0.5) * (Math.random() * 1);
+              const isLarge = settings.layout_type === 'grid' && i % 5 === 0;
 
-        {settings.layout_type === 'list' ? (
-          <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {items.map((item, i) => (
+              return (
                 <motion.a
                   href={item.affiliate_link}
                   target="_blank"
                   rel="noopener noreferrer"
                   key={item.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ type: 'spring', stiffness: 100, damping: 15, delay: i * 0.05 }}
-                  whileHover={{ scale: 1.02, zIndex: 20 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="group relative flex flex-row items-center gap-4 overflow-hidden transition-all duration-300 p-3"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: `1px solid rgba(255,255,255,0.06)`, borderRadius: cardRadius }}
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1, rotate: settings.layout_type === 'grid' ? rotation : 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  whileHover={{ scale: 1.03, rotate: 0, zIndex: 20 }}
+                  whileTap={{ scale: 0.97 }}
+                  className={`group relative flex overflow-hidden transition-all duration-300 premium-glass ${
+                    settings.layout_type === 'list' 
+                      ? 'flex-row items-center gap-4 p-3' 
+                      : `flex-col ${isLarge ? 'item-span-2' : ''}`
+                  }`}
+                  style={{ borderRadius: cardRadius }}
                 >
-                  <div className="relative w-20 h-20 shrink-0 overflow-hidden" style={{ borderRadius: cardRadius }}>
+                  {/* Badges */}
+                  <div className="absolute top-2 right-2 z-20 flex flex-col items-end gap-1">
+                    {item.discount ? (
+                      <div className="bg-[#EE4D2D] text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-lg animate-pulse">
+                        {item.discount} OFF
+                      </div>
+                    ) : i === 0 && (
+                      <div className="bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                        MELHOR PREÇO
+                      </div>
+                    )}
+                    {settings.layout_type === 'grid' && (
+                      <div className="bg-black/40 backdrop-blur-md text-white/60 text-[8px] font-black px-1.5 py-0.5 rounded-md border border-white/5">
+                        {item.price ? `${Math.floor(Math.random() * 40 + 60)} Vendidos` : ''}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Image */}
+                  <div className={`relative shrink-0 overflow-hidden ${
+                    settings.layout_type === 'list' 
+                      ? 'w-24 h-24' 
+                      : `w-full ${isLarge ? 'aspect-[16/9]' : 'aspect-square'}`
+                  }`} style={{ borderRadius: settings.layout_type === 'list' ? `calc(${cardRadius} - 8px)` : '0' }}>
                     <OptimizedImage src={item.image_url} alt={item.title} />
+                    <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <h3 className="text-white font-black uppercase text-[10px] tracking-wider truncate group-hover:text-emerald-400 transition-colors">
-                        {item.title}
-                      </h3>
-                      {item.price && (
-                        <span className="shrink-0 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm">
-                          {item.price}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-white/40 text-[8px] font-mono truncate">shope.ee/link_oficial</p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <div className="flex items-center gap-1 text-[11px] font-black" style={{ color: themeColor }}>
-                        RESGATAR <ArrowUpRight size={12} />
-                      </div>
-                      <button 
-                        onClick={(e) => handleShare(item, e)}
-                        className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-white transition-colors"
-                      >
-                        <Share2 size={14} /> COMPARTILHAR
-                      </button>
-                    </div>
-                  </div>
-                </motion.a>
-              ))}
-            </AnimatePresence>
-          </div>
-        ) : (
-<div className="grid grid-cols-2 gap-4">
-            <AnimatePresence mode="popLayout">
-              {items.map((item, i) => {
-                const priceValue = item.price ? parseFloat(item.price.replace('R$', '').replace(',', '.')) : 0;
-                const hasDiscount = priceValue > 0;
-                const originalPrice = hasDiscount ? priceValue * 1.5 : priceValue;
-                const discountPercent = hasDiscount ? 30 : 0;
- 
-                return (
-                  <motion.a
-                    href={item.affiliate_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    key={item.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ type: 'spring', stiffness: 100, damping: 15, delay: i * 0.08 }}
-                    whileHover={{ y: -4 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="group relative flex flex-col overflow-hidden transition-all duration-300"
-                    style={{ backgroundColor: '#0a0a0a', borderRadius: '1.25rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.6)' }}
-                  >
-                    <div className="relative w-full aspect-[3/4] overflow-hidden" style={{ backgroundColor: '#080808' }}>
-                      <OptimizedImage src={item.image_url} alt={item.title} />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-                      
-                      <div className="absolute top-2 left-2">
-                        <div className="px-2.5 py-1 text-white text-[7px] font-black uppercase tracking-widest rounded-md flex items-center gap-1" style={{ backgroundColor: themeColor, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
-                          <Zap size={8} className="fill-current" /> SELEÇÃO
-                        </div>
-                      </div>
+                  
+                  {/* Content */}
+                  <div className={`flex-1 min-w-0 ${settings.layout_type === 'list' ? 'pr-2' : 'p-4'}`}>
+                    <h3 className={`text-white font-bold tracking-tight mb-2 line-clamp-2 uppercase group-hover:text-emerald-400 transition-colors ${
+                      settings.layout_type === 'list' ? 'text-[11px]' : 'text-[10px]'
+                    }`}>
+                      {item.title}
+                    </h3>
 
-                      {hasDiscount && (
-                        <div className="absolute top-2 right-2 px-2 py-1 bg-red-500 text-white text-[7px] font-black uppercase tracking-widest rounded-md flex items-center gap-1 animate-pulse">
-                          <Tag size={8} /> -{ discountPercent }%
-                        </div>
-                      )}
-
-                      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black to-transparent">
-                        <div className="flex items-center gap-1.5 text-white/70 text-[8px] font-medium">
-                          <Flame size={10} className="animate-pulse" />
-                          <span className="tracking-wide">Estoque LIMITADO</span>
-                        </div>
+                    {(item.discount || item.price_before_discount) && (
+                      <div className="bg-[#EE4D2D] text-white py-0.5 px-2 flex items-center gap-1 mb-2 rounded-sm w-fit animate-pulse">
+                        <Zap size={10} fill="currentColor" />
+                        <span className="text-[8px] font-black uppercase tracking-tighter">Ofertas Relâmpago</span>
                       </div>
-                    </div>
+                    )}
                     
-                    <div className="p-3 flex flex-col gap-2">
-                      <h3 className="text-white font-semibold text-[9px] uppercase tracking-wide line-clamp-2 leading-tight">
-                        {item.title}
-                      </h3>
-
-                      <div className="flex items-end justify-between">
-                        <div className="flex flex-col">
-                          {hasDiscount && (
-                            <span className="text-white/40 text-[8px] line-through font-medium">
-                              R$ {originalPrice.toFixed(2).replace('.', ',')}
-                            </span>
-                          )}
-                          <span className="text-white text-lg font-black tracking-tight">
-                            {item.price || 'R$ 0,00'}
+                    <div className={`flex items-end justify-between gap-2 ${settings.layout_type === 'grid' ? 'mt-2' : ''}`}>
+                      <div className="flex flex-col">
+                        {item.price_before_discount ? (
+                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter line-through opacity-50">
+                            R$ {item.price_before_discount}
                           </span>
+                        ) : (
+                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter line-through opacity-50">
+                            R$ {(parseFloat(item.price?.replace(',','.') || '0') * 1.4).toFixed(2).replace('.',',')}
+                          </span>
+                        )}
+                        <span className={`${settings.layout_type === 'list' ? 'text-lg' : 'text-xl'} font-black leading-none`} style={{ color: themeColor }}>
+                           {item.price?.includes('R$') ? item.price : `R$ ${item.price || '0,00'}`}
+                        </span>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className={`flex items-center gap-1.5 rounded-lg bg-emerald-500 text-black font-black text-[10px] shadow-lg group-hover:bg-emerald-400 transition-all cta-pulse ${
+                          settings.layout_type === 'list' ? 'px-3 py-1.5' : 'p-2'
+                        }`}>
+                          {settings.layout_type === 'list' ? 'APROVEITAR' : ''} <ArrowUpRight size={14} />
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-1">
-                        <div className="flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-white text-[9px] font-black uppercase tracking-wider transition-all" style={{ backgroundColor: themeColor }}>
-                          Comprar <ArrowRight size={11} />
-                        </div>
-                      </div>
-
-                      <button 
-                        onClick={(e) => handleShare(item, e)}
-                        className="w-full py-2 rounded-lg flex items-center justify-center gap-1.5 text-white/40 text-[8px] font-bold uppercase tracking-wider hover:text-white transition-colors"
-                        style={{ border: '1px dashed rgba(255,255,255,0.08)' }}
-                      >
-                        <Share2 size={12} /> Indicar
-                      </button>
                     </div>
-                  </motion.a>
-                );
-              })}
-            </AnimatePresence>
-          </div>
-        )}
+
+                    {settings.layout_type === 'grid' && (
+                       <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between opacity-60 group-hover:opacity-100 transition-opacity">
+                         <span className="text-[8px] font-black tracking-widest uppercase text-slate-500 flex items-center gap-1">
+                           <Zap size={10} style={{ color: themeColor }} /> OFICIAL SHOPEE
+                         </span>
+                         <button 
+                            onClick={(e) => handleShare(item, e)}
+                            className="p-1 hover:text-white transition-colors"
+                          >
+                            <Share2 size={14} />
+                          </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {settings.layout_type === 'list' && (
+                    <button 
+                      onClick={(e) => handleShare(item, e)}
+                      className="absolute bottom-3 right-2 p-1 text-[9px] font-bold text-slate-500 hover:text-white transition-colors"
+                    >
+                      <Share2 size={12} />
+                    </button>
+                  )}
+                </motion.a>
+              );
+            })}
+          </AnimatePresence>
+        </div>
         
         {items.length === 0 && !loading && (
            <motion.div 
              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-             className="text-center py-20 border-dashed opacity-40"
-             style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px dashed rgba(255,255,255,0.08)`, borderRadius: '2.5rem' }}
+             className="text-center py-20 premium-glass relative overflow-hidden"
+             style={{ borderRadius: '2.5rem' }}
            >
-             <ShoppingBag size={48} className="mx-auto mb-4" style={{ color: themeColor }} />
-             <p className="font-black text-[10px] uppercase tracking-[0.2em]">Vitrine Vazia</p>
-             <p className="text-[10px] text-slate-500 mt-2">Aguardando curadoria de produtos...</p>
-             <p className="text-[8px] text-slate-600 mt-4 font-mono">userId: {userId}</p>
+             <div className="absolute inset-0 bg-emerald-500/5 backdrop-blur-3xl" />
+             <div className="relative z-10">
+               <ShoppingBag size={48} className="mx-auto mb-4 opacity-20" style={{ color: themeColor }} />
+               <p className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500">Vitrine Vazia</p>
+               <p className="text-[10px] text-slate-600 mt-2">Aguardando curadoria de produtos...</p>
+             </div>
            </motion.div>
         )}
         
         <motion.div 
            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
-           className="mt-24 pt-12 text-center flex flex-col items-center gap-4"
-           style={{ borderTop: `1px solid rgba(255,255,255,0.04)` }}
-        >
-           <div className="flex items-center gap-2 text-[9px] tracking-[0.4em] font-black uppercase" style={{ color: `${themeColor}44` }}>
-              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: `${themeColor}44` }} />
-              SISTEMA CRIPTOGRAFADO
+           className="mt-24 pt-12 text-center flex flex-col items-center gap-4 border-t border-white/5"
+         >
+           <div className="flex items-center gap-2 text-[9px] tracking-[0.4em] font-black uppercase text-slate-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              SISTEMA OFICIAL VERIFICADO
            </div>
-           <p className="text-[8px] font-medium tracking-tighter opacity-50 uppercase" style={{ color: '#334155' }}>
-             &copy; 2026 AGENTES SHOP . TODOS OS DIREITOS RESERVADOS
+           <p className="text-[8px] font-bold opacity-30 uppercase tracking-tighter">
+             &copy; 2026 Agentes Shop . Todos os direitos reservados
            </p>
         </motion.div>
       </div>

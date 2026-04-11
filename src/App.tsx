@@ -300,6 +300,7 @@ const App: React.FC = () => {
   const [isPro, setIsPro] = useState(false);
   const [trialExpired, setTrialExpired] = useState(false);
   const [trialRemaining, setTrialRemaining] = useState<number | null>(null);
+  const [creativeMode, setCreativeMode] = useState<"viral" | "autoral" | "cantado">("viral");
   const [user, setUser] = useState<any>(null);
   const hasAccessToPlatform =
     isPro || (trialRemaining !== null && trialRemaining > 0);
@@ -323,6 +324,7 @@ const App: React.FC = () => {
   const [activePlatform, setActivePlatform] = useState<"tiktok" | "shopee">(
     "tiktok",
   );
+  const [isDirectAutomationRequested, setIsDirectAutomationRequested] = useState(false);
   const userMetadataRef = useRef<Record<string, any>>({});
   const metadataUpdateInFlightRef = useRef(false);
   const pendingMetadataRef = useRef<Record<string, any> | null>(null);
@@ -362,15 +364,35 @@ const App: React.FC = () => {
         const payload = pendingMetadataRef.current;
         pendingMetadataRef.current = null;
 
-        const { data, error } = await supabase.auth.updateUser({
+        // 1. Atualizar Auth Metadata
+        const { data, error: authError } = await supabase.auth.updateUser({
           data: payload,
         });
 
-        if (error) {
-          return null;
+        if (authError) {
+          console.error("[Auth] Erro ao atualizar metadata:", authError);
         }
 
-        if (data.user) {
+        // 2. Sincronizar com a tabela 'profiles' (Fonte da verdade relacional)
+        // Mapeamos chaves específicas da metadata para colunas da tabela
+        const profileUpdate: Record<string, any> = {
+          id: user.id,
+          updated_at: new Date().toISOString()
+        };
+
+        if (payload.store_slug !== undefined) profileUpdate.store_slug = payload.store_slug;
+        if (payload.store_ready !== undefined) profileUpdate.store_ready = payload.store_ready;
+        if (payload.shopee_id !== undefined) profileUpdate.shopee_id = payload.shopee_id;
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert(profileUpdate, { onConflict: 'id' });
+
+        if (profileError) {
+          console.error("[Database] Erro ao sincronizar perfil:", profileError);
+        }
+
+        if (data?.user) {
           userMetadataRef.current = data.user.user_metadata || payload;
           lastPersistedStepRef.current =
             (data.user.user_metadata?.last_step as Step | undefined) || null;
@@ -387,55 +409,41 @@ const App: React.FC = () => {
   const applyUserAppState = async (authUser: any) => {
     if (!authUser) return;
 
+    // 1. Buscar do banco (Fonte da verdade absoluta)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('store_slug, store_ready, shopee_id')
+      .eq('id', authUser.id)
+      .single();
+
     const metadata = authUser.user_metadata || {};
-    const legacySlug = (
-      localStorage.getItem("bio_store_slug") || ""
-    ).toLowerCase();
+    
+    // 2. Determinar estado final (Prioridade: Banco > Metadata > LocalStorage)
+    const legacySlug = (localStorage.getItem("bio_store_slug") || "").toLowerCase();
     const legacyReady = localStorage.getItem("bio_store_ready") === "true";
-    const metadataSlug =
-      typeof metadata.store_slug === "string"
-        ? metadata.store_slug.toLowerCase()
-        : "";
-    const metadataReady = metadata.store_ready === true;
-    let inferredSlug = metadataSlug || legacySlug || "";
-    let inferredReady = Boolean(
-      metadataReady ||
-      (legacyReady &&
-        inferredSlug &&
-        !STORE_PLACEHOLDER_SLUGS.includes(inferredSlug)),
-    );
 
-    if (!inferredReady && authUser.id) {
-      if (metadataSlug && !STORE_PLACEHOLDER_SLUGS.includes(metadataSlug)) {
-        const { data: slugStoreRows } = await supabase
-          .from("bio_store")
-          .select("user_id")
-          .eq("user_id", metadataSlug)
-          .limit(1);
+    const finalSlug = (
+      profile?.store_slug || 
+      metadata.store_slug || 
+      legacySlug || 
+      "meu-link"
+    ).toLowerCase();
 
-        if (slugStoreRows && slugStoreRows.length > 0) {
-          inferredSlug = metadataSlug;
-          inferredReady = true;
-        }
-      }
-    }
+    const finalReady = profile?.store_ready ?? metadata.store_ready ?? legacyReady;
 
-    const nextSlug = inferredSlug || "meu-link";
-    const nextReady = inferredReady;
+    // 3. Aplicar ao estado local
+    setStoreSlug(finalSlug);
+    setStoreReady(finalReady);
 
-    setStoreSlug(nextSlug || "meu-link");
-    setStoreReady(nextReady);
-
-    if (
-      (!metadataSlug && nextReady) ||
-      (!metadataReady && nextReady) ||
-      (!metadataSlug && legacySlug) ||
-      (!metadataReady && legacyReady)
-    ) {
+    // 4. Se não existia no banco ou se veio do localStorage, sincronizar para a nuvem
+    if (!profile?.store_slug || legacySlug) {
+      console.log("[Sincronização] Atualizando perfil na nuvem...");
       await updateUserMetadata({
-        store_slug: nextSlug,
-        store_ready: nextReady,
-      });
+        store_slug: finalSlug,
+        store_ready: finalReady
+      }, true); // silent = true para evitar re-render em loop
+      
+      // Limpar legado após sucesso
       localStorage.removeItem("bio_store_slug");
       localStorage.removeItem("bio_store_ready");
     }
@@ -917,11 +925,15 @@ const App: React.FC = () => {
     }
 
     const lastStep = user.user_metadata?.last_step as Step | undefined;
+    
+    // Proteção: Se o usuário já tem loja mas caiu no onboarding_start (ex: refresh), joga pro Início
+    const effectiveLastStep = (lastStep === "onboarding_start" && storeReady) ? "home" : lastStep;
+
     if (
-      lastStep &&
-      !["scouting", "ready", "treating", "automation"].includes(lastStep)
+      effectiveLastStep &&
+      !["scouting", "ready", "treating", "automation"].includes(effectiveLastStep)
     ) {
-      setStep(lastStep);
+      setStep(effectiveLastStep);
     } else {
       setStep("home");
     }
@@ -1398,7 +1410,7 @@ const App: React.FC = () => {
       };
 
       setSelectedProduct(customProduct);
-      setStep("list");
+      setStep("shopee");
       void researchTikTok(customProduct);
       setCustomLink("");
       await saveScoutedProducts([customProduct]);
@@ -1407,6 +1419,20 @@ const App: React.FC = () => {
     } finally {
       setIsScanning(false);
     }
+  };
+
+  const handleDirectCreativeAction = async (product: any, mode: "viral" | "autoral" | "cantado") => {
+    if (trialExpired && !hasAccessToPlatform) {
+      showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
+      return;
+    }
+    
+    setSelectedProduct(product);
+    setCreativeMode(mode);
+    setIsDirectAutomationRequested(true);
+    
+    // Inicia o fluxo de pesquisa/tratamento
+    void researchTikTok(product);
   };
 
   const refreshProducts = async () => {
@@ -1951,12 +1977,21 @@ const App: React.FC = () => {
       setTreatingChecklist((prev) => [...prev, "Ecossistema pronto"]);
 
       await new Promise((r) => setTimeout(r, 600));
-      setStep("ready");
-      showToast(`${topScored.length} VÍDEOS ENCONTRADOS! 🎬`);
+      
+      if (isDirectAutomationRequested) {
+        setIsDirectAutomationRequested(false);
+        // Em modo direto, pulamos o editor (ready) e vamos direto para a automação
+        setStep("automation");
+        void runAutomation(activePlatform);
+        showToast(`SQUAD_BYPASS: ${creativeMode.toUpperCase()} ATIVADO! 🚀`);
+      } else {
+        setStep("ready");
+        showToast(`${topScored.length} VÍDEOS ENCONTRADOS! 🎬`);
+      }
     } catch (err: any) {
       console.error("Erro ao buscar TikTok:", err);
       showToast(err.message || "TENTE NOVAMENTE COM OUTRO PRODUTO");
-      setStep("list");
+      setStep("shopee");
     }
   }
 
@@ -2905,7 +2940,7 @@ const App: React.FC = () => {
             >
               <AgentScouting
                 onComplete={() => {
-                  setStep("list");
+                  setStep("shopee");
                   refreshProducts();
                 }}
               />
@@ -2914,234 +2949,7 @@ const App: React.FC = () => {
 
           {/* Tela de scouting removida - redireciona direto para list */}
 
-          {step === "list" && (
-            <motion.div
-              key="list"
-              variants={stepVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={stepTransition}
-              className="step-wrapper-standard p-4 sm:p-6 space-y-6 pb-40"
-            >
-              {/* Pesquisa por Link da Shopee */}
-              <form
-                onSubmit={handleCustomLinkSubmit}
-                className="relative group shrink-0 space-y-2"
-              >
-                <div className="absolute -inset-1 bg-accent/20 rounded-2xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity duration-500" />
-                <div className="relative flex items-center">
-                  <div className="flex-1 relative">
-                    <Search
-                      size={14}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-accent transition-colors z-20"
-                    />
-                    <input
-                      type="text"
-                      value={customLink}
-                      onChange={(e) => setCustomLink(e.target.value)}
-                      placeholder="Qual produto deseja buscar?"
-                      className="w-full bg-slate-950/80 border border-white/5 rounded-2xl pl-10 pr-24 py-3.5 text-[12px] text-white focus:outline-none focus:border-accent/40 shadow-2xl placeholder:text-white/20 transition-all font-medium relative z-10"
-                    />
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20">
-                      <motion.button
-                        whileTap={{ scale: 0.95 }}
-                        type="submit"
-                        className="bg-accent text-slate-950 h-9 px-4 rounded-xl font-black uppercase text-[10px] tracking-tighter hover:brightness-110 shadow-xl shadow-accent/10 transition-all flex items-center justify-center gap-1.5"
-                      >
-                        BUSCAR
-                      </motion.button>
-                    </div>
-                  </div>
-                </div>
-                {/* Texto de Auxílio */}
-                <motion.div
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 px-1 opacity-60"
-                >
-                  <div className="w-1 h-1 bg-accent rounded-full animate-pulse" />
-                  <p className="text-[9px] font-black text-accent uppercase tracking-widest italic">
-                    DICA: DIGITE E CLIQUE NO BOTÃO BUSCAR
-                  </p>
-                </motion.div>
-              </form>
-
-              {/* Header */}
-              <div className="flex justify-between items-center px-1">
-                <div className="space-y-1">
-                  <h2 className="text-3xl font-black uppercase leading-none italic tracking-tighter">
-                    Packs <span className="text-accent">Shopee</span>
-                  </h2>
-                  <p className="text-[10px] text-dim font-black uppercase tracking-[0.3em] flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-                    FOTOS E VÍDEOS GERAIS
-                  </p>
-                </div>
-                <div className="glass-acid px-4 py-2 border border-accent/20 text-accent text-[11px] font-black uppercase tracking-widest rounded-xl">
-                  {activeItems.length} ATIVOS
-                </div>
-              </div>
-
-              {/* Botão Atualizar Produtos */}
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                onClick={refreshProducts}
-                className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center gap-3 text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] hover:bg-white/10 hover:border-accent/30 hover:text-accent transition-all group"
-              >
-                <RefreshCcw
-                  size={16}
-                  className="group-hover:rotate-180 transition-transform duration-700"
-                />
-                Sincronizar Acervo Viral
-              </motion.button>
-
-              {/* Grade de Categorias Premium */}
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                {niches.map((n) => (
-                  <motion.button
-                    key={n.id}
-                    whileTap={{ scale: 0.92 }}
-                    onClick={() => handleNicheChange(n.id)}
-                    className={`flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] border transition-all duration-300 relative group overflow-hidden ${
-                      activeNiche === n.id
-                        ? "bg-accent/10 border-accent/50 text-accent shadow-[0_8px_30px_rgba(6,182,212,0.15)] bg-gradient-to-br from-accent/5 to-transparent"
-                        : "bg-slate-900/40 border-white/5 text-white/40 hover:border-white/20 hover:bg-white/5"
-                    }`}
-                  >
-                    {activeNiche === n.id && (
-                      <motion.div
-                        layoutId="niche-glow"
-                        className="absolute inset-0 bg-accent/5 rounded-[1.5rem] pointer-events-none"
-                      />
-                    )}
-                    <span
-                      className={`text-2xl transition-transform duration-300 ${activeNiche === n.id ? "scale-110" : "group-hover:scale-110 grayscale-[0.5] group-hover:grayscale-0 opacity-60 group-hover:opacity-100"}`}
-                    >
-                      {n.icon}
-                    </span>
-                    <span
-                      className={`text-[10px] font-black uppercase tracking-widest leading-none text-center transition-colors ${
-                        activeNiche === n.id ? "text-accent" : "text-slate-600"
-                      }`}
-                    >
-                      {n.label}
-                    </span>
-                  </motion.button>
-                ))}
-              </div>
-
-              {/* Lista de Produtos */}
-              <div className="space-y-3">
-                {activeItems.map((p, i) => {
-                  const isPublished = publicationHistory.some(
-                    (h) => h.product_id === p.id,
-                  );
-                  return (
-                    <motion.div
-                      key={p.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: Math.min(i * 0.03, 0.3) }}
-                      whileHover={{ x: 6 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`relative group ${isPublished ? "opacity-40 grayscale pointer-events-none" : "cursor-pointer"}`}
-                      onClick={() => {
-                        setSelectedProduct(p);
-                        researchTikTok(p);
-                      }}
-                    >
-                      <div className="absolute -inset-[1px] bg-gradient-to-r from-accent/20 via-transparent to-accent/5 rounded-[2.2rem] opacity-0 group-hover:opacity-100 transition-opacity blur-[1px]" />
-
-                      <div className="relative bg-slate-900/60 border border-white/5 rounded-[2rem] p-4 flex gap-5 items-center backdrop-blur-3xl transition-all group-hover:border-accent/30 group-hover:bg-slate-900/80 shadow-2xl shadow-black/40">
-                        {/* Badge de Comissão */}
-                        <div className="relative w-16 h-16 shrink-0">
-                          <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                          <div className="relative w-full h-full rounded-2xl bg-black/60 border border-accent/20 flex flex-col items-center justify-center overflow-hidden">
-                            <span className="text-[10px] font-black text-accent/60 uppercase leading-none mb-0.5 tracking-tighter">
-                              COM
-                            </span>
-                            <span className="text-xl font-black text-accent italic leading-none">
-                              {p.commission_pct}%
-                            </span>
-                            <div className="absolute inset-x-0 bottom-0 h-1 bg-accent/30" />
-                          </div>
-                        </div>
-
-                        {/* Info do Produto */}
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
-                              <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                              <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">
-                                {p.sales} VENDAS
-                              </span>
-                            </div>
-                            {isPublished && (
-                              <span className="text-[8px] font-black uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                                POSTADO
-                              </span>
-                            )}
-                          </div>
-
-                          <h3 className="font-black text-[13px] text-white/90 uppercase truncate leading-tight group-hover:text-white transition-colors">
-                            {p.title}
-                          </h3>
-
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono text-xs font-black text-emerald-400/80">
-                              {p.price}
-                            </span>
-                            <div className="w-1 h-1 rounded-full bg-slate-700" />
-                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">
-                              SQUAD SELECTION
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Ações Rápidas */}
-                        <div className="flex flex-col gap-2 shrink-0">
-                          <motion.div
-                            whileHover={{ scale: 1.1 }}
-                            className="w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent group-hover:bg-accent group-hover:text-slate-950 transition-all shadow-lg shadow-accent/5"
-                          >
-                            <ArrowRight size={20} />
-                          </motion.div>
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addToBio(p, e);
-                            }}
-                            className="w-11 h-9 rounded-xl border border-white/5 bg-white/5 flex items-center justify-center text-white/40 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all active:scale-95"
-                            title="Publicar na minha Vitrine"
-                          >
-                            <ShoppingBag size={15} />
-                          </motion.button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-
-                {activeItems.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
-                    <RefreshCcw size={40} className="text-accent/30" />
-                    <p className="text-[10px] text-white/30 font-black uppercase tracking-widest">
-                      Nenhum produto carregado
-                    </p>
-                    <button
-                      onClick={refreshProducts}
-                      className="text-accent text-[10px] font-black uppercase tracking-widest underline"
-                    >
-                      Atualizar agora
-                    </button>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
+          {/* Tela de listagem removida - Redirecionada para o ShopeeHub (Imagem 02) */}
 
           {step === "plans" && (
             <motion.div
@@ -4126,7 +3934,7 @@ const App: React.FC = () => {
                         caption={videoLegend}
                         isPro={isPro}
                         onSuccess={() => {
-                          setStep("list");
+                          setStep("shopee");
                           setAutomationFinished(false);
                         }}
                       />
@@ -4136,7 +3944,7 @@ const App: React.FC = () => {
                           whileTap={{ scale: 0.95 }}
                           className="h-16 bg-slate-900 border-2 border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/90 hover:border-white/30 transition-all flex items-center justify-center gap-2"
                           onClick={() => {
-                            setStep("ready");
+                            setStep("shopee");
                             setAutomationFinished(false);
                           }}
                         >
@@ -4147,7 +3955,7 @@ const App: React.FC = () => {
                           whileTap={{ scale: 0.95 }}
                           className="h-16 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 border-2 border-white/20"
                           onClick={() => {
-                            setStep("list");
+                            setStep("shopee");
                             setAutomationFinished(false);
                           }}
                         >
@@ -4254,14 +4062,28 @@ const App: React.FC = () => {
               initial="initial"
               animate="animate"
               exit="exit"
-              transition={stepTransition}
               className="step-wrapper-standard"
             >
               <ShopeeHub 
                 onShowToast={showToast} 
                 userStoreSlug={storeSlug} 
-                onViralize={(p) => researchTikTok({ ...p, title: p.item_name })}
+                onSelectProduct={handleDirectCreativeAction}
+                onGoBack={() => setStep("home")}
               />
+            </motion.div>
+          )}
+
+          {step === "bio" && (
+            <motion.div
+              key="bio"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard"
+            >
+              <BioStore userId={storeSlug} onGoBack={() => setStep("home")} />
             </motion.div>
           )}
         </AnimatePresence>
