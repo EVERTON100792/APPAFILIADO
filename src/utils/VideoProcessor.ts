@@ -627,39 +627,8 @@ export class VideoProcessor {
         this.ctx.restore();
         break;
       }
-      case 'wave': {
-        const waveOffset = Math.sin(progress * Math.PI * 4) * 20;
-        this.ctx.save();
-        this.ctx.translate(waveOffset, 0);
-        this.ctx.drawImage(this.canvas, -waveOffset, 0, W, H);
-        this.ctx.restore();
-        break;
-      }
-      case 'spiral': {
-        const angle = progress * Math.PI * 2;
-        const scale = 1 + Math.sin(progress * Math.PI) * 0.1;
-        this.ctx.save();
-        this.ctx.translate(W / 2, H / 2);
-        this.ctx.rotate(angle);
-        this.ctx.scale(scale, scale);
-        this.ctx.drawImage(this.canvas, -W / 2, -H / 2, W, H);
-        this.ctx.restore();
-        break;
-      }
-      case 'pixelate': {
-        const pixelSize = Math.floor(10 + sin * 30);
-        if (pixelSize > 2) {
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = Math.floor(W / pixelSize);
-          tempCanvas.height = Math.floor(H / pixelSize);
-          const tempCtx = tempCanvas.getContext('2d')!;
-          tempCtx.drawImage(this.canvas, 0, 0, tempCanvas.width, tempCanvas.height);
-          this.ctx.imageSmoothingEnabled = false;
-          this.ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, W, H);
-          this.ctx.imageSmoothingEnabled = true;
-        }
-        break;
-      }
+      // Distorted effects removed per user request for premium aesthetic
+
       case 'light_leak': {
         const gradient = this.ctx.createRadialGradient(W * 0.8, H * 0.2, 0, W * 0.7, H * 0.3, W * 0.6);
         gradient.addColorStop(0, `rgba(255, 165, 0, ${sin * 0.6})`);
