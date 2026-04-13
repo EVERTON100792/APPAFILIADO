@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { UploadCloud, Clock, CheckCircle2, AlertCircle, Loader2, Download } from 'lucide-react';
+import { UploadCloud, Clock, CheckCircle2, AlertCircle, Loader2, Download, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TikTokPublisherProps {
@@ -9,20 +9,91 @@ interface TikTokPublisherProps {
   caption: string;
   isPro: boolean;
   onSuccess?: () => void;
+  productLink?: string;
+  isAutoralVideo?: boolean;
 }
 
-export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoUrl, caption, isPro, onSuccess }) => {
+export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoUrl, caption, isPro, onSuccess, productLink, isAutoralVideo }) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleDate, setScheduleDate] = useState<string>('');
   const [status, setStatus] = useState<{type: 'idle' | 'success' | 'error', msg: string}>({ type: 'idle', msg: '' });
+  const [publishTarget, setPublishTarget] = useState<'tiktok' | 'shopee' | null>(null);
 
-  const handlePublishNow = async () => {
+  // Gerar legenda otimizada para vendas (máx 150 caracteres)
+  const generateShopeeCaption = () => {
+    const productName = caption.split('\n')[0] || "Produto";
+    const priceMatch = caption.match(/R\$[\s\d,]+/);
+    const price = priceMatch ? priceMatch[0] : "";
+    
+    // Criar legenda curta e direta para vendas
+    const shortCaption = `${productName} ${price}\n🔗 Clique no link da bio!\n\n#shopee #achadinhos #promo #oferta #viral #brasil`;
+    
+    // Limitar a 150 caracteres
+    return shortCaption.length > 150 ? shortCaption.substring(0, 147) + "..." : shortCaption;
+  };
+
+  // Download do vídeo
+  const downloadVideo = async () => {
+    if (!videoUrl) return null;
+    
+    try {
+      if (videoUrl.startsWith('blob:')) {
+        const response = await fetch(videoUrl);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = isAutoralVideo ? 'video-autoral.mp4' : 'video-viral.mp4';
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+        return true;
+      } else if (videoUrl.startsWith('http')) {
+        window.open(videoUrl, '_blank');
+        return true;
+      }
+    } catch (err) {
+      console.error("Erro ao baixar:", err);
+    }
+    return false;
+  };
+
+  // Abrir TikTok
+  const openTikTok = () => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Tentar abrir app do TikTok
+      window.location.href = 'tiktok://';
+      setTimeout(() => {
+        window.location.href = 'https://www.tiktok.com/tiktokstudio/upload?from=webapp';
+      }, 1500);
+    } else {
+      window.open('https://www.tiktok.com/tiktokstudio/upload?from=webapp', '_blank');
+    }
+  };
+
+  // Abrir Shopee Videos
+  const openShopeeVideos = () => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Tentar abrir app Shopee
+      window.location.href = 'shopee://';
+      setTimeout(() => {
+        window.location.href = 'https://shopee.com.br/videos';
+      }, 1500);
+    } else {
+      window.open('https://shopee.com.br/videos', '_blank');
+    }
+  };
+
+  const handlePublishToTikTok = async () => {
     if (!videoUrl) return;
     setIsPublishing(true);
+    setPublishTarget('tiktok');
     setStatus({ type: 'idle', msg: '' });
 
     try {
+      // Copiar legenda completa do TikTok
       try {
         await navigator.clipboard.writeText(caption);
       } catch {
@@ -36,36 +107,53 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
         document.body.removeChild(textarea);
       }
       
-      if (videoUrl.startsWith('blob:')) {
-        const response = await fetch(videoUrl);
-        const blob = await response.blob();
-        const extension = blob.type.includes('mp4') ? 'mp4' : 'mp4';
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `video.${extension}`;
-        a.click();
-        URL.revokeObjectURL(blobUrl);
-      } else if (videoUrl.startsWith('http')) {
-        window.open(videoUrl, '_blank');
-      }
+      // Abrir TikTok
+      openTikTok();
 
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
-        window.location.href = 'tiktok://';
-        setTimeout(() => {
-          window.location.href = 'https://www.tiktok.com/tiktokstudio/upload?from=webapp';
-        }, 1500);
-      } else {
-        window.open('https://www.tiktok.com/tiktokstudio/upload?from=webapp', '_blank');
-      }
-
-      setStatus({ type: 'success', msg: '✅ Legenda copiada! Vídeo baixando... TikTok aberto!' });
-      if (onSuccess) onSuccess();
+      setStatus({ type: 'success', msg: '✅ Legenda copiada! TikTok aberto! Agora poste o vídeo que já foi baixado.' });
+      if (onSuccess) setTimeout(onSuccess, 3000);
     } catch (err: any) {
       setStatus({ type: 'error', msg: err.message });
     } finally {
       setIsPublishing(false);
+      setPublishTarget(null);
+    }
+  };
+
+  const handlePublishToShopee = async () => {
+    if (!videoUrl) return;
+    setIsPublishing(true);
+    setPublishTarget('shopee');
+    setStatus({ type: 'idle', msg: '' });
+
+    try {
+      // Gerar legenda otimizada para vendas (150 chars máx)
+      const shopeeCaption = generateShopeeCaption();
+      
+      // Copiar legenda reduzida
+      try {
+        await navigator.clipboard.writeText(shopeeCaption);
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = shopeeCaption;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      
+      // Abrir Shopee Videos
+      openShopeeVideos();
+
+      setStatus({ type: 'success', msg: '✅ Legenda copiada! Shopee aberto! Agora poste o vídeo que já foi baixado.' });
+      if (onSuccess) setTimeout(onSuccess, 3000);
+    } catch (err: any) {
+      setStatus({ type: 'error', msg: err.message });
+    } finally {
+      setIsPublishing(false);
+      setPublishTarget(null);
     }
   };
 
@@ -110,41 +198,60 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h3 className="text-xl font-black text-white italic uppercase flex items-center gap-2">
-            Upload Center
+            📤 Como Postar
           </h3>
-          <p className="text-xs text-slate-400 mt-1">Baixe o vídeo e copie a legenda automaticamente.</p>
+          <p className="text-xs text-slate-400 mt-1">
+            {isAutoralVideo 
+              ? "Vídeo já foi baixado! Copie a legenda e poste." 
+              : "Vídeo já baixado! See instructions below:"}
+          </p>
         </div>
       </div>
 
       <div className="pt-2 border-t border-slate-800">
-        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Ações de Voo</label>
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
+          Publicar em
+        </label>
         
-        <div className="flex flex-wrap items-center gap-3">
-          {/* POST NOW */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* TIKTOK */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={handlePublishNow}
+            onClick={handlePublishToTikTok}
             disabled={isPublishing || !videoUrl}
-            className={`flex-1 flex justify-center items-center gap-2 px-6 py-3 rounded-2xl font-bold uppercase text-xs tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed
-              ${status.type === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xl hover:shadow-indigo-500/30'}`}
+            className={`flex-1 flex justify-center items-center gap-2 px-6 py-4 rounded-2xl font-bold uppercase text-xs tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed
+              ${publishTarget === 'tiktok' ? 'bg-pink-500/20 border border-pink-500 text-pink-400' : 'bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-xl hover:shadow-pink-500/30'}`}
           >
-            {isPublishing && !isScheduling ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            Baixar Vídeo + Copiar Legenda
+            {isPublishing && publishTarget === 'tiktok' ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Video size={16} />
+            )}
+            TikTok
           </motion.button>
 
-          {/* SCHEDULE */}
+          {/* SHOPEE VIDEOS */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setIsScheduling(!isScheduling)}
-            disabled={isPublishing}
-            className="flex-1 flex justify-center items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-2xl font-bold uppercase text-xs tracking-wider text-slate-200 border border-slate-600 transition-all"
+            onClick={handlePublishToShopee}
+            disabled={isPublishing || !videoUrl}
+            className={`flex-1 flex justify-center items-center gap-2 px-6 py-4 rounded-2xl font-bold uppercase text-xs tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed
+              ${publishTarget === 'shopee' ? 'bg-orange-500/20 border border-orange-500 text-orange-400' : 'bg-gradient-to-br from-orange-500 to-red-600 text-white shadow-xl hover:shadow-orange-500/30'}`}
           >
-            <Clock size={16} />
-            {isPro ? "Agendar" : "Agendar (PRO)"}
+            {isPublishing && publishTarget === 'shopee' ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Video size={16} />
+            )}
+            Shopee Videos
           </motion.button>
         </div>
+        
+        <p className="text-[9px] text-slate-500 mt-2 text-center">
+          TikTok: legenda completa | Shopee: legenda otimizada para vendas (150 caracteres)
+        </p>
       </div>
 
       {/* SCHEDULE EXPANDABLE PANEL */}

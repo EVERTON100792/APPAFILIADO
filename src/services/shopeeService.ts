@@ -24,6 +24,7 @@ export interface ShopeeSearchFilters {
   max_price?: number;
   sort_by?: "sales" | "price" | "commission" | number;
   list_type?: number;
+  page_number?: number;
 }
 
 export class ShopeeService {
@@ -39,22 +40,27 @@ export class ShopeeService {
         action: "search_products",
         params: {
           keyword: filters.keyword || "",
-          page_size: 20,
-          page_number: 1,
+          page_size: 50,
+          page_number: filters.page_number || 1,
           sort_by: shopeeSort,
           list_type: filters.list_type || 0,
         },
       },
     });
 
+    console.group(`🔍 Shopee Search: "${filters.keyword}"`);
+    console.log("Filters applied:", filters);
+    
     if (error || !result?.success) {
       console.error("Error searching Shopee products:", error || result?.error || result?.errors);
+      console.groupEnd();
       throw error || new Error(result?.error || result?.errors?.[0]?.message || "Erro na busca da Shopee");
     }
 
-    console.log("Shopee search raw result:", result);
     const nodes = result.data?.nodes || result.data?.productOfferV2?.nodes || [];
-    console.log(`Found ${nodes.length} nodes`);
+    console.log(`Success: Found ${nodes.length} items`);
+    console.groupEnd();
+    
     if (nodes.length === 0) return [];
 
     const urlToShortLink = new Map<string, string>();
@@ -147,5 +153,25 @@ export class ShopeeService {
     const urlResult = result.data?.urlGenerate || result.data?.generate_link || result.data?.generateLink;
     const links = Array.isArray(urlResult) ? urlResult : [urlResult].filter(Boolean);
     return links.map((l: any) => l.short_link || l.shortLink || l.originLink || l.origin_link).filter(Boolean);
+  }
+
+  /**
+   * Fetches full item details (including all carousel images)
+   */
+  static async getItemDetail(shopId: number, itemId: number): Promise<any> {
+    try {
+      const { data, error } = await supabase.functions.invoke("shopee-prod-search", {
+        body: {
+          action: "get_item_detail",
+          params: { shop_id: shopId, item_id: itemId }
+        }
+      });
+
+      if (error || !data?.success) throw error || new Error("Failed to fetch detail");
+      return data.data;
+    } catch (error) {
+      console.error("Error fetching item detail:", error);
+      return null;
+    }
   }
 }

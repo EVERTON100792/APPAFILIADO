@@ -5,6 +5,7 @@ export interface ProcessingOptions {
   legend: string;
   isMuted: boolean;
   transition: 'zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'none';
+  transitionList?: ('zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'none' | 'wave' | 'spiral' | 'pixelate')[];
   videoId?: string;
   trimStart?: number;
   trimEnd?: number;
@@ -45,35 +46,83 @@ export class VideoProcessor {
     }
   }
 
-  private async fetchVideoAsBlob(url: string): Promise<string> {
+  private async fetchAsBlob(url: string, type: 'image' | 'video' = 'video'): Promise<string> {
     const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
     
-    // Lista de proxies para tentar em ordem (sem o proxy do Supabase como primeiro, pois pode estar com erro 500)
+    // PRIORIDADE 1: Proxy Interno (Evita CORS e 403)
     const proxies = [
+      (u: string) => u.includes(PROXY_BASE) ? u : `${PROXY_BASE}?url=${encodeURIComponent(u)}`,
       (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
       (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u: string) => u.includes(PROXY_BASE) ? u : `${PROXY_BASE}?url=${encodeURIComponent(u)}`,
-      (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
     ];
 
+    // Se for imagem da shopee, tenta carregar
     for (const proxyFn of proxies) {
       try {
         const targetUrl = proxyFn(url);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s para garantir imagens pesadas
         
-        const res = await fetch(targetUrl, { cache: 'no-cache', signal: controller.signal });
+        console.log(`[VideoProcessor] Tentando carregar: ${targetUrl}`);
+        const res = await fetch(targetUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
         
         if (res.ok) {
           const blob = await res.blob();
-          if (blob.size > 50000) return URL.createObjectURL(blob);
+          if (blob.size > 100) {
+            console.log(`[VideoProcessor] Sucesso: ${url}`);
+            return URL.createObjectURL(blob);
+          }
         }
       } catch (e) {
-        console.warn('Proxy falhou ou timeout');
+        console.warn(`[VideoProcessor] Falha no proxy para ${url}`);
       }
     }
     return url;
+  }
+
+  private async loadAndResampleAudio(url: string, targetSampleRate: number): Promise<AudioBuffer> {
+    const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
+    const proxyUrl = `${PROXY_BASE}?url=${encodeURIComponent(url)}`;
+    
+    try {
+      console.log(`[VideoProcessor] Carregando Áudio via Proxy: ${proxyUrl}`);
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        console.error(`[VideoProcessor] Erro de Rede Áudio: HTTP ${response.status} para URL: ${url}`);
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const originalBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+      if (originalBuffer.sampleRate === targetSampleRate) {
+        return originalBuffer;
+      }
+
+      // Resampling logic if needed
+      const offlineCtx = new OfflineAudioContext(
+        originalBuffer.numberOfChannels,
+        originalBuffer.duration * targetSampleRate,
+        targetSampleRate
+      );
+
+      const source = offlineCtx.createBufferSource();
+      source.buffer = originalBuffer;
+      source.connect(offlineCtx.destination);
+      source.start();
+
+      const resampledBuffer = await offlineCtx.startRendering();
+      await audioCtx.close();
+      return resampledBuffer;
+
+    } catch (err) {
+      console.error("[VideoProcessor] Falha fatal no áudio (usando fallback silencioso):", err);
+      const audioCtx = new AudioContext({ sampleRate: targetSampleRate });
+      return audioCtx.createBuffer(1, targetSampleRate, targetSampleRate);
+    }
   }
 
 
@@ -114,7 +163,7 @@ export class VideoProcessor {
           if (wasPaused) video.pause();
         } else {
           video = this.ownedVideo;
-          const sourceUrl = await this.fetchVideoAsBlob(videoUrl);
+          const sourceUrl = await this.fetchAsBlob(videoUrl, 'video');
           blobUrl = sourceUrl.startsWith('blob:') ? sourceUrl : null;
           video.crossOrigin = blobUrl ? '' : 'anonymous';
           video.src = sourceUrl;
@@ -279,7 +328,7 @@ export class VideoProcessor {
 
           const isTransition = transitionTs.some(t => ct >= t && ct < t + 1.5);
           if (isTransition) this.applyTransitionEffect(transition, ct, transitionTs, W, H);
-          if (options.legend) this.drawLegend(options.legend, W, H);
+          // Legend is now handled by drawCallToAction and drawProductInfo in renderSlideshow
 
           const timestamp = (ct - startTime) * 1_000_000;
           const frame = new VideoFrame(this.canvas, { timestamp });
@@ -301,6 +350,194 @@ export class VideoProcessor {
         renderFrame();
       } catch (err) {
         if (options.existingVideoEl) options.existingVideoEl.loop = true;
+        reject(err);
+      }
+    });
+  }
+
+  public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const W = 1080;
+        const H = 1920; 
+        this.canvas.width = W;
+        this.canvas.height = H;
+        
+        // Target duration: fixed 38s for better engagement (user asked 30-40s)
+        const targetDuration = 38; 
+        const fps = 30;
+        const totalFrames = targetDuration * fps;
+        const slideChangeInterval = 3.5; // Change slide every 3.5s
+
+        // 1. Preload images with proxy support
+        const images = await Promise.all(imageUrls.map(async url => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          return new Promise<HTMLImageElement>(async (res) => {
+            try {
+              const blobUrl = await this.fetchAsBlob(url, 'image');
+              img.src = blobUrl;
+              img.onload = () => res(img);
+              img.onerror = () => { img.src = url; img.onload = () => res(img); img.onerror = () => res(img); };
+            } catch (e) { res(img); }
+          });
+        }));
+
+        const cleanImages = images.filter(img => img.width > 10);
+        if (cleanImages.length === 0) throw new Error("Nenhuma imagem válida carregada");
+
+        // Se tiver apenas 1 imagem, criar variações para ter mais diversidade
+        let finalImages = cleanImages;
+        if (cleanImages.length < 3) {
+          // Duplicar a imagem 4x para ter mais tempo de vídeo com transições
+          finalImages = [...cleanImages, ...cleanImages, ...cleanImages, ...cleanImages];
+        }
+
+        // 2. Setup Muxer & Encoders
+        const muxer = new Muxer({
+          target: new ArrayBufferTarget(),
+          video: { codec: 'avc', width: W, height: H },
+          audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 },
+          fastStart: 'in-memory'
+        });
+
+        const videoEncoder = new VideoEncoder({
+          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+          error: e => console.error("VideoEncoder error", e)
+        });
+        videoEncoder.configure({
+          codec: 'avc1.4d0033', width: W, height: H, bitrate: 6_000_000, avc: { format: 'avc' }
+        });
+
+        const audioEncoder = new AudioEncoder({
+          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+          error: e => console.error("AudioEncoder error", e)
+        });
+        audioEncoder.configure({
+          codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000
+        });
+
+        // 3. Setup Audio Buffer (Sincronização Perfeita)
+        let audioBuffer: AudioBuffer | null = null;
+        if (options.musicUrl) {
+          try {
+            audioBuffer = await this.loadAndResampleAudio(options.musicUrl, 44100);
+          } catch (e) {
+            console.warn("Falha ao carregar áudio, seguindo sem som");
+          }
+        }
+
+        const filterCSS = this.getFilterCSS(options.filter || 'elite');
+        const transitionTypes = options.transitionList || ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash'];
+
+        // 4. Render Loop (Sync Video + Audio)
+        for (let i = 0; i < totalFrames; i++) {
+          const currentTime = i / fps;
+          const slideIdx = Math.floor(currentTime / slideChangeInterval) % finalImages.length;
+          const img = finalImages[slideIdx];
+          const progress = (currentTime % slideChangeInterval) / slideChangeInterval;
+          const isCTA = currentTime > (targetDuration - 3.5);
+
+          this.ctx.clearRect(0, 0, W, H);
+          this.ctx.fillStyle = "#020617";
+          this.ctx.fillRect(0, 0, W, H);
+
+          if (!isCTA) {
+            // High-End Ken Burns
+            const baseScale = Math.max(W / img.width, H / img.height);
+            // Alternate scale directions
+            const zoomIn = Math.floor(currentTime / slideChangeInterval) % 2 === 0;
+            const scale = zoomIn ? baseScale * (1 + progress * 0.2) : baseScale * (1.2 - progress * 0.2);
+            
+            const scrollY = (H - img.height * scale) / 2;
+            const scrollX = (W - img.width * scale) / 2;
+
+            this.ctx.save();
+            this.ctx.filter = filterCSS;
+            this.ctx.drawImage(img, scrollX, scrollY, img.width * scale, img.height * scale);
+            this.ctx.restore();
+
+            // CTA Messages - primeiro 12 segundos
+            this.drawCallToAction(currentTime, W, H, progress);
+            
+            // Product Info - aparece após 12 segundos
+            this.drawProductInfo(`${productName}\n${price}`, W, H, currentTime);
+          } else {
+            // CTA Final
+            this.ctx.fillStyle = "#10b981";
+            this.ctx.font = "bold 90px Inter, sans-serif";
+            this.ctx.textAlign = "center";
+            this.ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
+            this.ctx.shadowBlur = 30;
+            this.ctx.fillText("PEÇA O LINK!", W / 2, H / 2 - 40);
+            this.ctx.shadowBlur = 0;
+            this.ctx.font = "50px Inter";
+            this.ctx.fillStyle = "white";
+            this.ctx.fillText("OU LINK NA BIO", W / 2, H / 2 + 60);
+          }
+
+          // Premium Transitions
+          const transitionZone = 0.6; // 600ms transition
+          if (progress < transitionZone && i > 0 && !isCTA) {
+            const tType = transitionTypes[Math.floor(currentTime / slideChangeInterval) % transitionTypes.length];
+            // Normalize progress for the transition zone
+            const tp = progress / transitionZone;
+            // Fake the timestamp for applyTransition
+            this.applyTransitionEffect(tType, tp * 1.5, [0], W, H);
+          }
+
+          // Encode Video Frame
+          const vFrame = new VideoFrame(this.canvas, { timestamp: currentTime * 1_000_000 });
+          videoEncoder.encode(vFrame, { keyFrame: i % 30 === 0 });
+          vFrame.close();
+
+          // Encode Audio Chunk (matching the video frame)
+          if (audioBuffer) {
+            const samplesPerFrame = 44100 / fps;
+            const startSample = Math.floor(i * samplesPerFrame) % audioBuffer.length;
+            const endSample = startSample + samplesPerFrame;
+            
+            // Extract samples for this frame
+            const audioData = new Float32Array(Math.floor(samplesPerFrame) * 2);
+            for (let channel = 0; channel < 2; channel++) {
+                const channelData = audioBuffer.getChannelData(channel % audioBuffer.numberOfChannels);
+                for (let s = 0; s < samplesPerFrame; s++) {
+                    audioData[s * 2 + channel] = channelData[(startSample + s) % audioBuffer.length];
+                }
+            }
+
+            const aData = new AudioData({
+              format: 'f32-planar',
+              sampleRate: 44100,
+              numberOfFrames: Math.floor(samplesPerFrame),
+              numberOfChannels: 2,
+              timestamp: currentTime * 1_000_000,
+              data: audioData
+            });
+
+            if (audioEncoder.state === 'configured') {
+              audioEncoder.encode(aData);
+            }
+            aData.close();
+          }
+          
+          // Yield to UI sometimes for feedback (not really needed in for loop but good practice)
+          if (i % 60 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+
+        // Flush encoders with state check
+        if (videoEncoder.state === 'configured') {
+          await videoEncoder.flush();
+        }
+        if (audioEncoder.state === 'configured') {
+          await audioEncoder.flush();
+        }
+        muxer.finalize();
+        
+        const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+        resolve(blob);
+      } catch (err) {
+        console.error("Slideshow error:", err);
         reject(err);
       }
     });
@@ -386,46 +623,167 @@ export class VideoProcessor {
         this.ctx.restore();
         break;
       }
+      case 'wave': {
+        const waveOffset = Math.sin(progress * Math.PI * 4) * 20;
+        this.ctx.save();
+        this.ctx.translate(waveOffset, 0);
+        this.ctx.drawImage(this.canvas, -waveOffset, 0, W, H);
+        this.ctx.restore();
+        break;
+      }
+      case 'spiral': {
+        const angle = progress * Math.PI * 2;
+        const scale = 1 + Math.sin(progress * Math.PI) * 0.1;
+        this.ctx.save();
+        this.ctx.translate(W / 2, H / 2);
+        this.ctx.rotate(angle);
+        this.ctx.scale(scale, scale);
+        this.ctx.drawImage(this.canvas, -W / 2, -H / 2, W, H);
+        this.ctx.restore();
+        break;
+      }
+      case 'pixelate': {
+        const pixelSize = Math.floor(10 + sin * 30);
+        if (pixelSize > 2) {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = Math.floor(W / pixelSize);
+          tempCanvas.height = Math.floor(H / pixelSize);
+          const tempCtx = tempCanvas.getContext('2d')!;
+          tempCtx.drawImage(this.canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+          this.ctx.imageSmoothingEnabled = false;
+          this.ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, W, H);
+          this.ctx.imageSmoothingEnabled = true;
+        }
+        break;
+      }
     }
   }
 
-  private drawLegend(text: string, W: number, H: number) {
-    let fontSize = Math.floor(W * 0.052);
-    this.ctx.font = `bold ${fontSize}px Inter, Arial, sans-serif`;
-    this.ctx.textAlign = 'center';
-    const maxWidth = W * 0.86;
+  private drawCallToAction(time: number, W: number, H: number, progress: number) {
+    // Apenas 3 mensagens de chamada para comprar
+    const ctaMessages = [
+      "🔥 COMPRA AGORA! 🔥",
+      "⚡ OFERTA IMPERDÍVEL!",
+      "🛒 NÃO PERCA ESSA!",
+    ];
 
+    // Mostrar apenas nos primeiros 8 segundos
+    if (time > 8) return;
+
+    // Selecionar mensagem baseada no tempo
+    const msgIndex = Math.floor(time / 2.5) % ctaMessages.length;
+    const message = ctaMessages[msgIndex];
+
+    // Animação de opacidade - aparece e some
+    const phaseDuration = 2.5;
+    const localProgress = (time % phaseDuration) / phaseDuration;
+    
+    let opacity = 1;
+    if (localProgress < 0.15) {
+      opacity = localProgress / 0.15;
+    } else if (localProgress > 0.7) {
+      opacity = (1 - localProgress) / 0.3;
+    }
+
+    const fontSize = Math.floor(W * 0.08);
+    
+    this.ctx.save();
+    this.ctx.globalAlpha = opacity;
+    this.ctx.textAlign = 'center';
+    
+    // Fundo simples
+    this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    this.ctx.fillRect(W * 0.1, H * 0.08, W * 0.8, H * 0.12);
+    
+    // Texto branco grande
+    this.ctx.font = `900 ${fontSize}px Inter, Arial, sans-serif`;
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.fillText(message, W / 2, H * 0.16);
+
+    this.ctx.globalAlpha = 1;
+    this.ctx.restore();
+  }
+
+  private drawProductInfo(text: string, W: number, H: number, time: number) {
+    // Aparece a partir de 8 segundos
+    if (time < 8) return;
+
+    const lines = text.split('\n');
+    const productName = lines[0] || "";
+    const price = lines[1] || "";
+
+    const titleSize = Math.floor(W * 0.06);
+    const titleLines = this.wrapText(productName, titleSize, W * 0.85);
+    const priceSize = Math.floor(W * 0.1);
+    
+    // Animação de entrada suave
+    const fadeProgress = Math.min((time - 8) / 2, 1);
+    const opacity = fadeProgress;
+
+    const startY = H * 0.65;
+    
+    this.ctx.save();
+    this.ctx.globalAlpha = opacity;
+
+    // Fundo escuro na parte inferior
+    this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    this.ctx.fillRect(0, startY - 30, W, H * 0.4);
+
+    // Título do produto - centralizado e grande
+    this.ctx.textAlign = 'center';
+    const titleY = startY + 20;
+    
+    titleLines.forEach((line, idx) => {
+      const lineY = titleY + (idx * titleSize * 1.2);
+      const upperLine = line.toUpperCase();
+      
+      this.ctx.font = `900 ${titleSize}px Inter, Arial, sans-serif`;
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.fillText(upperLine, W / 2, lineY);
+    });
+    
+    // Preço em badge verde - centralizado
+    const priceY = startY + titleLines.length * titleSize * 1.2 + 35;
+    
+    this.ctx.fillStyle = '#10b981';
+    this.ctx.beginPath();
+    this.ctx.roundRect(W * 0.25, priceY - 10, W * 0.5, priceSize + 20, 12);
+    this.ctx.fill();
+    
+    this.ctx.font = `900 ${priceSize}px Inter, Arial, sans-serif`;
+    this.ctx.fillStyle = '#000000';
+    this.ctx.fillText(price, W / 2, priceY + priceSize - 5);
+
+    // CTA
+    const ctaY = priceY + priceSize + 35;
+    this.ctx.font = `bold ${Math.floor(W * 0.035)}px Inter, Arial, sans-serif`;
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.fillText('🔗 CLIQUE NO LINK DA BIO', W / 2, ctaY);
+
+    // Hashtags
+    const hashY = ctaY + 25;
+    this.ctx.font = `${Math.floor(W * 0.022)}px Inter, Arial, sans-serif`;
+    this.ctx.fillStyle = '#22d3ee';
+    this.ctx.fillText('#viral #shopee #achadinhos', W / 2, hashY);
+
+    this.ctx.restore();
+  }
+
+  private wrapText(text: string, fontSize: number, maxWidth: number): string[] {
     const words = text.split(' ');
     const lines: string[] = [''];
     let cur = 0;
+    
     words.forEach(word => {
       const test = lines[cur] + (lines[cur] ? ' ' : '') + word;
-      if (this.ctx.measureText(test).width > maxWidth && lines[cur]) { cur++; lines[cur] = word; }
+      if (this.ctx.measureText(test).width > maxWidth && lines[cur]) { 
+        cur++; 
+        lines[cur] = word; 
+      }
       else lines[cur] = test;
     });
-
-    if (lines.length > 3) fontSize = Math.floor(W * 0.038);
-    this.ctx.font = `bold ${fontSize}px Inter, Arial, sans-serif`;
-
-    const lh = fontSize * 1.35;
-    const pad = 28;
-    const totalH = lines.length * lh + pad;
-    const startY = H - totalH - Math.floor(H * 0.055);
-    const bx = W * 0.07, bw = W * 0.86, r = 20;
-
-    this.ctx.fillStyle = 'rgba(0,0,0,0.84)';
-    this.ctx.beginPath();
-    this.ctx.moveTo(bx + r, startY - 8);
-    this.ctx.arcTo(bx + bw, startY - 8, bx + bw, startY + totalH, r);
-    this.ctx.arcTo(bx + bw, startY + totalH, bx, startY + totalH, r);
-    this.ctx.arcTo(bx, startY + totalH, bx, startY - 8, r);
-    this.ctx.arcTo(bx, startY - 8, bx + bw, startY - 8, r);
-    this.ctx.closePath();
-    this.ctx.fill();
-    this.ctx.fillStyle = '#FFFFFF';
-    lines.forEach((line, i) => {
-      this.ctx.fillText(line, W / 2, startY + (i + 1) * lh - 4);
-    });
+    
+    return lines;
   }
 
   private async finishEncoding(

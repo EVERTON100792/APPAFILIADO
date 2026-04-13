@@ -44,12 +44,15 @@ import { HotmartService } from "./services/HotmartService";
 import { TrialCountdown } from "./components/TrialCountdown";
 import { AgentScouting } from "./components/AgentScouting";
 import { ShopeeHub } from "./components/ShopeeHub";
+import { ShopeeService } from "./services/shopeeService";
 import { productDB } from './data/productDB';
 import { TikTokPublisher } from "./components/TikTokPublisher";
 import {
   generateViralProductName,
   getSmartSearchName,
 } from "./utils/viralNaming";
+import { Copywriter } from "./utils/Copywriter";
+import { VIRAL_MUSIC, TRANSITIONS, FILTERS } from "./utils/MusicLibrary";
 
 const STRIPE_PRICE_ID = "price_1TIZKzKYzfLaHvnki5ZXmNG9";
 const HOTMART_CHECKOUT_URL = "https://pay.hotmart.com/S105263156D";
@@ -547,7 +550,7 @@ const App: React.FC = () => {
   const [treatingProgress, setTreatingProgress] = useState(8);
   const [treatingChecklist, setTreatingChecklist] = useState<string[]>([]);
 
-  const viralTracks = [
+  const viralTracks: { id: string; name: string; url: string }[] = [
     {
       id: "phonk",
       name: "Phonk Viral 🏎️",
@@ -572,6 +575,21 @@ const App: React.FC = () => {
       id: "lofi",
       name: "Lofi Chill ☕",
       url: "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1002e1c944.mp3?filename=lofi-study-112191.mp3",
+    },
+    {
+      id: "funk",
+      name: "Funk Brasil 🇧🇷",
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    },
+    {
+      id: "electronic",
+      name: "Electronic ⚡",
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+    },
+    {
+      id: "upbeat",
+      name: "Upbeat Energy 🚀",
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
     },
   ];
 
@@ -1530,7 +1548,13 @@ const App: React.FC = () => {
     setStep("treating");
     setTreatingStatus("Mapeando sinais de demanda e criativos virais...");
     setTreatingProgress(12);
-    setTreatingChecklist([
+    
+    const tiktokChecklistId = Date.now(); // Unique ID for this run
+    const updateTikTokChecklist = (items: string[]) => {
+      setTreatingChecklist(items.map((item, i) => `${tiktokChecklistId}-tiktok-${i}-${item}`));
+    };
+    
+    updateTikTokChecklist([
       "Lendo palavras-chave do produto",
       "Consultando tendencias TikTok + Shopee",
       "Preparando filtros de relevancia",
@@ -1912,8 +1936,10 @@ const App: React.FC = () => {
 
       setTreatingStatus("Processando melhor criativo selecionado...");
       setTreatingProgress(75);
-      setTreatingChecklist((prev) => [
-        ...prev,
+      updateTikTokChecklist([
+        "Lendo palavras-chave do produto",
+        "Consultando tendencias TikTok + Shopee",
+        "Preparando filtros de relevancia",
         `Encontrados ${topScored.length} criativos de alto potencial`,
       ]);
 
@@ -1939,6 +1965,7 @@ const App: React.FC = () => {
         author: bestVideo.author,
         stats: bestVideo.stats,
         proxiedUrl: proxiedUrl, // Mantemos o proxy se necessário
+        isAutoral: false, // Vídeo viral do TikTok
       });
 
       if (product) {
@@ -1948,7 +1975,13 @@ const App: React.FC = () => {
 
       setTreatingStatus("Finalizando pipeline viral...");
       setTreatingProgress(100);
-      setTreatingChecklist((prev) => [...prev, "Ecossistema pronto"]);
+      updateTikTokChecklist([
+        "Lendo palavras-chave do produto",
+        "Consultando tendencias TikTok + Shopee",
+        "Preparando filtros de relevancia",
+        `Encontrados ${topScored.length} criativos de alto potencial`,
+        "Ecossistema pronto",
+      ]);
 
       await new Promise((r) => setTimeout(r, 600));
       setStep("ready");
@@ -1957,6 +1990,361 @@ const App: React.FC = () => {
       console.error("Erro ao buscar TikTok:", err);
       showToast(err.message || "TENTE NOVAMENTE COM OUTRO PRODUTO");
       setStep("list");
+    }
+  }
+
+  // Função para criar vídeo com imagens customizadas
+  async function createVideoWithImages(product: any, images: string[]) {
+    if (trialExpired && !hasAccessToPlatform) {
+      showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
+      return;
+    }
+
+    setSelectedProduct(product);
+    resetVideoEditor();
+    setStep("treating");
+    setTreatingStatus("Criando vídeo com suas imagens...");
+    setTreatingProgress(20);
+    setTreatingChecklist([`Criando vídeo com ${images.length} imagens...`]);
+
+    try {
+      // Sortear música
+      const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
+      const music = VIRAL_MUSIC[musicIndex];
+      setTreatingProgress(40);
+
+      // Sortear transições
+      const allTransitionsList = ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate', 'wave', 'spiral', 'pixelate'];
+      const shuffledTransitions = allTransitionsList.sort(() => Math.random() - 0.5);
+      const newTransitions = shuffledTransitions.slice(0, 10);
+      setTreatingProgress(60);
+
+      // Sortear filtro
+      const allFiltersList = [...FILTERS];
+      const newFilter = allFiltersList[Math.floor(Math.random() * allFiltersList.length)];
+      setTreatingProgress(80);
+
+      const videoProcessor = new VideoProcessor();
+      const options: ProcessingOptions = {
+        filter: newFilter,
+        transition: newTransitions[0] || 'zoom',
+        transitionList: newTransitions,
+        legend: "",
+        isMuted: false,
+        musicUrl: music.url
+      } as any;
+
+      const price = product.price || 0;
+      const productName = product.item_name || product.title || "Produto";
+      
+      setTreatingChecklist(["Renderizando vídeo..."]);
+      
+      const videoBlob = await videoProcessor.renderSlideshow(images, options, `R$ ${price.toFixed(2)}`, productName);
+
+      setTreatingProgress(100);
+      setTreatingStatus("Vídeo pronto!");
+
+      const videoObjectUrl = URL.createObjectURL(videoBlob);
+      
+      setVideoData({
+        id: `custom-${Date.now()}`,
+        url: videoObjectUrl,
+        thumbnail: images[0],
+        title: productName,
+        author: "Criado por Você",
+        stats: { likes: 0, shares: 0, comments: 0 },
+        isAutoral: true,
+        images: images,
+        musicId: music.id,
+        transitions: newTransitions,
+        filter: newFilter
+      });
+
+      setCustomCopy(`${productName}\nR$ ${price.toFixed(2)}\n\n#viral #shopee #achadinhos`);
+      setVideoLegend("");
+
+      await new Promise(r => setTimeout(r, 600));
+      setStep("ready");
+      showToast(`VÍDEO PRONTO! ${images.length} imagens`);
+    } catch (err: any) {
+      console.error("Erro ao criar vídeo:", err);
+      showToast(err.message || "ERRO AO CRIAR VÍDEO");
+      setStep("list");
+    }
+  }
+
+  async function handleCreateAutoralVideo(product: any, customImages?: string[]) {
+    if (trialExpired && !hasAccessToPlatform) {
+      showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
+      return;
+    }
+
+    // Usar imagens customizadas se forem fornecidas
+    if (customImages && customImages.length > 0) {
+      console.log("[App] Usando imagens customizadas:", customImages.length);
+      await createVideoWithImages(product, customImages);
+      return;
+    }
+
+    setSelectedProduct(product);
+    resetVideoEditor();
+    setStep("treating");
+    setTreatingStatus("Criando vídeo autoral com imagens do produto...");
+    setTreatingProgress(12);
+    setTreatingChecklist([]); // Clear previous checklist
+    
+    const checklistId = Date.now(); // Unique ID for this run
+    
+    const updateChecklist = (items: string[]) => {
+      setTreatingChecklist(items.map((item, i) => `${checklistId}-${i}-${item}`));
+    };
+
+    updateChecklist([
+      "Buscando imagens do produto",
+      "Processando transições e efeitos",
+      "Mixando batida viral",
+      "Renderizando criativo único"
+    ]);
+
+    try {
+      const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
+      
+      console.log("[App] Detalhes do produto (imagens):", detail?.images);
+      console.log("[App] Detalhes do produto (data):", detail?.data);
+      
+      let images: string[] = [];
+      
+      // Shopee API v2 retorna as imagens no campo "images" diretamente
+      const imageSources = [
+        // API v2 retorna no campo images
+        detail?.images,
+        detail?.data?.images,
+        detail?.data?.image_list,
+        detail?.data?.items?.[0]?.images,
+        // Estruturas alternativas
+        detail?.info?.item?.images,
+        detail?.item?.images,
+        detail?.data?.item?.images,
+      ];
+      
+      console.log("[App] fontes de imagens:", imageSources);
+      
+      for (const source of imageSources) {
+        if (Array.isArray(source) && source.length > 0) {
+          console.log("[App] fonte encontrada:", source);
+          const newImages = source.map((hash: any) => {
+            // Different hash formats from Shopee API
+            const hashStr = hash?.hash || hash?.image_id || hash?.url || hash;
+            if (hashStr) {
+              return `https://down-br.img.susercontent.com/file/${hashStr}`;
+            }
+            return null;
+          }).filter((url): url is string => url !== null && url !== undefined);
+          
+          if (newImages.length > images.length) {
+            images = newImages;
+          }
+        }
+      }
+      
+      // Se não encontrou imagens da API, usar a thumbnail do produto
+      if (images.length === 0 && product.item_image) {
+        console.log("[App] Usando thumbnail do produto como fallback");
+        images = [product.item_image];
+      }
+      
+      // Garantir que temos pelo menos uma imagem válida
+      if (images.length === 0) {
+        // Fallback final: usar placeholder
+        images = ["https://via.placeholder.com/400x400/1e293b/10b981?text=Produto+Shopee"];
+      }
+      
+      // Se só tem 1 imagem, criar variações duplicates para ter mais "slides"
+      if (images.length > 0 && images.length < 5) {
+        const baseImage = images[0];
+        
+        // Duplicar a imagem para criar mais slides no vídeo
+        // O sistema de vídeo vai alternar entre elas com transições
+        images = [baseImage, baseImage, baseImage, baseImage, baseImage];
+      }
+      
+      console.log(`[App] Imagens encontradas: ${images.length}`);
+      
+      if (images.length === 0) {
+        throw new Error("Nenhuma imagem disponível para este produto");
+      }
+
+      setTreatingProgress(40);
+      updateChecklist([
+        "Buscando imagens do produto",
+        "Processando transições e efeitos",
+        "Mixando batida viral",
+        "Renderizando criativo único",
+        `Encontradas ${images.length} imagens`
+      ]);
+
+      const copy = Copywriter.generateCopy(product.item_name, `R$ ${product.price}`, activeNiche || 'default');
+      
+      const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
+      const music = VIRAL_MUSIC[musicIndex];
+
+      setTreatingProgress(60);
+      updateChecklist([
+        "Buscando imagens do produto",
+        "Processando transições e efeitos",
+        "Mixando batida viral",
+        "Renderizando criativo único",
+        `Encontradas ${images.length} imagens`,
+        `Música: ${music.name}`
+      ]);
+
+      const allTransitions: ('zoom' | 'glitch' | 'blur' | 'slide' | 'shake' | 'flash' | 'beat' | 'fire' | 'rotate')[] = 
+        ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate'];
+      const allFilters = ['elite', 'ultra8k', 'cinematic', 'bloom', 'glitch'];
+      
+      const videoProcessor = new VideoProcessor();
+      const options: ProcessingOptions = {
+        filter: allFilters[Math.floor(Math.random() * allFilters.length)],
+        transition: 'zoom',
+        transitionList: allTransitions,
+        legend: "",
+        isMuted: false,
+        musicUrl: music.url
+      };
+
+      setTreatingProgress(80);
+      updateChecklist([
+        "Buscando imagens do produto",
+        "Processando transições e efeitos",
+        "Mixando batida viral",
+        "Renderizando criativo único",
+        `Encontradas ${images.length} imagens`,
+        `Música: ${music.name}`,
+        "Renderizando vídeo..."
+      ]);
+
+      const videoBlob = await videoProcessor.renderSlideshow(images, options, `R$ ${product.price}`, product.item_name);
+
+      setTreatingProgress(100);
+      setTreatingStatus("Vídeo autoral pronto!");
+      updateChecklist([
+        "Buscando imagens do produto",
+        "Processando transições e efeitos",
+        "Mixando batida viral",
+        "Renderizando criativo único",
+        `Encontradas ${images.length} imagens`,
+        `Música: ${music.name}`,
+        "Renderizando vídeo...",
+        "Vídeo criado com sucesso!"
+      ]);
+
+      const videoObjectUrl = URL.createObjectURL(videoBlob);
+      
+      setVideoData({
+        id: `autoral-${Date.now()}`,
+        url: videoObjectUrl,
+        thumbnail: images[0],
+        title: product.item_name,
+        author: "Criado por Você",
+        stats: { likes: 0, shares: 0, comments: 0 },
+        isAutoral: true,
+        images: images,
+        musicId: music.id,
+        transitions: allTransitions,
+        filter: allFilters[0]
+      });
+
+      setCustomCopy(copy.tiktokCaption + "\n\n" + copy.hashtags.join(" "));
+      setVideoLegend("");
+
+      await new Promise(r => setTimeout(r, 600));
+      setStep("ready");
+      showToast(`VÍDEO AUTORAL PRONTO! ${images.length} imagens`);
+    } catch (err: any) {
+      console.error("Erro ao criar vídeo autoral:", err);
+      showToast(err.message || "ERRO AO CRIAR VÍDEO AUTORAL");
+      setStep("list");
+    }
+  }
+
+  // Gerar nova versão do vídeo autoral com diferentes configurações
+  async function regenerateAutoralVideo() {
+    if (!selectedProduct || !videoData?.isAutoral || !videoData?.images) {
+      showToast("Nenhum vídeo autoral para regenerar");
+      return;
+    }
+
+    showToast("Gerando nova versão... 🎲");
+    setIsProcessing(true);
+
+    try {
+      // Garantir que temos muitas "imagens" para o vídeo
+      let images = videoData.images;
+      
+      // Se só tem 1 imagem, criar 10 variações com transformações CSS simuladas
+      if (images.length < 5) {
+        const baseImage = images[0];
+        images = Array(12).fill(baseImage); // 12 slides diferentes
+      }
+
+      // Sortear nova música (diferente da atual)
+      const currentMusicId = videoData.musicId;
+      let newMusic = VIRAL_MUSIC[Math.floor(Math.random() * VIRAL_MUSIC.length)];
+      let attempts = 0;
+      while (newMusic.id === currentMusicId && attempts < 20) {
+        newMusic = VIRAL_MUSIC[Math.floor(Math.random() * VIRAL_MUSIC.length)];
+        attempts++;
+      }
+
+      // Sortear mais transições (8-12 tipos diferentes!)
+      const allTransitionsList = ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate', 'wave', 'spiral', 'pixelate'] as string[];
+      const shuffledTransitions = allTransitionsList.sort(() => Math.random() - 0.5);
+      const newTransitions = shuffledTransitions.slice(0, Math.floor(Math.random() * 5) + 8) as any;
+
+      // Sortear novo filtro
+      const allFiltersList = [...FILTERS];
+      const shuffledFilters = allFiltersList.sort(() => Math.random() - 0.5);
+      const newFilter = shuffledFilters[0];
+
+      console.log(`[App] Regenerando com: música=${newMusic.name}, transições=${newTransitions.length} tipos, filtro=${newFilter}, imagens=${images.length}`);
+
+      const videoProcessor = new VideoProcessor();
+      const options: ProcessingOptions = {
+        filter: newFilter,
+        transition: newTransitions[0] || 'zoom',
+        transitionList: newTransitions,
+        legend: "",
+        isMuted: false,
+        musicUrl: newMusic.url
+      };
+
+      const price = selectedProduct.price || 0;
+      const productName = selectedProduct.item_name || selectedProduct.title || "Produto";
+      const videoBlob = await videoProcessor.renderSlideshow(images, options, `R$ ${price.toFixed(2)}`, productName);
+
+      // Limpar URL anterior
+      if (videoData?.url) {
+        URL.revokeObjectURL(videoData.url);
+      }
+
+      const videoObjectUrl = URL.createObjectURL(videoBlob);
+      
+      setVideoData({
+        ...videoData,
+        id: `autoral-${Date.now()}`,
+        url: videoObjectUrl,
+        thumbnail: images[0],
+        musicId: newMusic.id,
+        transitions: newTransitions,
+        filter: newFilter
+      });
+
+      showToast(`Nova versão! 🎲 Música: ${newMusic.name}`);
+    } catch (err: any) {
+      console.error("Erro ao regenerar vídeo:", err);
+      showToast("Erro ao gerar nova versão");
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -3718,14 +4106,32 @@ const App: React.FC = () => {
                     <div className="flex gap-2">
                       <motion.button
                         whileTap={{ scale: 0.95 }}
-                        onClick={swapVideo}
-                        className="flex-1 h-12 bg-slate-900 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-white text-[10px] font-black uppercase tracking-widest hover:border-accent/30 transition-all"
+                        onClick={() => {
+                          if (videoData?.isAutoral) {
+                            regenerateAutoralVideo();
+                          } else {
+                            swapVideo();
+                          }
+                        }}
+                        disabled={isProcessing}
+                        className="flex-1 h-12 bg-slate-900 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-white text-[10px] font-black uppercase tracking-widest hover:border-accent/30 transition-all disabled:opacity-50"
                       >
-                        <RotateCcw size={14} className="text-accent" /> Trocar
-                        Vídeo
+                        <RotateCcw size={14} className="text-accent" /> 
+                        {videoData?.isAutoral ? "Nova Versão 🎲" : "Trocar Vídeo"}
                       </motion.button>
                     </div>
                   </div>
+
+                  {videoData?.isAutoral && (
+                    <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl p-3">
+                      <p className="text-[9px] font-black uppercase text-cyan-400 mb-2">Configurações Atuais</p>
+                      <div className="flex flex-wrap gap-2 text-[8px] text-white/60">
+                        <span className="bg-cyan-500/20 px-2 py-1 rounded">🎵 {videoData.musicId || 'Random'}</span>
+                        <span className="bg-purple-500/20 px-2 py-1 rounded">✨ {videoData.filter || 'Random'}</span>
+                        <span className="bg-orange-500/20 px-2 py-1 rounded">🔄 {videoData.transitions?.length || 4} transições</span>
+                      </div>
+                    </div>
+                  )}
 
                   <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] leading-none mb-4 flex items-center gap-2">
                     <Sparkles size={12} className="text-accent" />
@@ -4120,16 +4526,20 @@ const App: React.FC = () => {
                       animate={{ opacity: 1, scale: 1 }}
                       className="space-y-4"
                     >
-                      <TikTokPublisher 
-                        userId={user?.id}
-                        videoUrl={downloadPreviewUrl || null} 
-                        caption={videoLegend}
-                        isPro={isPro}
-                        onSuccess={() => {
-                          setStep("list");
-                          setAutomationFinished(false);
-                        }}
-                      />
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 p-6 rounded-3xl text-center">
+                        <CheckCircle2 size={48} className="text-emerald-400 mx-auto mb-3" />
+                        <h3 className="text-xl font-black text-white uppercase mb-2">
+                          ✅ Vídeo Pronto!
+                        </h3>
+                        <p className="text-sm text-slate-400 mb-2">
+                          {activePlatform === 'tiktok' 
+                            ? 'Legenda copiada, vídeo baixado e TikTok aberto!' 
+                            : 'Legenda copiada, vídeo baixado e Shopee Videos aberto!'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Seu criativo está pronto para postagem.
+                        </p>
+                      </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <motion.button
@@ -4260,7 +4670,13 @@ const App: React.FC = () => {
               <ShopeeHub 
                 onShowToast={showToast} 
                 userStoreSlug={storeSlug} 
-                onViralize={(p) => researchTikTok({ ...p, title: p.item_name })}
+                onViralize={(p, videoType, customImages) => {
+                  if (videoType === 'autoral') {
+                    handleCreateAutoralVideo(p, customImages);
+                  } else {
+                    researchTikTok({ ...p, title: p.item_name });
+                  }
+                }}
               />
             </motion.div>
           )}

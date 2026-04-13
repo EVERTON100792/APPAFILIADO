@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Search, 
   ShoppingBag, 
@@ -13,11 +13,20 @@ import {
   Rocket,
   Flame,
   Award,
-  CircleDollarSign
+  CircleDollarSign,
+  RotateCcw,
+  Video,
+  Download,
+  RefreshCw,
+  Upload
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShopeeService } from "../services/shopeeService";
+import { VideoProcessor } from "../utils/VideoProcessor";
+import { Copywriter } from "../utils/Copywriter";
+import type { VideoCopy } from "../utils/Copywriter";
+import { VIRAL_MUSIC } from "../utils/MusicLibrary";
 import type { ShopeeProduct } from "../services/shopeeService";
 import { sanitizeShopeeLink, createUniversalLink } from "../utils/shopeeLinkUtils";
 import { generateWhatsappMessage } from "../utils/shareUtils";
@@ -25,7 +34,7 @@ import { generateWhatsappMessage } from "../utils/shareUtils";
 interface ShopeeHubProps {
   onShowToast: (msg: string) => void;
   userStoreSlug?: string;
-  onViralize?: (product: any) => void;
+  onViralize?: (product: any, videoType?: 'tiktok' | 'autoral', customImages?: string[]) => void;
 }
 
 const FALLBACK_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' rx='24' fill='%23070b16'/%3E%3Crect x='16' y='16' width='128' height='128' rx='22' fill='%2311172a' stroke='%2322c55e' stroke-opacity='.22'/%3E%3Cpath d='M54 102h52' stroke='%2322c55e' stroke-width='8' stroke-linecap='round'/%3E%3Cpath d='M80 52c-11 0-20 9-20 20v9h40v-9c0-11-9-20-20-20Z' fill='none' stroke='%23e5e7eb' stroke-width='8' stroke-linejoin='round'/%3E%3Ccircle cx='80' cy='81' r='6' fill='%2322c55e'/%3E%3C/svg%3E";
@@ -42,6 +51,34 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [showSettings, setShowSettings] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [activeNiche, setActiveNiche] = useState<string | null>(null);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [genStatus, setGenStatus] = useState("");
+  const [generatedVideo, setGeneratedVideo] = useState<{blob: Blob, copy: VideoCopy} | null>(null);
+  const [pipelineStep, setPipelineStep] = useState(0);
+  const [randomSeed, setRandomSeed] = useState(0);
+
+  const videoProcRef = useRef(new VideoProcessor());
+  const productDetailRef = useRef<any>(null);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [tempProduct, setTempProduct] = useState<any>(null);
+  const [tempImages, setTempImages] = useState<string[]>([]);
+
+  const handleImageSelection = (product: any) => {
+    setTempProduct(product);
+    setTempImages([]);
+    setShowImageModal(true);
+  };
+
+  const topDayKeywords = [
+    "mais vendidos", "tendencias", "bombando", "viral shopee", "produtos virais", 
+    "utilidades domesticas", "gadgets inteligentes", "maquiagem viral", "organização casa",
+    "achadinhos shopee", "ofertas do dia", "mais procurados"
+  ];
+  const topWeekKeywords = [
+    "melhores da semana", "mais vendidos semana", "top achadinhos", "favoritos shopee",
+    "decoração minimalista", "iterações virais", "beleza e cuidado", "cozinha moderna",
+    "tecnologia 2024", "acessórios premium", "moda tendencia"
+  ];
 
   const tabs: {id: TabType, label: string, icon: any}[] = [
     { id: "all", label: "Explorar", icon: Search },
@@ -88,6 +125,140 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     fetchProfile();
   }, []);
 
+  // Scroll Lock for Video Generation
+  useEffect(() => {
+    if (isGeneratingVideo) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [isGeneratingVideo]);
+
+  const handleCreateAuthoralVideo = async (product: any) => {
+    try {
+      setIsGeneratingVideo(true);
+      setGeneratedVideo(null);
+      setPipelineStep(0);
+      setGenStatus("Iniciando Motor...");
+      
+      const steps = [
+        "Lendo Palavras-chave...",
+        "Consultando Tendências...",
+        "Preparando Filtros...",
+        "Mixando Batida Viral...",
+        "Renderizando Criativo Único..."
+      ];
+
+      const updateStep = (idx: number) => {
+        setPipelineStep(idx);
+        setGenStatus(steps[idx]);
+      };
+
+      updateStep(0);
+      const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
+      
+      updateStep(1);
+      let images: string[] = [];
+      
+      // Extrair TODAS as imagens disponíveis do produto da Shopee API
+      // Prioridade: images > image_list > item.images > images do produto original
+      const rawImages = 
+        detail?.images || 
+        detail?.image_list || 
+        detail?.item?.images || 
+        detail?.data?.images || 
+        [];
+      
+      // Processar todas as imagens encontradas
+      if (Array.isArray(rawImages) && rawImages.length > 0) {
+        images = rawImages.map((hash: any) => {
+          const hashStr = typeof hash === 'string' ? hash : hash?.hash || hash?.url || hash?.image_url || hash;
+          return hashStr ? `https://down-br.img.susercontent.com/file/${hashStr}` : null;
+        }).filter((url): url is string => url !== null && url !== undefined);
+      }
+      
+      // Se não encontrou imagens da API, usar a imagem principal do produto
+      if (images.length === 0 && product.item_image) {
+        images.push(product.item_image);
+      }
+      
+      // Se ainda tiver só 1 imagem, tentar buscar mais de outras fontes
+      if (images.length === 1) {
+        // Tentar buscar imagens do produto original via API
+        const allImages = detail?.data?.info?.item?.images || 
+                          detail?.info?.item?.images || 
+                          [];
+        if (Array.isArray(allImages) && allImages.length > 0) {
+          const extraImages = allImages.map((h: any) => {
+            const hashStr = typeof h === 'string' ? h : h?.hash || h;
+            return hashStr ? `https://down-br.img.susercontent.com/file/${hashStr}` : null;
+          }).filter((url): url is string => url !== null && url !== undefined);
+          images = [...images, ...extraImages];
+        }
+      }
+      
+      // Remover duplicatas
+      images = [...new Set(images)];
+      
+      console.log(`[ShopeeHub] Imagens coletadas para vídeo: ${images.length}`, images);
+
+      updateStep(2);
+      const copy = Copywriter.generateCopy(product.item_name, `R$ ${product.price}`, activeNiche || 'default');
+      
+      updateStep(3);
+      // Selecionar música aleatória
+      const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
+      const music = VIRAL_MUSIC[musicIndex];
+      
+      updateStep(4);
+      
+      const allTransitions: ('zoom' | 'glitch' | 'blur' | 'slide' | 'shake' | 'flash' | 'beat' | 'fire' | 'rotate')[] = ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate'];
+      const allFilters = ['elite', 'ultra8k', 'cinematic', 'bloom', 'glitch'];
+      
+      const options = {
+        filter: allFilters[Math.floor(Math.random() * allFilters.length)],
+        transition: 'zoom' as const,
+        transitionList: allTransitions,
+        legend: "",
+        isMuted: false,
+        musicUrl: music.url
+      };
+
+      const videoBlob = await videoProcRef.current.renderSlideshow(images, options, `R$ ${product.price}`, product.item_name);
+      
+      setGeneratedVideo({ blob: videoBlob, copy });
+      setPipelineStep(5);
+      setGenStatus("Vídeo pronto!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao gerar vídeo. Tente novamente.");
+      setIsGeneratingVideo(false);
+    }
+  };
+
+  const downloadVideo = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      onShowToast("✅ LEGENDA COPIADA!");
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
   // Initial load or tab change
   useEffect(() => {
     if (!isLoadingProfile) {
@@ -95,49 +266,63 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     }
   }, [activeTab, isLoadingProfile]);
 
-  const handleSearch = async (overrideKeyword?: string) => {
+  const handleSearch = async (overrideKeyword?: string, forceRefresh = false) => {
     setIsSearching(true);
-    let searchKeyword = overrideKeyword !== undefined ? overrideKeyword : keyword;
-    let sortBy: any = 2;
+    // Limpar lista atual para dar feedback imediato de carregamento
+    if (forceRefresh || (overrideKeyword === undefined && !keyword)) setProducts([]);
 
+    let searchKeyword = overrideKeyword !== undefined ? overrideKeyword : keyword;
+    let sortBy: any = 2; // Default: Sales DESC
+    let listType = 0;
+    
+    // Niche/Pool Selection
     if (activeTab === "top_day") {
-      sortBy = 3;
-      if (!searchKeyword) searchKeyword = "mais vendidos";
+      sortBy = 2; // Sales DESC
+      if (!searchKeyword) {
+        searchKeyword = topDayKeywords[Math.floor(Math.random() * topDayKeywords.length)];
+      }
     } else if (activeTab === "top_week") {
-      sortBy = 3;
-      if (!searchKeyword) searchKeyword = "ofertas semana";
+      sortBy = 2; // Sales DESC
+      if (!searchKeyword) {
+        searchKeyword = topWeekKeywords[Math.floor(Math.random() * topWeekKeywords.length)];
+      }
     } else if (activeTab === "lightning") {
-      searchKeyword = "oferta relampago";
+      searchKeyword = "oferta relampago"; 
+      sortBy = 2;
     } else if (activeTab === "50off") {
-      if (!searchKeyword) searchKeyword = "ofertas";
+      searchKeyword = "promoção 50 off";
+      sortBy = 2;
     }
 
+    // Random page logic with safety
+    const isPredefinedTab = activeTab !== "all";
+    const maxPages = isPredefinedTab ? 3 : 10;
+    let randomPage = (isPredefinedTab || forceRefresh) ? Math.floor(Math.random() * maxPages) + 1 : 1;
+
     try {
+      console.log(`[ShopeeHub] Tentativa 1: "${searchKeyword}" | Tab: ${activeTab} | Page: ${randomPage}`);
+      
       let results = await ShopeeService.searchProducts({ 
         keyword: searchKeyword.trim(),
-        sort_by: sortBy
+        sort_by: sortBy,
+        page_number: randomPage,
+        list_type: listType
       }, userShopeeId || undefined);
 
-      if (activeTab === "lightning") {
-        if (results.length < 3) {
-          const backup = await ShopeeService.searchProducts({ keyword: "oferta relampago", sort_by: 2 }, userShopeeId || undefined);
-          results = [...results, ...backup].slice(0, 20);
-        }
+      // RETRY LOGIC: Se vier vazio em página alta, tenta página 1
+      if (results.length === 0 && randomPage > 1) {
+        console.log(`[ShopeeHub] Página ${randomPage} vazia. Tentando fallback para Página 1...`);
+        results = await ShopeeService.searchProducts({ 
+          keyword: searchKeyword.trim(),
+          sort_by: sortBy,
+          page_number: 1,
+          list_type: listType
+        }, userShopeeId || undefined);
       }
 
-      if (activeTab === "50off") {
-        if (results.length < 3) {
-          const backup = await ShopeeService.searchProducts({ keyword: "promoção 50 off", sort_by: 2 }, userShopeeId || undefined);
-          results = [...results, ...backup].slice(0, 20);
-        }
-      }
-
+      // Final sorting cleanup for rank tabs
       if (activeTab === "top_day" || activeTab === "top_week") {
-        results = results.sort((a, b) => {
-          const scoreA = (a.sales || 1) * (a.commission_rate || 1);
-          const scoreB = (b.sales || 1) * (b.commission_rate || 1);
-          return scoreB - scoreA;
-        });
+        results = results.sort((a, b) => (b.sales || 0) - (a.sales || 0));
       }
 
       setProducts(results);
@@ -249,15 +434,31 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full h-14 bg-slate-950/80 border border-white/10 rounded-2xl pl-12 pr-4 text-white placeholder:text-white/20 focus:border-emerald-500/50 outline-none font-bold transition-all"
+              className="w-full h-14 bg-slate-950/80 border border-white/10 rounded-2xl pl-12 pr-14 text-white placeholder:text-white/20 focus:border-emerald-500/50 outline-none font-bold transition-all"
             />
+            {keyword && (
+              <button 
+                onClick={() => { setKeyword(""); handleSearch(""); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-all"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
+          <button
+            onClick={() => handleSearch(undefined, true)}
+            disabled={isSearching}
+            className="w-14 h-14 bg-slate-900 border border-white/10 text-emerald-500 rounded-2xl flex items-center justify-center hover:bg-slate-800 hover:border-emerald-500/30 active:scale-95 transition-all shadow-lg"
+            title="Atualizar Resultados"
+          >
+            {isSearching ? <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /> : <RotateCcw size={22} />}
+          </button>
           <button
             onClick={() => handleSearch()}
             disabled={isSearching}
             className="w-14 h-14 bg-emerald-500 text-slate-950 rounded-2xl flex items-center justify-center hover:bg-emerald-400 active:scale-95 transition-all shadow-lg shadow-emerald-500/10"
           >
-            {isSearching ? <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" /> : <TrendingUp size={22} />}
+            <TrendingUp size={22} />
           </button>
         </div>
       </div>
@@ -267,7 +468,14 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              if (activeTab === tab.id) {
+                // If already active, trigger refresh
+                handleSearch(undefined, true);
+              } else {
+                setActiveTab(tab.id);
+              }
+            }}
             className={`shrink-0 h-10 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-wider transition-all border ${
               activeTab === tab.id
                 ? "bg-emerald-500 border-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
@@ -360,14 +568,22 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                   </div>
                 </div>
 
-                {/* VIP Action: VIRAL */}
-                <button
-                  onClick={() => onViralize?.({ title: product.item_name, ...product })}
-                  className="w-full h-10 bg-emerald-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 group"
-                >
-                  <Rocket size={14} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                  VIRAL
-                </button>
+                {/* VIP Actions: VIRAL & AUTORAL */}
+                <div className="flex flex-col gap-2 mb-2">
+                  <button
+                    onClick={() => onViralize?.(product, 'tiktok')}
+                    className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition-all shadow-lg shadow-emerald-500/10 active:scale-95"
+                  >
+                    <Rocket size={14} /> VÍDEO VIRAL
+                  </button>
+
+                  <button
+                    onClick={() => handleImageSelection(product)}
+                    className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs transition-all shadow-lg shadow-cyan-500/10 active:scale-95"
+                  >
+                    <Video size={14} /> VÍDEO AUTORAL
+                  </button>
+                </div>
 
                 {/* Utilities Row */}
                 <div className="flex items-center gap-2 mt-1">
@@ -457,6 +673,252 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isGeneratingVideo && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-slate-950 flex items-center justify-center p-4 overflow-hidden"
+          >
+            <div className="w-full max-w-lg bg-slate-950 border border-white/10 rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
+              {/* Premium Header Decoration */}
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500" />
+              
+              {!generatedVideo ? (
+                <div className="flex flex-col gap-6 py-4">
+                  {/* Viral Squad Styled Header */}
+                  <div className="flex flex-col items-center text-center gap-4">
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-full border border-dashed border-white/20 flex items-center justify-center animate-[spin_10s_linear_infinite]">
+                        <div className="w-16 h-16 bg-white/5 rounded-3xl flex items-center justify-center border border-white/10 backdrop-blur-xl">
+                          <RefreshCw className="text-white animate-pulse" size={28} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">Pipeline Viral</span>
+                      <h3 className="text-3xl font-black italic text-white uppercase tracking-tighter leading-none">
+                        Curando o Melhor <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Criativo</span>
+                      </h3>
+                      <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-2 px-8">
+                        Processando melhor criativo selecionado...
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Horizontal Progress Bar */}
+                  <div className="flex flex-col gap-2 px-4 mt-4">
+                    <div className="flex items-center justify-between text-[11px] font-black tracking-widest uppercase mb-1">
+                      <span className="text-white/30">Progresso da Análise</span>
+                      <span className="text-white">{Math.min(pipelineStep * 20 + 20, 100)}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(pipelineStep * 20 + 20, 100)}%` }}
+                        className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Boxed Pipeline Steps */}
+                  <div className="flex flex-col gap-3 px-2 pt-4">
+                    {[
+                      { id: 0, label: "Lendo Palavras-chave do Produto" },
+                      { id: 1, label: "Consultando Tendências TikTok + Shopee" },
+                      { id: 2, label: "Preparando Filtros de Relevância" },
+                      { id: 3, label: "Mixando Batida Viral High-Retention" },
+                      { id: 4, label: "Renderizando Engine Pro..." }
+                    ].map((step, idx) => {
+                      const isActive = pipelineStep === idx;
+                      const isDone = pipelineStep > idx;
+                      
+                      return (
+                        <div 
+                          key={step.id} 
+                          className={`group flex items-center gap-4 p-4 rounded-2xl border transition-all duration-500 ${
+                            isDone ? "bg-emerald-500/10 border-emerald-500/20" : 
+                            isActive ? "bg-white/5 border-white/20 shadow-lg shadow-black/40" : 
+                            "bg-transparent border-white/5 opacity-40 text-white/50"
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${
+                            isDone ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" : 
+                            isActive ? "bg-cyan-500 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.8)]" : 
+                            "bg-white/10"
+                          }`} />
+                          
+                          <p className={`text-[11px] font-black uppercase tracking-widest flex-1 ${
+                            isDone ? "text-emerald-400" : 
+                            isActive ? "text-white" : 
+                            ""
+                          }`}>
+                            {step.label}
+                          </p>
+                          
+                          {isDone && <CheckCircle2 size={14} className="text-emerald-500" />}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-col items-center gap-3 pt-4">
+                    <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.5em] animate-pulse">IA em Operação...</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-6">
+                  {/* Preview Title */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-2xl font-black italic text-metallic uppercase tracking-tighter">Criativo Pronto</h3>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em]">Qualidade Pro Max • 40s</p>
+                    </div>
+                    <button 
+                      onClick={() => setIsGeneratingVideo(false)}
+                      className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Video Preview */}
+                  <div className="aspect-[9/16] max-h-[400px] rounded-[32px] overflow-hidden bg-slate-900 border border-white/10 relative group mx-auto">
+                    <video 
+                      src={URL.createObjectURL(generatedVideo.blob)}
+                      autoPlay loop playsInline controls
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => {
+                        copyToClipboard(generatedVideo.copy.tiktokCaption + "\n\n" + generatedVideo.copy.hashtags.join(" "));
+                        downloadVideo(generatedVideo.blob, `video-viral-tiktok.mp4`);
+                        onShowToast("🚀 AGORA É SÓ POSTAR NO TIKTOK!");
+                      }}
+                      className="h-14 bg-white text-slate-950 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-wider hover:bg-emerald-400 transition-all shadow-xl shadow-white/5 active:scale-95"
+                    >
+                      <Download size={18} strokeWidth={3} /> TikTok
+                    </button>
+                    <button
+                      onClick={() => {
+                        copyToClipboard(generatedVideo.copy.shopeeCaption + "\n\n" + generatedVideo.copy.hashtags.join(" "));
+                        downloadVideo(generatedVideo.blob, `video-viral-shopee.mp4`);
+                        onShowToast("🛍️ LINK COPIADO PARA SHOPEE!");
+                      }}
+                      className="h-14 bg-orange-500 text-white rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-wider hover:bg-orange-400 transition-all shadow-xl shadow-orange-500/10 active:scale-95"
+                    >
+                      <Rocket size={18} strokeWidth={3} /> Shopee
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => handleCreateAuthoralVideo(productDetailRef.current)}
+                    className="w-full h-11 border border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    <RefreshCw size={14} /> Gerar Outra Versão
+                  </button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Seleção de Imagens */}
+      <AnimatePresence>
+        {showImageModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-md bg-slate-900 border border-white/10 rounded-3xl p-6"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-black text-white uppercase">Selecione Imagens</h3>
+                <button onClick={() => setShowImageModal(false)} className="text-white/40 hover:text-white">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <p className="text-sm text-white/60 mb-4">
+                Envie fotos do produto para criar um vídeo personalizado. Se preferir, clique em "Criar com Imagens do Produto" para usar as imagens da Shopee.
+              </p>
+
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                id="modal-image-upload"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) {
+                    const imageUrls: string[] = [];
+                    for (let i = 0; i < files.length; i++) {
+                      imageUrls.push(URL.createObjectURL(files[i]));
+                    }
+                    setTempImages(imageUrls);
+                  }
+                }}
+              />
+
+              <div className="space-y-3">
+                <label
+                  htmlFor="modal-image-upload"
+                  className="w-full h-14 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold cursor-pointer"
+                >
+                  <Upload size={20} /> Selecionar do Dispositivo
+                </label>
+
+                {tempImages.length > 0 && (
+                  <div className="text-center text-green-400 text-sm font-bold">
+                    ✅ {tempImages.length} imagens selecionadas
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    if (tempImages.length > 0) {
+                      onViralize?.(tempProduct, 'autoral', tempImages);
+                      setShowImageModal(false);
+                      setTempImages([]);
+                    } else {
+                      onShowToast("Selecione pelo menos 1 imagem");
+                    }
+                  }}
+                  disabled={tempImages.length === 0}
+                  className="w-full h-14 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold rounded-2xl disabled:opacity-50"
+                >
+                  Criar com Imagens Selecionadas
+                </button>
+
+                <button
+                  onClick={() => {
+                    onViralize?.(tempProduct, 'autoral', []);
+                    setShowImageModal(false);
+                    setTempImages([]);
+                  }}
+                  className="w-full h-12 border border-white/20 text-white/60 font-bold rounded-xl hover:bg-white/5"
+                >
+                  Criar com Imagens do Produto
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

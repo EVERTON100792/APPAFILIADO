@@ -14,6 +14,11 @@ interface ShopeeRequest {
 // Shopee Affiliate v1 (Legacy) Configuration
 const SHOPEE_GRAPHQL_URL = "https://open-api.affiliate.shopee.com.br/graphql";
 
+// @ts-ignore: Deno global only available at runtime
+const APP_ID = Deno.env.get("SHOPEE_APP_ID") || "18389670456";
+// @ts-ignore: Deno global only available at runtime
+const SECRET = Deno.env.get("SHOPEE_SECRET") || "L4EDLOK2VQMQOZIPKLZPLSP7QTBEWFGK";
+
 async function generateV1Signature(appId: string, secret: string, timestamp: number, body: string): Promise<string> {
   // Signature = SHA256(AppID + Timestamp + Payload + Secret)
   const baseString = `${appId}${timestamp}${body}${secret}`;
@@ -32,18 +37,27 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Skip auth check - allow public access for this function
+  // The function will work with or without auth header
+
   try {
-    // @ts-ignore
-    const appId = Deno.env.get("SHOPEE_APP_ID") || "18389670456";
-    // @ts-ignore
-    const secret = Deno.env.get("SHOPEE_SECRET") || "L4EDLOK2VQMQOZIPKLZPLSP7QTBEWFGK";
-    
     console.log(`[Shopee] v1 Triggering ${req.method} with Action: ${req.url}`);
 
     const bodyStr = await req.text();
     if (!bodyStr) throw new Error("Empty request body");
     
-    const { action, params } = JSON.parse(bodyStr) as ShopeeRequest;
+    let action: string = "";
+    let params: any = {};
+    
+    try {
+      const parsed = JSON.parse(bodyStr);
+      action = parsed.action || "";
+      params = parsed.params || {};
+    } catch (e) {
+      action = "search_products";
+      params = {};
+    }
+    
     const timestamp = Math.floor(Date.now() / 1000);
     
     let graphqlQuery = "";
@@ -101,29 +115,59 @@ serve(async (req: Request) => {
       const { item_id, shop_id } = params;
       if (!item_id || !shop_id) throw new Error("Missing item_id or shop_id");
       
-      const detailUrl = `https://shopee.com.br/api/v4/item/get?itemid=${item_id}&shopid=${shop_id}`;
-      console.log(`[Shopee] Fetching public item detail: ${detailUrl}`);
+      // Try multiple Shopee API endpoints to get images
+      const endpoints = [
+        `https://shopee.com.br/api/v2/item/get?itemid=${item_id}&shopid=${shop_id}`,
+        `https://shopee.com.br/api/v4/item/get?itemid=${item_id}&shopid=${shop_id}`,
+      ];
       
-      const response = await fetch(detailUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
+      let images: string[] = [];
+      let result: any = null;
+      
+      for (const detailUrl of endpoints) {
+        console.log(`[Shopee] Trying: ${detailUrl}`);
+        
+        const response = await fetch(detailUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          }
+        });
+        
+        const responseText = await response.text();
+        try {
+          result = JSON.parse(responseText);
+          console.log(`[Shopee] Response keys:`, Object.keys(result));
+          
+          // Check various paths for images
+          const possiblePaths = [
+            result?.data?.images,
+            result?.data?.items?.[0]?.images,
+            result?.data?.item?.images,
+            result?.item?.images,
+            result?.data?.image_info?.images,
+          ];
+          
+          for (const path of possiblePaths) {
+            if (Array.isArray(path) && path.length > 0) {
+              images = path;
+              console.log(`[Shopee] Found ${images.length} images at path`);
+              break;
+            }
+          }
+          
+          if (images.length > 0) break;
+        } catch (e) {
+          console.log(`[Shopee] Failed to parse:`, responseText.substring(0, 200));
         }
-      });
-      
-      const responseText = await response.text();
-      let result;
-      try {
-        result = JSON.parse(responseText);
-      } catch (e) {
-        result = { error: "Non-JSON response", message: responseText };
       }
 
       return new Response(JSON.stringify({ 
         success: true, 
-        data: result.data || result,
-        status: response.status 
+        data: result,
+        images: images,
+        status: 200 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -133,26 +177,66 @@ serve(async (req: Request) => {
     }
 
     const payload = JSON.stringify({ query: graphqlQuery, variables });
-    const signature = await generateV1Signature(appId, secret, timestamp, payload);
-    const authHeader = `SHA256 Credential=${appId},Timestamp=${timestamp},Signature=${signature}`;
+    const signature = await generateV1Signature(APP_ID, SECRET, timestamp, payload);
+    const authHeader = `SHA256 Credential=${APP_ID},Timestamp=${timestamp},Signature=${signature}`;
 
     console.log(`[Shopee] Sending GraphQL request to ${SHOPEE_GRAPHQL_URL}`);
     
-    const response = await fetch(SHOPEE_GRAPHQL_URL, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Authorization": authHeader
-      },
-      body: payload,
-    });
-
-    const responseText = await response.text();
+    let response;
+    let responseText;
     let result;
+    
     try {
+      response = await fetch(SHOPEE_GRAPHQL_URL, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": authHeader
+        },
+        body: payload,
+      });
+      
+      responseText = await response.text();
       result = JSON.parse(responseText);
-    } catch (e) {
-      result = { error: "Non-JSON response", message: responseText };
+    } catch (fetchError: any) {
+      console.error("[Shopee] GraphQL fetch error:", fetchError.message);
+      
+      // Fallback: Search using public Shopee API
+      console.log("[Shopee] Using public API fallback for search");
+      const searchKeyword = params.keyword || "";
+      const searchUrl = `https://shopee.com.br/api/v4/search/search_items?by=sales&limit=50&newest=0&keyword=${encodeURIComponent(searchKeyword)}&order=desc&page_type=search`;
+      
+      const fallbackResponse = await fetch(searchUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "application/json",
+        }
+      });
+      
+      const fallbackText = await fallbackResponse.text();
+      const fallbackData = JSON.parse(fallbackText);
+      
+      const items = fallbackData.items?.map((item: any) => ({
+        itemId: item.item_id,
+        shopId: item.shop_id,
+        productName: item.name,
+        productLink: `https://shopee.com.br/product/${item.shop_id}/${item.item_id}`,
+        imageUrl: `https://cf.shopee.com.br/file/${item.image?.hash || item.image}`,
+        price: item.price / 100000,
+        price_before_discount: item.price_before_discount / 100000 || item.price / 100000,
+        discount: item.discount || 0,
+        commissionRate: 0.12,
+        sales: item.sold || 0,
+      })) || [];
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        data: { nodes: items },
+        error: null
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
 
     console.log(`[Shopee] Result: HTTP ${response.status}`);
@@ -161,7 +245,7 @@ serve(async (req: Request) => {
     let finalData = result.data || result;
     
     // Check if we have a user identity for tracking
-    const trackingId = params.user_shopee_id || appId;
+    const trackingId = params.user_shopee_id || APP_ID;
     
     if (action === "generate_links" && (!finalData.urlGenerate || finalData.errors)) {
       console.log(`[Shopee] GraphQL urlGenerate failed/empty. Applying Universal Link Fallback with trackingId: ${trackingId}`);
