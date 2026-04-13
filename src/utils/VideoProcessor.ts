@@ -663,15 +663,15 @@ export class VideoProcessor {
   }
 
   private drawCallToAction(time: number, W: number, H: number, progress: number) {
-    // Apenas 3 mensagens de chamada para comprar
+    // Mensagens curtas de chamada para comprar
     const ctaMessages = [
-      "🔥 COMPRA AGORA! 🔥",
-      "⚡ OFERTA IMPERDÍVEL!",
-      "🛒 NÃO PERCA ESSA!",
+      "🔥 COMPRE AGORA!",
+      "⚡ OFERTA!",
+      "🛒 NÃO PERCA!",
     ];
 
-    // Mostrar apenas nos primeiros 8 segundos
-    if (time > 8) return;
+    // Mostrar apenas nos primeiros 6 segundos
+    if (time > 6) return;
 
     // Selecionar mensagem baseada no tempo
     const msgIndex = Math.floor(time / 2.5) % ctaMessages.length;
@@ -688,85 +688,93 @@ export class VideoProcessor {
       opacity = (1 - localProgress) / 0.3;
     }
 
-    const fontSize = Math.floor(W * 0.045);
+    const fontSize = Math.floor(W * 0.04);
     
     this.ctx.save();
     this.ctx.globalAlpha = opacity;
     this.ctx.textAlign = 'center';
     
-    // Fundo simples mais compacto
-    this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    this.ctx.fillRect(W * 0.15, H * 0.1, W * 0.7, H * 0.08);
+    // Fundo compacto na parte superior
+    this.ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    this.ctx.fillRect(W * 0.2, H * 0.08, W * 0.6, H * 0.07);
     
-    // Texto branco
+    // Texto branco com shadow
+    this.ctx.font = `900 ${fontSize + 1}px Inter, Arial, sans-serif`;
+    this.ctx.fillStyle = '#000000';
+    this.ctx.fillText(message, W / 2 + 1, H * 0.135 + 1);
     this.ctx.font = `900 ${fontSize}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillText(message, W / 2, H * 0.155);
+    this.ctx.fillText(message, W / 2, H * 0.135);
 
     this.ctx.globalAlpha = 1;
     this.ctx.restore();
   }
 
   private drawProductInfo(text: string, W: number, H: number, time: number) {
-    // Aparece a partir de 8 segundos
-    if (time < 8) return;
+    // Aparece a partir de 10 segundos para dar tempo de ver as imagens
+    if (time < 10) return;
 
     const lines = text.split('\n');
     const productName = lines[0] || "";
     const price = lines[1] || "";
 
-    // Fontes menores para mobile
-    const titleSize = Math.floor(W * 0.04);
-    const titleLines = this.wrapText(productName, titleSize, W * 0.9);
-    const priceSize = Math.floor(W * 0.06);
+    // Fontes proporcionais - adapts to resolution
+    const titleSize = Math.floor(W * 0.035);
+    const titleLines = this.wrapText(productName, titleSize, W * 0.85);
+    const priceSize = Math.floor(W * 0.055);
     
     // Animação de entrada suave
-    const fadeProgress = Math.min((time - 8) / 2, 1);
+    const fadeProgress = Math.min((time - 10) / 1.5, 1);
     const opacity = fadeProgress;
 
-    const startY = H * 0.7;
+    const startY = H * 0.68;
     
     this.ctx.save();
     this.ctx.globalAlpha = opacity;
 
-    // Fundo escuro menor na parte inferior
-    this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    this.ctx.fillRect(0, startY, W, H * 0.35);
+    // Fundo escuro semi-transparente na parte inferior
+    this.ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    this.ctx.fillRect(0, startY - 20, W, H * 0.32);
 
-    // Título do produto - centralizado
+    // Título do produto - centralizado com shadow
     this.ctx.textAlign = 'center';
-    const titleY = startY + titleSize + 20;
+    const titleY = startY;
     
     titleLines.forEach((line, idx) => {
-      const lineY = titleY + (idx * titleSize * 1.15);
+      const lineY = titleY + (idx * titleSize * 1.2);
       const upperLine = line.toUpperCase();
+      
+      // Text shadow
+      this.ctx.font = `900 ${titleSize + 2}px Inter, Arial, sans-serif`;
+      this.ctx.fillStyle = '#000000';
+      this.ctx.fillText(upperLine, W / 2 + 2, lineY + 2);
       
       this.ctx.font = `900 ${titleSize}px Inter, Arial, sans-serif`;
       this.ctx.fillStyle = '#ffffff';
       this.ctx.fillText(upperLine, W / 2, lineY);
     });
     
-    // Preço em badge verde - menor
-    const priceY = startY + titleLines.length * titleSize * 1.15 + 30;
+    // Preço em badge verde
+    const priceY = startY + titleLines.length * titleSize * 1.2 + 25;
     
     this.ctx.fillStyle = '#10b981';
     this.ctx.beginPath();
-    this.ctx.roundRect(W * 0.3, priceY, W * 0.4, priceSize + 15, 8);
+    this.ctx.roundRect(W * 0.28, priceY - priceSize/2, W * 0.44, priceSize + 16, 10);
     this.ctx.fill();
     
     this.ctx.font = `900 ${priceSize}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#000000';
-    this.ctx.fillText(price, W / 2, priceY + priceSize);
+    this.ctx.fillText(price, W / 2, priceY + priceSize * 0.35);
 
-    // CTA menor
-    const ctaY = priceY + priceSize + 25;
-    this.ctx.font = `bold ${Math.floor(W * 0.025)}px Inter, Arial, sans-serif`;
+    // CTA
+    const ctaY = priceY + priceSize + 22;
+    this.ctx.font = `bold ${Math.floor(W * 0.022)}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillText('🔗 CLIQUE NO LINK DA BIO', W / 2, ctaY);
+    this.ctx.fillText('🔗 LINK NA BIO', W / 2, ctaY);
 
-    // Hashtags menor
-    const hashY = ctaY + 20;
-    this.ctx.font = `${Math.floor(W * 0.018)}px Inter, Arial, sans-serif`;
+    // Hashtags
+    const hashY = ctaY + 18;
+    this.ctx.font = `${Math.floor(W * 0.016)}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#22d3ee';
     this.ctx.fillText('#viral #shopee #achadinhos', W / 2, hashY);
 

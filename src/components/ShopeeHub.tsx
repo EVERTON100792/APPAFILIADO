@@ -18,7 +18,10 @@ import {
   Video,
   Download,
   RefreshCw,
-  Upload
+  Upload,
+  Volume2,
+  VolumeX,
+  Music
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,7 +29,7 @@ import { ShopeeService } from "../services/shopeeService";
 import { VideoProcessor } from "../utils/VideoProcessor";
 import { Copywriter } from "../utils/Copywriter";
 import type { VideoCopy } from "../utils/Copywriter";
-import { VIRAL_MUSIC } from "../utils/MusicLibrary";
+import { VIRAL_MUSIC, type ViralMusic } from "../utils/MusicLibrary";
 import type { ShopeeProduct } from "../services/shopeeService";
 import { sanitizeShopeeLink, createUniversalLink } from "../utils/shopeeLinkUtils";
 import { generateWhatsappMessage } from "../utils/shareUtils";
@@ -51,11 +54,15 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [showSettings, setShowSettings] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [activeNiche, setActiveNiche] = useState<string | null>(null);
-  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [genStatus, setGenStatus] = useState("");
   const [generatedVideo, setGeneratedVideo] = useState<{blob: Blob, copy: VideoCopy} | null>(null);
   const [pipelineStep, setPipelineStep] = useState(0);
   const [randomSeed, setRandomSeed] = useState(0);
+  const [selectedMusic, setSelectedMusic] = useState<ViralMusic | null>(null);
+  const [isMutedVideo, setIsMutedVideo] = useState(false);
+  const [showMusicPicker, setShowMusicPicker] = useState(false);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
 
   const videoProcRef = useRef(new VideoProcessor());
   const productDetailRef = useRef<any>(null);
@@ -246,25 +253,32 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       const copy = Copywriter.generateCopy(product.item_name, `R$ ${product.price}`, activeNiche || 'default');
       
       updateStep(3);
-      // Selecionar música aleatória (nunca repete a última)
-      const music = getRandomMusic();
+      // Selecionar música (usuário escolhe ou aleatória)
+      const music = selectedMusic || getRandomMusic();
       
       updateStep(4);
       
-      const allTransitions: ('zoom' | 'glitch' | 'blur' | 'slide' | 'shake' | 'flash' | 'beat' | 'fire' | 'rotate')[] = ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate'];
-      const allFilters = ['elite', 'ultra8k', 'cinematic', 'bloom', 'glitch'];
+      // Transições mais avanzadas
+      const allTransitions = ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate', 'wave', 'spiral', 'pixelate', 'split'];
+      const allFilters = ['elite', 'ultra8k', 'cinematic', 'bloom', 'glitch', 'vhs', 'neon', 'golden'];
+      
+      // Selecionar transições aleatórias
+      const shuffledTrans = [...allTransitions].sort(() => Math.random() - 0.5).slice(0, 6) as any[];
       
       const options = {
         filter: allFilters[Math.floor(Math.random() * allFilters.length)],
-        transition: 'zoom' as const,
-        transitionList: allTransitions,
+        transition: shuffledTrans[0] as any,
+        transitionList: shuffledTrans,
         legend: "",
-        isMuted: false,
-        musicUrl: music.url
+        isMuted: isMutedVideo,
+        musicUrl: isMutedVideo ? undefined : music.url
       };
 
       const videoBlob = await videoProcRef.current.renderSlideshow(images, options, `R$ ${product.price}`, product.item_name);
       
+      // Criar URL para preview
+      const previewUrl = URL.createObjectURL(videoBlob);
+      setVideoPreviewUrl(previewUrl);
       setGeneratedVideo({ blob: videoBlob, copy });
       setPipelineStep(5);
       setGenStatus("Vídeo PRonto! ✅");
@@ -830,12 +844,12 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4">
                   {/* Preview Title */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-2xl font-black italic text-metallic uppercase tracking-tighter">Criativo Pronto</h3>
-                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em]">Qualidade Pro Max • 40s</p>
+                      <h3 className="text-xl font-black italic text-metallic uppercase tracking-tighter">Criativo Pronto</h3>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em]">30s • Vídeo Preview</p>
                     </div>
                     <button 
                       onClick={() => setIsGeneratingVideo(false)}
@@ -845,13 +859,38 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                     </button>
                   </div>
 
+                  {/* Music & Sound Options */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowMusicPicker(true)}
+                      className="flex-1 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-emerald-400"
+                    >
+                      <Video size={14} /> Música
+                    </button>
+                    <button
+                      onClick={() => setIsMutedVideo(!isMutedVideo)}
+                      className={`h-10 px-4 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase ${isMutedVideo ? 'bg-red-500/20 border border-red-500/30 text-red-400' : 'bg-white/5 border border-white/10 text-white/60'}`}
+                    >
+                      {isMutedVideo ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                      {isMutedVideo ? 'Sem Som' : 'Com Som'}
+                    </button>
+                  </div>
+
                   {/* Video Preview */}
-                  <div className="aspect-[9/16] max-h-[400px] rounded-[32px] overflow-hidden bg-slate-900 border border-white/10 relative group mx-auto">
-                    <video 
-                      src={URL.createObjectURL(generatedVideo.blob)}
-                      autoPlay loop playsInline controls
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="aspect-[9/16] max-h-[350px] rounded-3xl overflow-hidden bg-slate-900 border border-white/10 relative mx-auto w-full">
+                    {videoPreviewUrl ? (
+                      <video 
+                        src={videoPreviewUrl}
+                        autoPlay loop playsInline controls
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <video 
+                        src={URL.createObjectURL(generatedVideo.blob)}
+                        autoPlay loop playsInline controls
+                        className="w-full h-full object-contain"
+                      />
+                    )}
                   </div>
 
                   {/* Action Buttons */}
@@ -974,6 +1013,73 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                 >
                   Criar com Imagens do Produto
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Music Picker Modal */}
+      <AnimatePresence>
+        {showMusicPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-3xl p-4 max-h-[80vh] overflow-hidden flex flex-col"
+            >
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                <h3 className="text-lg font-black text-white uppercase">Escolha a Música</h3>
+                <button onClick={() => setShowMusicPicker(false)} className="text-white/40 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="flex gap-2 mb-3 shrink-0">
+                <button
+                  onClick={() => {
+                    setSelectedMusic(null);
+                    setShowMusicPicker(false);
+                  }}
+                  className="flex-1 h-9 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/60"
+                >
+                  Aleatória
+                </button>
+                <button
+                  onClick={() => {
+                    setIsMutedVideo(true);
+                    setShowMusicPicker(false);
+                  }}
+                  className="flex-1 h-9 bg-red-500/10 border border-red-500/20 rounded-lg text-[10px] font-black uppercase text-red-400"
+                >
+                  Sem Som
+                </button>
+              </div>
+
+              <div className="overflow-y-auto space-y-1 flex-1">
+                {VIRAL_MUSIC.slice(0, 50).map((music, idx) => (
+                  <button
+                    key={music.id}
+                    onClick={() => {
+                      setSelectedMusic(music);
+                      setIsMutedVideo(false);
+                      setShowMusicPicker(false);
+                    }}
+                    className={`w-full h-10 px-3 rounded-lg flex items-center justify-between text-left ${
+                      selectedMusic?.id === music.id 
+                        ? 'bg-emerald-500/20 border border-emerald-500/30' 
+                        : 'bg-white/5 border border-transparent hover:bg-white/10'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold text-white truncate">{music.name}</span>
+                    <span className="text-[9px] text-white/40">{music.bpm} BPM</span>
+                  </button>
+                ))}
               </div>
             </motion.div>
           </motion.div>
