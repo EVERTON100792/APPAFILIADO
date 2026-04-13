@@ -358,16 +358,18 @@ export class VideoProcessor {
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        const W = 1080;
-        const H = 1920; 
+        // Mobile-optimized resolution (720x1280 instead of 1080x1920)
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const W = isMobile ? 720 : 1080;
+        const H = isMobile ? 1280 : 1920; 
         this.canvas.width = W;
         this.canvas.height = H;
         
-        // Target duration: fixed 38s for better engagement (user asked 30-40s)
-        const targetDuration = 38; 
-        const fps = 30;
+        // Reduced duration for mobile performance (15s instead of 38s)
+        const targetDuration = isMobile ? 15 : 25; 
+        const fps = isMobile ? 24 : 30;
         const totalFrames = targetDuration * fps;
-        const slideChangeInterval = 3.5; // Change slide every 3.5s
+        const slideChangeInterval = isMobile ? 3 : 3.5;
 
         // 1. Preload images with proxy support
         const images = await Promise.all(imageUrls.map(async url => {
@@ -405,8 +407,9 @@ export class VideoProcessor {
           output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
           error: e => console.error("VideoEncoder error", e)
         });
+        const videoBitrate = isMobile ? 2_500_000 : 6_000_000;
         videoEncoder.configure({
-          codec: 'avc1.4d0033', width: W, height: H, bitrate: 6_000_000, avc: { format: 'avc' }
+          codec: 'avc1.4d0033', width: W, height: H, bitrate: videoBitrate, avc: { format: 'avc' }
         });
 
         const audioEncoder = new AudioEncoder({

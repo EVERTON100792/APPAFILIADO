@@ -160,31 +160,14 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     fetchProfile();
   }, []);
 
-  // Scroll Lock for Video Generation - Otimizado para mobile
+  // Allow scroll on mobile - don't lock during video generation
+  // The fixed position was causing browser crashes on mobile
   useEffect(() => {
-    const lockScroll = () => {
-      document.body.style.overflow = "hidden";
-      document.body.style.position = "fixed";
-      document.body.style.width = "100%";
-      document.body.style.height = "100%";
-      document.body.style.touchAction = "none";
-    };
-    
-    const unlockScroll = () => {
+    if (!isGeneratingVideo) {
       document.body.style.overflow = "";
       document.body.style.position = "";
-      document.body.style.width = "";
-      document.body.style.height = "";
       document.body.style.touchAction = "";
-    };
-
-    if (isGeneratingVideo) {
-      lockScroll();
-    } else {
-      unlockScroll();
     }
-    
-    return unlockScroll;
   }, [isGeneratingVideo]);
 
   const handleCreateAuthoralVideo = async (product: any) => {
@@ -192,7 +175,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       setIsGeneratingVideo(true);
       setGeneratedVideo(null);
       setPipelineStep(0);
-      setGenStatus("Iniciando Motor...");
+      setGenStatus("Iniciando...");
+      
+      // Allow scroll on mobile during generation
+      document.body.style.overflow = "auto";
+      document.body.style.position = "static";
       
       const steps = [
         "Lendo Palavras-chave...",
@@ -280,10 +267,10 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       
       setGeneratedVideo({ blob: videoBlob, copy });
       setPipelineStep(5);
-      setGenStatus("Vídeo pronto!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao gerar vídeo. Tente novamente.");
+      setGenStatus("Vídeo PRonto! ✅");
+    } catch (err: any) {
+      console.error("Erro ao gerar vídeo:", err?.message || err);
+      onShowToast("❌ ERRO AO GERAR: " + (err?.message || "Tente novamente"));
       setIsGeneratingVideo(false);
     }
   };
