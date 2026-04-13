@@ -1145,6 +1145,7 @@ const App: React.FC = () => {
   };
 
   const [isMobile, setIsMobile] = useState(false);
+  const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const checkMobile = () => {
@@ -1156,9 +1157,16 @@ const App: React.FC = () => {
         (/iPhone|iPad|iPod|Android/i.test(userAgent) || isTouch) &&
           !isLargeScreen,
       );
+      setWindowSize({ width: window.innerWidth, height: window.innerHeight });
     };
     checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  const isSmall = windowSize.width < 640;
+  const isMedium = windowSize.width >= 640 && windowSize.width < 1024;
+  const isLarge = windowSize.width >= 1024;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -2911,7 +2919,7 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-slate-950 text-slate-50 font-inter overflow-hidden">
+    <div className={`flex flex-col h-[100dvh] bg-slate-950 text-slate-50 font-inter overflow-hidden ${isSmall ? 'text-sm' : ''}`}>
       {!isSupabaseConfigured && (
         <div className="bg-red-600 text-white p-2 text-center text-[9px] font-black uppercase tracking-widest z-[1000] relative">
           ⚠️ CONFIGURAÇÃO SUPABASE AUSENTE (NETLIFY SETTINGS)
