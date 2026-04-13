@@ -62,6 +62,38 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [showImageModal, setShowImageModal] = useState(false);
   const [tempProduct, setTempProduct] = useState<any>(null);
   const [tempImages, setTempImages] = useState<string[]>([]);
+  const authLockRef = useRef<Promise<any> | null>(null);
+  const isMobileRef = useRef(false);
+  const lastMusicIndexRef = useRef<number>(-1);
+
+  const getRandomMusic = () => {
+    let index: number;
+    do {
+      index = Math.floor(Math.random() * VIRAL_MUSIC.length);
+    } while (index === lastMusicIndexRef.current && VIRAL_MUSIC.length > 1);
+    lastMusicIndexRef.current = index;
+    return VIRAL_MUSIC[index];
+  };
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+      isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(ua) || ("ontouchstart" in window);
+    };
+    checkMobile();
+  }, []);
+
+  const safeGetUser = async () => {
+    if (authLockRef.current) {
+      await authLockRef.current;
+    }
+    authLockRef.current = supabase.auth.getUser();
+    try {
+      return await authLockRef.current;
+    } finally {
+      authLockRef.current = null;
+    }
+  };
 
   const handleImageSelection = (product: any) => {
     setTempProduct(product);
@@ -103,7 +135,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await safeGetUser();
         if (user) {
           const { data } = await supabase
             .from("profiles")
@@ -116,8 +148,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
           const slug = meta.store_slug || localStorage.getItem("bio_store_slug") || "meu-link";
           setUserStoreSlug(slug.toLowerCase());
         }
-      } catch (err) {
-        console.error("Error fetching profile:", err);
+      } catch (err: any) {
+        console.error("Error fetching profile:", err?.message || err);
+        if (err?.name === "AbortError" || err?.message?.includes("Lock broken")) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
       } finally {
         setIsLoadingProfile(false);
       }
@@ -125,16 +160,31 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     fetchProfile();
   }, []);
 
-  // Scroll Lock for Video Generation
+  // Scroll Lock for Video Generation - Otimizado para mobile
   useEffect(() => {
-    if (isGeneratingVideo) {
+    const lockScroll = () => {
       document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
-    return () => {
-      document.body.style.overflow = "auto";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100%";
+      document.body.style.height = "100%";
+      document.body.style.touchAction = "none";
     };
+    
+    const unlockScroll = () => {
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
+      document.body.style.touchAction = "";
+    };
+
+    if (isGeneratingVideo) {
+      lockScroll();
+    } else {
+      unlockScroll();
+    }
+    
+    return unlockScroll;
   }, [isGeneratingVideo]);
 
   const handleCreateAuthoralVideo = async (product: any) => {
@@ -209,9 +259,8 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       const copy = Copywriter.generateCopy(product.item_name, `R$ ${product.price}`, activeNiche || 'default');
       
       updateStep(3);
-      // Selecionar música aleatória
-      const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
-      const music = VIRAL_MUSIC[musicIndex];
+      // Selecionar música aleatória (nunca repete a última)
+      const music = getRandomMusic();
       
       updateStep(4);
       
@@ -326,8 +375,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       }
 
       setProducts(results);
-    } catch (err) {
-      console.error("ERRO SHOPEE:", err);
+    } catch (err: any) {
+      console.error("ERRO SHOPEE:", err?.message || err);
+      if (err?.name === "AbortError" || err?.message?.includes("Lock broken")) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
       onShowToast("❌ ERRO NA CONEXÃO COM SHOPEE");
     } finally {
       setIsSearching(false);
@@ -336,7 +388,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
   const addToVitrine = async (product: ShopeeProduct) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await safeGetUser();
       if (!user) {
         onShowToast("⚠️ FAÇA LOGIN PARA ADICIONAR!");
         return;

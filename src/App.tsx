@@ -145,6 +145,22 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 // Viral naming utilities are now imported from ./utils/viralNaming
 
+// Auth lock to prevent concurrent getUser calls causing "Lock broken" errors
+const authLockRef = { current: null as Promise<any> | null };
+
+const safeGetUser = async () => {
+  if (authLockRef.current) {
+    await authLockRef.current;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  authLockRef.current = supabase.auth.getUser();
+  try {
+    return await authLockRef.current;
+  } finally {
+    authLockRef.current = null;
+  }
+};
+
 // Step types for the main application navigation
 type Step =
   | "home"
@@ -643,7 +659,7 @@ const App: React.FC = () => {
 
       // 2. Check Use provided user or fallback to auth
       const activeUser =
-        currentUser || (await supabase.auth.getUser()).data.user;
+        currentUser || (await safeGetUser()).data.user;
 
       if (activeUser) {
         userMetadataRef.current = activeUser.user_metadata || {};
@@ -668,8 +684,11 @@ const App: React.FC = () => {
         setStoreSlug("meu-link");
         setStoreReady(false);
       }
-    } catch (err) {
-      console.error("Erro ao verificar acesso");
+    } catch (err: any) {
+      console.error("Erro ao verificar acesso:", err?.message || err);
+      if (err?.name === "AbortError" || err?.message?.includes("Lock broken")) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
     } finally {
       setIsHydratingApp(false);
       setIsLoadingAuth(false);
