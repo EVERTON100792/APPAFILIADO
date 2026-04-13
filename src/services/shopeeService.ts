@@ -35,7 +35,7 @@ export class ShopeeService {
     let shopeeSort = filters.sort_by === "sales" ? 3 : 2;
     if (typeof filters.sort_by === "number") shopeeSort = filters.sort_by;
 
-    const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
+    var { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
       body: {
         action: "search_products",
         params: {

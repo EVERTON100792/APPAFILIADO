@@ -336,14 +336,28 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     let randomPage = (isPredefinedTab || forceRefresh) ? Math.floor(Math.random() * maxPages) + 1 : 1;
 
     try {
-      console.log(`[ShopeeHub] Tentativa 1: "${searchKeyword}" | Tab: ${activeTab} | Page: ${randomPage}`);
+      console.log(`[ShopeeHub] Buscando: "${searchKeyword}" | Tab: ${activeTab} | Page: ${randomPage}`);
       
-      let results = await ShopeeService.searchProducts({ 
-        keyword: searchKeyword.trim(),
-        sort_by: sortBy,
-        page_number: randomPage,
-        list_type: listType
-      }, userShopeeId || undefined);
+      let results: ShopeeProduct[] = [];
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        try {
+          results = await ShopeeService.searchProducts({ 
+            keyword: searchKeyword.trim(),
+            sort_by: sortBy,
+            page_number: randomPage,
+            list_type: listType
+          }, userShopeeId || undefined);
+          break;
+        } catch (err: any) {
+          attempts++;
+          console.log(`[ShopeeHub] Tentativa ${attempts} falhou:`, err?.message);
+          if (attempts >= maxAttempts) throw err;
+          await new Promise(r => setTimeout(r, 1000 * attempts));
+        }
+      }
 
       // RETRY LOGIC: Se vier vazio em página alta, tenta página 1
       if (results.length === 0 && randomPage > 1) {
@@ -364,10 +378,15 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       setProducts(results);
     } catch (err: any) {
       console.error("ERRO SHOPEE:", err?.message || err);
-      if (err?.name === "AbortError" || err?.message?.includes("Lock broken")) {
-        await new Promise(r => setTimeout(r, 1000));
+      const errMsg = err?.message || err?.toString() || "";
+      if (errMsg.includes("aborted") || errMsg.includes("AbortError")) {
+        onShowToast("⏳ CONEXÃO LENTA. TENTANDO NOVAMENTE...");
+        setTimeout(() => handleSearch(overrideKeyword, forceRefresh), 2000);
+      } else if (errMsg.includes("fetch") || errMsg.includes("network") || errMsg.includes("Failed")) {
+        onShowToast("❌ SEM CONEXÃO. VERIFIQUE A INTERNET!");
+      } else {
+        onShowToast("❌ ERRO AO BUSCAR SHOPEE");
       }
-      onShowToast("❌ ERRO NA CONEXÃO COM SHOPEE");
     } finally {
       setIsSearching(false);
     }
