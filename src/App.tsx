@@ -3744,10 +3744,10 @@ const App: React.FC = () => {
               animate="animate"
               exit="exit"
               transition={stepTransition}
-              className="step-wrapper-standard flex flex-col bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.08),transparent_30%),linear-gradient(180deg,#020617_0%,#020617_100%)]"
+              className="step-wrapper-standard lg:flex lg:flex-col bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.08),transparent_30%),linear-gradient(180deg,#020617_0%,#020617_100%)] overflow-y-auto lg:overflow-visible h-[100dvh] lg:h-auto"
             >
               {/* VÍDEO STICKY — sempre visível no topo ao rolar */}
-              <div className="z-30 px-3 pt-safe shrink-0 bg-gradient-to-b from-slate-950 via-slate-950/94 to-transparent backdrop-blur-xl lg:sticky lg:top-0 sm:px-4">
+              <div className="z-30 px-3 pt-safe lg:shrink-0 bg-gradient-to-b from-slate-950 via-slate-950/94 to-transparent backdrop-blur-xl lg:sticky lg:top-0 sm:px-4">
                 <div className="mt-2 mb-2 rounded-[1.35rem] border border-white/6 bg-white/[0.025] px-3 py-3 shadow-[0_14px_40px_rgba(2,6,23,0.28)] sm:px-4">
                   <div className="flex items-center justify-between mb-2">
                     <motion.button
@@ -3801,7 +3801,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="video-preview-container !h-[190px] sm:!h-[260px] relative overflow-hidden rounded-[1.45rem] sm:rounded-[1.7rem] border border-white/8 shadow-[0_20px_50px_rgba(2,6,23,0.42)] bg-slate-950">
+                  <div className="video-preview-container min-h-[320px] sm:min-h-[500px] aspect-[9/16] max-h-[75vh] sm:max-h-[650px] mx-auto relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] border border-white/8 shadow-[0_20px_50px_rgba(2,6,23,0.42)] bg-black">
                     {videoData?.url ? (
                       <>
                         <video
@@ -3818,7 +3818,7 @@ const App: React.FC = () => {
                           playsInline
                           loop
                           muted={isMuted}
-                          className={`w-full h-full object-cover filter-preview-${activeFilter} ${isTransitionActive ? `transition-preview-${activeTransition}` : ""}`}
+                          className={`w-full h-full object-contain filter-preview-${activeFilter} ${isTransitionActive ? `transition-preview-${activeTransition}` : ""}`}
                         />
 
                         <button
@@ -3843,11 +3843,11 @@ const App: React.FC = () => {
                         />
 
                         {videoLegend && (
-                          <div className="absolute inset-x-0 bottom-14 sm:bottom-16 flex justify-center z-20 px-4 sm:px-5">
+                          <div className="absolute inset-x-0 bottom-16 sm:bottom-20 flex justify-center z-20 px-4 sm:px-5">
                             <motion.div
                               initial={{ scale: 0.8, opacity: 0 }}
                               animate={{ scale: 1, opacity: 1 }}
-                              className="bg-gradient-to-r from-accent to-emerald-400 text-slate-950 px-4 py-2 rounded-2xl font-black text-[10px] sm:text-[11px] uppercase italic tracking-tight text-center shadow-[0_10px_24px_rgba(16,185,129,0.22)] border border-white/16 max-w-[88%] sm:max-w-[82%]"
+                              className="bg-gradient-to-r from-accent to-emerald-400 text-slate-950 px-5 py-2.5 rounded-2xl font-black text-[11px] sm:text-[13px] uppercase italic tracking-tight text-center shadow-[0_10px_24px_rgba(16,185,129,0.32)] border border-white/20 max-w-[94%] sm:max-w-[90%] break-words leading-tight"
                             >
                               {videoLegend}
                             </motion.div>
@@ -3889,7 +3889,7 @@ const App: React.FC = () => {
               </div>{" "}
               {/* fim do sticky video */}
               {/* CONTROLES SCROLLÁVEIS ABAIXO */}
-              <div className="flex-1 overflow-y-auto pb-32 px-3 space-y-4 sm:px-4">
+              <div className="lg:flex-1 lg:overflow-y-auto pb-32 px-3 space-y-4 sm:px-4">
                 {/* Main Professional Editor Controls */}
                 <div className="mt-2">
                   <VisualTimeline />

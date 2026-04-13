@@ -570,27 +570,28 @@ export class VideoProcessor {
         this.ctx.fillRect(0, 0, W, H);
         break;
       case 'fire':
-        this.ctx.fillStyle = `rgba(255,${Math.floor(80 + Math.random() * 80)},0,${sin * 0.4})`;
+        this.ctx.fillStyle = `rgba(255,${Math.floor(100 + Math.sin(ct * 15) * 50)},0,${sin * 0.45})`;
         this.ctx.fillRect(0, 0, W, H);
         break;
       case 'glitch': {
-        if (Math.random() > 0.6) {
-          const sliceH = Math.random() * 60;
-          const sy = Math.random() * H;
-          const dx = (Math.random() - 0.5) * 60;
+        const glitchStep = Math.floor(ct * 6);
+        if (glitchStep % 3 === 0) {
+          const sliceH = 40 + (Math.sin(ct * 10) * 20);
+          const sy = (Math.cos(ct * 5) * 0.5 + 0.5) * (H - sliceH);
+          const dx = Math.sin(ct * 40) * 30;
           this.ctx.drawImage(this.canvas, 0, sy, W, sliceH, dx, sy, W, sliceH);
           this.ctx.globalCompositeOperation = 'screen';
-          this.ctx.globalAlpha = 0.3;
-          this.ctx.fillStyle = `rgba(255,0,0,0.4)`;
-          this.ctx.fillRect(dx + 4, sy, Math.random() * 40, sliceH);
+          this.ctx.globalAlpha = 0.2;
+          this.ctx.fillStyle = `rgba(2,132,199,0.3)`;
+          this.ctx.fillRect(dx + 4, sy, 60, sliceH);
           this.ctx.globalCompositeOperation = 'source-over';
           this.ctx.globalAlpha = 1;
         }
         break;
       }
       case 'shake': {
-        const sx = (Math.random() - 0.5) * 30;
-        const sy2 = (Math.random() - 0.5) * 30;
+        const sx = Math.sin(ct * 45) * 12 * sin;
+        const sy2 = Math.cos(ct * 38) * 12 * sin;
         this.ctx.save();
         this.ctx.translate(sx, sy2);
         this.ctx.drawImage(this.canvas, -sx, -sy2, W, H);
@@ -659,6 +660,58 @@ export class VideoProcessor {
         }
         break;
       }
+      case 'light_leak': {
+        const gradient = this.ctx.createRadialGradient(W * 0.8, H * 0.2, 0, W * 0.7, H * 0.3, W * 0.6);
+        gradient.addColorStop(0, `rgba(255, 165, 0, ${sin * 0.6})`);
+        gradient.addColorStop(0.5, `rgba(255, 69, 0, ${sin * 0.3})`);
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        this.ctx.save();
+        this.ctx.globalCompositeOperation = 'screen';
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, W, H);
+        this.ctx.restore();
+        break;
+      }
+      case 'glass_shine': {
+        const xOffset = progress * W * 2 - W;
+        const gradient = this.ctx.createLinearGradient(xOffset, 0, xOffset + W * 0.4, H);
+        gradient.addColorStop(0, 'rgba(255,255,255,0)');
+        gradient.addColorStop(0.5, `rgba(255,255,255,${sin * 0.5})`);
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        this.ctx.save();
+        this.ctx.globalCompositeOperation = 'overlay';
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, W, H);
+        this.ctx.restore();
+        break;
+      }
+      case 'whip_push': {
+        const tx = -progress * W;
+        this.ctx.save();
+        this.ctx.filter = `blur(${Math.min(20, progress * 40)}px)`;
+        this.ctx.translate(tx, 0);
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.restore();
+        break;
+      }
+      case 'mirror_flip': {
+        const scaleX = Math.cos(progress * Math.PI);
+        this.ctx.save();
+        this.ctx.translate(W / 2, 0);
+        this.ctx.scale(scaleX, 1);
+        this.ctx.drawImage(this.canvas, -W / 2, 0);
+        this.ctx.restore();
+        break;
+      }
+      case 'pan_cinematic': {
+        const panX = Math.sin(progress * Math.PI) * W * 0.05;
+        this.ctx.save();
+        this.ctx.translate(panX, 0);
+        this.ctx.scale(1.1, 1.1);
+        this.ctx.drawImage(this.canvas, -W * 0.05, -H * 0.05);
+        this.ctx.restore();
+        break;
+      }
     }
   }
 
@@ -666,8 +719,35 @@ export class VideoProcessor {
     // Mensagens curtas de chamada para comprar
     const ctaMessages = [
       "🔥 COMPRE AGORA!",
-      "⚡ OFERTA!",
-      "🛒 NÃO PERCA!",
+      "⚡ OFERTA RELÂMPAGO!",
+      "🛒 NÃO PERCA ESSA!",
+      "✨ ACHADINHO VIP!",
+      "😱 PREÇO SURREAL!",
+      "😍 EU PRECISO DISSO!",
+      "🎁 PRESENTE IDEAL!",
+      "💎 QUALIDADE PREMIUM!",
+      "💸 MENOR PREÇO!",
+      "🚀 ENVIO IMEDIATO!",
+      "🏆 CAMPEÃO DE VENDAS!",
+      "🌟 NOTA MÁXIMA!",
+      "📦 FRETE GRÁTIS HOJE!",
+      "🔥 ÚLTIMAS UNIDADES!",
+      "⚠️ ESTOQUE LIMITADO!",
+      "💥 DESCONTO EXCLUSIVO!",
+      "🌈 VÁRIAS CORES!",
+      "🛠️ SUPER RESISTENTE!",
+      "🏡 PARA SUA CASA!",
+      "🧸 SEUS FILHOS VÃO AMAR!",
+      "🍳 FACILITE SUA VIDA!",
+      "📱 TECNOLOGIA PURA!",
+      "👟 ESTILO E CONFORTO!",
+      "💄 BELEZA E CHARME!",
+      "🧘 BEM-ESTAR TOTAL!",
+      "🐶 PARA SEU PET!",
+      "🚲 VIDA SAUDÁVEL!",
+      "🎉 APROVEITE AGORA!",
+      "🎯 ACHADO PERFEITO!",
+      "🔥 O MAIS DESEJADO!",
     ];
 
     // Mostrar apenas nos primeiros 6 segundos
@@ -720,6 +800,7 @@ export class VideoProcessor {
 
     // Fontes proporcionais - adapts to resolution
     const titleSize = Math.floor(W * 0.035);
+    this.ctx.font = `900 ${titleSize}px Inter, Arial, sans-serif`;
     const titleLines = this.wrapText(productName, titleSize, W * 0.85);
     const priceSize = Math.floor(W * 0.055);
     
