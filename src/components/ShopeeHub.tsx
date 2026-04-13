@@ -754,9 +754,9 @@ const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] bg-slate-950 flex items-center justify-center p-4 overflow-hidden"
+            className="fixed inset-0 z-[1000] bg-slate-950 flex items-center justify-center p-2 overflow-hidden"
           >
-            <div className="w-full max-w-lg bg-slate-950 border border-white/10 rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
+            <div className="w-full h-full max-w-2xl bg-slate-950 border-0 rounded-3xl p-4 shadow-2xl relative flex flex-col">
               {/* Premium Header Decoration */}
               <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500" />
               
@@ -844,84 +844,84 @@ const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 flex-1">
                   {/* Preview Title */}
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between shrink-0">
                     <div>
-                      <h3 className="text-xl font-black italic text-metallic uppercase tracking-tighter">Criativo Pronto</h3>
-                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em]">30s • Vídeo Preview</p>
+                      <h3 className="text-lg font-black italic text-metallic uppercase tracking-tighter">Criativo Pronto</h3>
+                      <p className="text-[9px] font-bold text-white/30 uppercase tracking-[0.3em]">30s • Preview</p>
                     </div>
                     <button 
                       onClick={() => setIsGeneratingVideo(false)}
-                      className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white"
+                      className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white"
                     >
-                      <X size={20} />
+                      <X size={16} />
                     </button>
                   </div>
 
                   {/* Music & Sound Options */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => setShowMusicPicker(true)}
-                      className="flex-1 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-emerald-400"
+                      className="flex-1 h-8 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-center gap-1 text-[9px] font-black uppercase text-emerald-400"
                     >
-                      <Video size={14} /> Música
+                      <Video size={12} /> Música
                     </button>
                     <button
                       onClick={() => setIsMutedVideo(!isMutedVideo)}
-                      className={`h-10 px-4 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase ${isMutedVideo ? 'bg-red-500/20 border border-red-500/30 text-red-400' : 'bg-white/5 border border-white/10 text-white/60'}`}
+                      className={`h-8 px-3 rounded-lg flex items-center justify-center gap-1 text-[9px] font-black uppercase ${isMutedVideo ? 'bg-red-500/20 border border-red-500/30 text-red-400' : 'bg-white/5 border border-white/10 text-white/60'}`}
                     >
-                      {isMutedVideo ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                      {isMutedVideo ? 'Sem Som' : 'Com Som'}
+                      {isMutedVideo ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                      {isMutedVideo ? 'Sem' : 'Som'}
                     </button>
                   </div>
 
-                  {/* Video Preview - Full View */}
-                  <div className="w-full rounded-2xl overflow-hidden bg-slate-950 border border-white/10 relative">
+                  {/* Video Preview - Full Screen */}
+                  <div className="flex-1 min-h-[300px] rounded-2xl overflow-hidden bg-slate-950 border border-white/10 relative flex items-center justify-center">
                     {videoPreviewUrl ? (
                       <video 
                         src={videoPreviewUrl}
                         autoPlay loop playsInline controls
-                        className="w-full h-auto max-h-[60vh]"
+                        className="w-full h-full object-contain max-h-[55vh]"
                       />
                     ) : (
                       <video 
                         src={URL.createObjectURL(generatedVideo.blob)}
                         autoPlay loop playsInline controls
-                        className="w-full h-auto max-h-[60vh]"
+                        className="w-full h-full object-contain max-h-[55vh]"
                       />
                     )}
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Action Buttons - Compact */}
+                  <div className="grid grid-cols-2 gap-2 shrink-0">
                     <button
                       onClick={() => {
                         copyToClipboard(generatedVideo.copy.tiktokCaption + "\n\n" + generatedVideo.copy.hashtags.join(" "));
                         downloadVideo(generatedVideo.blob, `video-viral-tiktok.mp4`);
                         onShowToast("🚀 AGORA É SÓ POSTAR NO TIKTOK!");
                       }}
-                      className="h-14 bg-white text-slate-950 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-wider hover:bg-emerald-400 transition-all shadow-xl shadow-white/5 active:scale-95"
+                      className="h-12 bg-white text-slate-950 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-wider hover:bg-emerald-400 transition-all shadow-lg"
                     >
-                      <Download size={18} strokeWidth={3} /> TikTok
+                      <Download size={16} strokeWidth={3} /> TikTok
                     </button>
                     <button
                       onClick={() => {
                         copyToClipboard(generatedVideo.copy.shopeeCaption + "\n\n" + generatedVideo.copy.hashtags.join(" "));
                         downloadVideo(generatedVideo.blob, `video-viral-shopee.mp4`);
-                        onShowToast("🛍️ LINK COPIADO PARA SHOPEE!");
+                        onShowToast("🛍️ LINK COPIADO!");
                       }}
-                      className="h-14 bg-orange-500 text-white rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-wider hover:bg-orange-400 transition-all shadow-xl shadow-orange-500/10 active:scale-95"
+                      className="h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-wider hover:bg-orange-400 transition-all shadow-lg"
                     >
-                      <Rocket size={18} strokeWidth={3} /> Shopee
+                      <Rocket size={16} strokeWidth={3} /> Shopee
                     </button>
                   </div>
 
                   <button
                     onClick={() => handleCreateAuthoralVideo(productDetailRef.current)}
-                    className="w-full h-11 border border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
+                    className="w-full h-10 border border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center gap-2 font-black text-[9px] uppercase tracking-widest transition-all shrink-0"
                   >
-                    <RefreshCw size={14} /> Gerar Outra Versão
+                    <RefreshCw size={12} /> Nova Versão
                   </button>
                 </div>
               )}
