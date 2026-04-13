@@ -365,11 +365,11 @@ export class VideoProcessor {
         this.canvas.width = W;
         this.canvas.height = H;
         
-        // Reduced duration for mobile performance (15s instead of 38s)
-        const targetDuration = isMobile ? 15 : 25; 
+        // Reduced duration for mobile performance (30s mobile, 38s desktop)
+        const targetDuration = isMobile ? 30 : 38; 
         const fps = isMobile ? 24 : 30;
         const totalFrames = targetDuration * fps;
-        const slideChangeInterval = isMobile ? 3 : 3.5;
+        const slideChangeInterval = 3;
 
         // 1. Preload images with proxy support
         const images = await Promise.all(imageUrls.map(async url => {
