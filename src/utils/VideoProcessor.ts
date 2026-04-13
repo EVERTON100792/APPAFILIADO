@@ -688,20 +688,20 @@ export class VideoProcessor {
       opacity = (1 - localProgress) / 0.3;
     }
 
-    const fontSize = Math.floor(W * 0.08);
+    const fontSize = Math.floor(W * 0.045);
     
     this.ctx.save();
     this.ctx.globalAlpha = opacity;
     this.ctx.textAlign = 'center';
     
-    // Fundo simples
-    this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    this.ctx.fillRect(W * 0.1, H * 0.08, W * 0.8, H * 0.12);
+    // Fundo simples mais compacto
+    this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    this.ctx.fillRect(W * 0.15, H * 0.1, W * 0.7, H * 0.08);
     
-    // Texto branco grande
+    // Texto branco
     this.ctx.font = `900 ${fontSize}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillText(message, W / 2, H * 0.16);
+    this.ctx.fillText(message, W / 2, H * 0.155);
 
     this.ctx.globalAlpha = 1;
     this.ctx.restore();
@@ -715,29 +715,30 @@ export class VideoProcessor {
     const productName = lines[0] || "";
     const price = lines[1] || "";
 
-    const titleSize = Math.floor(W * 0.06);
-    const titleLines = this.wrapText(productName, titleSize, W * 0.85);
-    const priceSize = Math.floor(W * 0.1);
+    // Fontes menores para mobile
+    const titleSize = Math.floor(W * 0.04);
+    const titleLines = this.wrapText(productName, titleSize, W * 0.9);
+    const priceSize = Math.floor(W * 0.06);
     
     // Animação de entrada suave
     const fadeProgress = Math.min((time - 8) / 2, 1);
     const opacity = fadeProgress;
 
-    const startY = H * 0.65;
+    const startY = H * 0.7;
     
     this.ctx.save();
     this.ctx.globalAlpha = opacity;
 
-    // Fundo escuro na parte inferior
+    // Fundo escuro menor na parte inferior
     this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    this.ctx.fillRect(0, startY - 30, W, H * 0.4);
+    this.ctx.fillRect(0, startY, W, H * 0.35);
 
-    // Título do produto - centralizado e grande
+    // Título do produto - centralizado
     this.ctx.textAlign = 'center';
-    const titleY = startY + 20;
+    const titleY = startY + titleSize + 20;
     
     titleLines.forEach((line, idx) => {
-      const lineY = titleY + (idx * titleSize * 1.2);
+      const lineY = titleY + (idx * titleSize * 1.15);
       const upperLine = line.toUpperCase();
       
       this.ctx.font = `900 ${titleSize}px Inter, Arial, sans-serif`;
@@ -745,27 +746,27 @@ export class VideoProcessor {
       this.ctx.fillText(upperLine, W / 2, lineY);
     });
     
-    // Preço em badge verde - centralizado
-    const priceY = startY + titleLines.length * titleSize * 1.2 + 35;
+    // Preço em badge verde - menor
+    const priceY = startY + titleLines.length * titleSize * 1.15 + 30;
     
     this.ctx.fillStyle = '#10b981';
     this.ctx.beginPath();
-    this.ctx.roundRect(W * 0.25, priceY - 10, W * 0.5, priceSize + 20, 12);
+    this.ctx.roundRect(W * 0.3, priceY, W * 0.4, priceSize + 15, 8);
     this.ctx.fill();
     
     this.ctx.font = `900 ${priceSize}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#000000';
-    this.ctx.fillText(price, W / 2, priceY + priceSize - 5);
+    this.ctx.fillText(price, W / 2, priceY + priceSize);
 
-    // CTA
-    const ctaY = priceY + priceSize + 35;
-    this.ctx.font = `bold ${Math.floor(W * 0.035)}px Inter, Arial, sans-serif`;
+    // CTA menor
+    const ctaY = priceY + priceSize + 25;
+    this.ctx.font = `bold ${Math.floor(W * 0.025)}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#ffffff';
     this.ctx.fillText('🔗 CLIQUE NO LINK DA BIO', W / 2, ctaY);
 
-    // Hashtags
-    const hashY = ctaY + 25;
-    this.ctx.font = `${Math.floor(W * 0.022)}px Inter, Arial, sans-serif`;
+    // Hashtags menor
+    const hashY = ctaY + 20;
+    this.ctx.font = `${Math.floor(W * 0.018)}px Inter, Arial, sans-serif`;
     this.ctx.fillStyle = '#22d3ee';
     this.ctx.fillText('#viral #shopee #achadinhos', W / 2, hashY);
 
