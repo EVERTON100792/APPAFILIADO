@@ -876,19 +876,19 @@ const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
                     </button>
                   </div>
 
-                  {/* Video Preview */}
-                  <div className="aspect-[9/16] max-h-[350px] rounded-3xl overflow-hidden bg-slate-900 border border-white/10 relative mx-auto w-full">
+                  {/* Video Preview - Full View */}
+                  <div className="w-full rounded-2xl overflow-hidden bg-slate-950 border border-white/10 relative">
                     {videoPreviewUrl ? (
                       <video 
                         src={videoPreviewUrl}
                         autoPlay loop playsInline controls
-                        className="w-full h-full object-contain"
+                        className="w-full h-auto max-h-[60vh]"
                       />
                     ) : (
                       <video 
                         src={URL.createObjectURL(generatedVideo.blob)}
                         autoPlay loop playsInline controls
-                        className="w-full h-full object-contain"
+                        className="w-full h-auto max-h-[60vh]"
                       />
                     )}
                   </div>
