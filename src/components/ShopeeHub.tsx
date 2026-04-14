@@ -96,16 +96,18 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
   const niches = [
-    { id: "cozinha",   name: "Cozinha",     icon: "??", keyword: "utensilios cozinha" },
-    { id: "beleza",    name: "Beleza",       icon: "??", keyword: "maquiagem skincare" },
-    { id: "tech",      name: "Tecnologia",   icon: "?", keyword: "gadgets eletronicos" },
-    { id: "casa",      name: "Casa",         icon: "?", keyword: "decoracao casa" },
-    { id: "organizer", name: "Organizacao",  icon: "??", keyword: "organizador cozinha" },
-    { id: "limpeza",   name: "Limpeza",      icon: "??", keyword: "produto limpeza" },
-    { id: "setup",     name: "Setup",        icon: "??", keyword: "suporte notebook teclado" },
-    { id: "pet",       name: "Pets",         icon: "??", keyword: "acessorios cachorro gato" },
-    { id: "kids",      name: "Kids",         icon: "??", keyword: "brinquedo infantil" },
-    { id: "viral",     name: "Achadinhos",   icon: "??", keyword: "achado shopee" },
+    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensilios cozinha panela" },
+    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem skincare cuidados" },
+    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "gadgets eletronicos fone" },
+    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoracao casa almofada" },
+    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador gaveta guarda roupa" },
+    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "produto limpeza esponja" },
+    { id: "setup",     name: "Setup",        icon: "🖥️", keyword: "suporte notebook teclado mouse" },
+    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "acessorios cachorro gato petshop" },
+    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo infantil educativo" },
+    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achado shopee viral" },
+    { id: "moda",      name: "Moda",         icon: "👗", keyword: "roupa feminina vestido tendencia" },
+    { id: "fitness",   name: "Fitness",      icon: "💪", keyword: "academia treino fitness" },
   ];
 
   useEffect(() => {
@@ -139,10 +141,62 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     }
   }, [activeTab, isLoadingProfile]);
 
+  // ── KEYWORD POOLS ─────────────────────────────────────────────────────────────
+  // Cada aba usa 4 keywords buscadas em PARALELO → ~200 produtos antes de filtrar
+
+  const LIGHTNING_KEYWORDS = [
+    "promoção relâmpago", "oferta especial shopee",
+    "queima estoque", "liquidação shopee",
+  ];
+  const OFF50_KEYWORDS = [
+    "desconto shopee", "liquidação total shopee",
+    "mega desconto", "super promoção shopee",
+  ];
+  const TOP_KEYWORDS = [
+    "mais vendidos shopee", "top achadinhos shopee",
+    "produto viral shopee", "shopee best seller",
+  ];
+
+  // ── HELPER: calcula desconto real usando original_price vs price ─────────────
+  const calcDiscount = (p: { price: number; original_price: number; discount: number }): number => {
+    // Usar campo discount da API se for razoável (> 0 e <= 99)
+    if (p.discount > 0 && p.discount <= 99) return p.discount;
+    // Recalcular baseado nos preços quando o campo não é confiável
+    if (p.original_price > 0 && p.original_price > p.price) {
+      return Math.round((1 - p.price / p.original_price) * 100);
+    }
+    return 0;
+  };
+
+  // ── HELPER: busca múltiplas keywords em paralelo e combina resultados ─────────
+  const parallelSearch = async (
+    keywords: string[],
+    sortBy: number = 3,
+    pagesPerKeyword: number = 2
+  ) => {
+    const requests: Promise<any[]>[] = [];
+
+    keywords.forEach(kw => {
+      // Buscar 2 páginas por keyword (p1 + p2) para garantir volume
+      for (let page = 1; page <= pagesPerKeyword; page++) {
+        requests.push(
+          ShopeeService.searchProducts(
+            { keyword: kw.trim(), sort_by: sortBy, page_number: page },
+            userShopeeId || undefined
+          ).catch(() => []) // ignora erros individuais para não quebrar o batch
+        );
+      }
+    });
+
+    const batches = await Promise.all(requests);
+    const allItems = ([] as any[]).concat(...batches);
+    return deduplicate(allItems);
+  };
+
   const handleSearch = async (overrideKeyword?: string, forceRefresh = false) => {
     setIsSearching(true);
-    if (forceRefresh) setProducts([]); 
-    
+    if (forceRefresh) setProducts([]);
+
     if (activeTab === "elite" && forceRefresh) {
       setIsSearching(false);
       return;
@@ -154,66 +208,87 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       setIsMiniScanning(false);
     }
 
-    let searchKeyword = overrideKeyword !== undefined ? (overrideKeyword || "achadinhos") : (keyword || "achadinhos");
-    
-    // Simplificar keywords para evitar 0 resultados
-    const lightningKeys = ["oferta relampago", "flash deal", "super oferta"];
-    const off50Keys = ["50% off", "liquida��o", "desconto"];
-    const topKeys = ["mais vendidos", "tendencia shopee", "top achadinhos"];
-
-    if (activeTab === "lightning") {
-      searchKeyword = lightningKeys[Math.floor(Math.random() * lightningKeys.length)]; 
-    } else if (activeTab === "50off") {
-      searchKeyword = off50Keys[Math.floor(Math.random() * off50Keys.length)];
-    } else if (activeTab === "top_day" || activeTab === "top_week") {
-      searchKeyword = topKeys[Math.floor(Math.random() * topKeys.length)];
-    }
-
     if (activeTab === "elite" && !forceRefresh && products.length === 0) {
       setIsSearching(false);
-      return; 
+      return;
     }
 
-    // Variar p�gina de forma segura (Abas especiais tem menos p�ginas de sucesso)
-    let maxPage = (activeTab === "all") ? 8 : 3;
-    let randomPage = Math.floor(Math.random() * maxPage) + 1;
-
     try {
-      // Est�gio 1: Busca Inicial
-      let results = await ShopeeService.searchProducts({ 
-        keyword: searchKeyword.trim(),
-        sort_by: 3,
-        page_number: randomPage
-      }, userShopeeId || undefined);
+      let finalProducts: any[] = [];
 
-      let finalProducts = deduplicate(results);
+      // ── MODO EXPLORAR (all) ────────────────────────────────────────────────────
+      if (activeTab === "all") {
+        const searchKw = overrideKeyword !== undefined
+          ? (overrideKeyword || "achadinhos shopee")
+          : (keyword || "achadinhos shopee");
 
-      // Se veio muito pouco, buscar mais uma p�gina para garantir volume
-      if (finalProducts.length < 20) {
-        const moreResults = await ShopeeService.searchProducts({ 
-          keyword: searchKeyword.trim(),
-          sort_by: 3,
-          page_number: randomPage + 1
-        }, userShopeeId || undefined);
-        finalProducts = deduplicate([...finalProducts, ...moreResults]);
+        // Busca simples em 3 páginas para explorar
+        const [p1, p2, p3] = await Promise.all([
+          ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 1 }, userShopeeId || undefined).catch(() => []),
+          ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 2 }, userShopeeId || undefined).catch(() => []),
+          ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 2, page_number: 1 }, userShopeeId || undefined).catch(() => []),
+        ]);
+        finalProducts = deduplicate([...p1, ...p2, ...p3]);
+        if (overrideKeyword === undefined) finalProducts = finalProducts.sort(() => Math.random() - 0.5);
+
+      // ── MODO RELÂMPAGO ─────────────────────────────────────────────────────────
+      } else if (activeTab === "lightning") {
+        // 4 keywords × 2 páginas = 8 chamadas paralelas → ~400 produtos brutos
+        finalProducts = await parallelSearch(LIGHTNING_KEYWORDS, 3, 2);
+
+        // Calcular desconto real e filtrar apenas os que têm desconto
+        const withRealDiscount = finalProducts
+          .map(p => ({ ...p, _disc: calcDiscount(p) }))
+          .filter(p => p._disc > 0)
+          .sort((a, b) => b._disc - a._disc);
+
+        finalProducts = withRealDiscount.length >= 10
+          ? withRealDiscount
+          : finalProducts.sort((a, b) => a.price - b.price); // fallback: menor preço
+
+      // ── MODO 50% OFF ───────────────────────────────────────────────────────────
+      } else if (activeTab === "50off") {
+        // 4 keywords × 2 páginas = ~400 produtos brutos
+        finalProducts = await parallelSearch(OFF50_KEYWORDS, 3, 2);
+
+        // Calcular desconto real para todos
+        const withCalcDisc = finalProducts.map(p => ({ ...p, _disc: calcDiscount(p) }));
+
+        // Filtro progressivo: 50%+ → 30%+ → 15%+ → ordenar por maior desconto
+        const g50 = withCalcDisc.filter(p => p._disc >= 50).sort((a, b) => b._disc - a._disc);
+        const g30 = withCalcDisc.filter(p => p._disc >= 30).sort((a, b) => b._disc - a._disc);
+        const g15 = withCalcDisc.filter(p => p._disc >= 15).sort((a, b) => b._disc - a._disc);
+        const gAny = withCalcDisc.filter(p => p._disc > 0).sort((a, b) => b._disc - a._disc);
+
+        if (g50.length >= 8)       finalProducts = g50;
+        else if (g30.length >= 8)  finalProducts = g30;
+        else if (g15.length >= 8)  finalProducts = g15;
+        else if (gAny.length >= 4) finalProducts = gAny;
+        else                        finalProducts = withCalcDisc.sort((a, b) => b._disc - a._disc);
+
+      // ── MODO DESTAQUES / TOP SEMANA ────────────────────────────────────────────
+      } else if (activeTab === "top_day" || activeTab === "top_week") {
+        // 4 keywords × 2 páginas = ~400 produtos brutos
+        finalProducts = await parallelSearch(TOP_KEYWORDS, 3, 2);
+
+        // Ordenar por sales (mais vendidos primeiro)
+        finalProducts = finalProducts.sort((a, b) => (b.sales || 0) - (a.sales || 0));
       }
 
-      // Fallback Est�gio 2: Relev�ncia
+      // ── FALLBACK GLOBAL ────────────────────────────────────────────────────────
       if (finalProducts.length === 0) {
-        console.warn(`Fallback Est�gio 2: Relev�ncia para "${searchKeyword}"`);
-        results = await ShopeeService.searchProducts({ 
-          keyword: searchKeyword.trim(),
-          sort_by: 2,
-          page_number: 1
-        }, userShopeeId || undefined);
-        finalProducts = deduplicate(results);
+        console.warn('Busca zerou — executando fallback global');
+        const fallback = await ShopeeService.searchProducts(
+          { keyword: "achadinhos shopee", sort_by: 3, page_number: 1 },
+          userShopeeId || undefined
+        );
+        finalProducts = deduplicate(fallback);
       }
 
-      // Shuffle final para variedade
-      setProducts(finalProducts.sort(() => Math.random() - 0.5));
+      setProducts(finalProducts);
     } catch (err) {
       console.error("Erro busca:", err);
-      onShowToast("?? Erro na conex�o Shopee");
+      onShowToast("⚠️ Erro na conexão Shopee");
     } finally {
       setIsSearching(false);
     }
@@ -221,8 +296,8 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
   const handleImageSelection = async (product: any) => {
     try {
-      console.log("?? Iniciando Seletor Autoral para:", product.item_name);
-      onShowToast("?? Abrindo Seletor Autoral...");
+      console.log("🎬 Iniciando Seletor Autoral para:", product.item_name);
+      onShowToast("🎬 Abrindo Seletor Autoral...");
       
       setTempProduct(product);
       setIsLoadingPicker(true);
@@ -241,7 +316,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         });
       }
       
-      // Se ainda n�o tiver imagens, usar a principal do produto como fallback
+      // Se ainda n�o tiver imagens, usar a principal do produto como fallback
       if (images.length === 0 && product.item_image) {
         images = [product.item_image];
       }
@@ -266,7 +341,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
     Array.from(files).forEach(file => {
       if (file.size > 5 * 1024 * 1024) {
-        onShowToast("?? Arquivo muito grande (Max 5MB)");
+        onShowToast("⚠️ Arquivo muito grande (Max 5MB)");
         return;
       }
       
@@ -319,7 +394,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const addToVitrine = async (product: ShopeeProduct) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { onShowToast("?? FA�A LOGIN!"); return; }
+      if (!user) { onShowToast("🔒 Faça login primeiro!"); return; }
       const sanitizedLink = sanitizeShopeeLink(product.product_link, userShopeeId || undefined);
       const { error } = await supabase.from("bio_store").insert({
         user_id: userStoreSlug, 
@@ -352,7 +427,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         <div className="relative z-10 w-full max-w-md bg-slate-900/50 border border-green-500/30 p-8 rounded-3xl backdrop-blur-2xl shadow-[0_0_50px_rgba(34,197,94,0.15)] text-center">
           <ShieldCheck className="text-4xl text-green-500 mx-auto mb-6 animate-pulse" size={48} />
           <h2 className="text-2xl font-black text-white mb-2 uppercase">RADAR ELITE 10%</h2>
-          <p className="text-green-500 font-mono text-[10px] mb-8 tracking-[0.2em] uppercase">Buscando Lucro M�ximo...</p>
+          <p className="text-green-500 font-mono text-[10px] mb-8 tracking-[0.2em] uppercase">Buscando Lucro Máximo...</p>
           <div className="space-y-6">
             <div className="h-4 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
               <motion.div 
@@ -377,7 +452,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     { id: "elite", label: "Elite (+10%)", icon: ShieldCheck },
     { id: "top_day", label: "Destaques", icon: Flame },
     { id: "top_week", label: "Top Semana", icon: Award },
-    { id: "lightning", label: "Rel�mpago", icon: Zap },
+    { id: "lightning", label: "Relâmpago", icon: Zap },
     { id: "50off", label: "50% OFF", icon: CircleDollarSign },
   ];
 
@@ -445,7 +520,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         <div className="flex flex-col gap-4 p-8 bg-emerald-500/5 border border-emerald-500/10 rounded-[2.5rem] text-center">
           <ShieldCheck className="text-emerald-400 mx-auto" size={48} />
           <h4 className="text-xl font-black italic text-white uppercase tracking-tighter">Radar Elite +10%</h4>
-          <p className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest">Busca autom�tica por comiss�o m�xima</p>
+          <p className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest">Busca automática por comissão máxima</p>
           <button onClick={runGlobalSpy} className="w-full h-16 bg-emerald-500 text-slate-950 font-black italic uppercase tracking-widest rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3">
             <Rocket size={20} /> INICIAR RADAR HACKER
           </button>
@@ -485,10 +560,10 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
               </div>
               <div className="flex flex-col gap-2 mt-2">
                 <button onClick={() => onViralize?.(product, 'tiktok')} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-[10px] uppercase shadow-lg shadow-emerald-500/20">
-                  <Rocket size={14} /> V�DEO VIRAL
+                  <Rocket size={14} /> VÍDEO VIRAL
                 </button>
                 <button onClick={() => handleImageSelection(product)} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[10px] uppercase shadow-lg shadow-blue-500/20">
-                  <Video size={14} /> V�DEO AUTORAL
+                  <Video size={14} /> VÍDEO AUTORAL
                 </button>
               </div>
               <div className="flex items-center gap-2 mt-2">
@@ -514,7 +589,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                 className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl p-6 relative shadow-2xl"
               >
                 <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 text-white/40"><X size={20} /></button>
-                <h3 className="text-xl font-black text-white uppercase mb-6 italic tracking-tight">Configura��es</h3>
+                <h3 className="text-xl font-black text-white uppercase mb-6 italic tracking-tight">Configurações</h3>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">ID Parceiro Shopee</label>
@@ -531,13 +606,13 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                       const { data: { user } } = await supabase.auth.getUser();
                       if (user) {
                         await supabase.from("profiles").upsert({ id: user.id, shopee_id: userShopeeId });
-                        onShowToast("? Configura��es Salvas");
+                        onShowToast("? Configurações Salvas");
                         setShowSettings(false);
                       }
                     }}
                     className="w-full h-14 bg-emerald-500 text-slate-950 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20"
                   >
-                    Salvar Altera��es
+                    Salvar Altera��es
                   </button>
                 </div>
               </motion.div>
@@ -564,7 +639,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                     <h3 className="text-xl font-black italic text-white uppercase flex items-center gap-2">
                       <Video size={20} className="text-blue-500" /> SELETOR AUTORAL
                     </h3>
-                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Crie seu v�deo premium</p>
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Crie seu vídeo premium</p>
                   </div>
                   <button 
                     onClick={() => setShowImagePicker(false)}
@@ -644,10 +719,10 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                       }}
                       className={`flex-[2] h-14 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-3 transition-all ${selectedImages.length > 0 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30' : 'bg-white/5 text-white/10'}`}
                     >
-                      Processar Sele��o ({selectedImages.length}) <ArrowRight size={18} />
+                      Processar Seleção ({selectedImages.length}) <ArrowRight size={18} />
                     </button>
                   </div>
-                  <p className="text-[8px] font-bold text-center text-white/20 uppercase">Selecione as fotos da Shopee ou suba as suas para o v�deo</p>
+                  <p className="text-[8px] font-bold text-center text-white/20 uppercase">Selecione as fotos da Shopee ou envie as suas para o vídeo</p>
                 </div>
               </motion.div>
             </div>

@@ -1,5 +1,4 @@
 import { supabase } from "../supabaseClient";
-import { sanitizeShopeeLink, createUniversalLink } from "../utils/shopeeLinkUtils";
 
 export interface ShopeeProduct {
   item_id: number;
@@ -30,12 +29,14 @@ export interface ShopeeSearchFilters {
 export class ShopeeService {
   /**
    * Searches for products on Shopee using the Edge Function proxy.
+   * Always converts productLinks to short links (s.shopee.com.br/xxx) to avoid
+   * captcha pages and ensure proper affiliate tracking.
    */
   static async searchProducts(filters: ShopeeSearchFilters, userShopeeId?: string): Promise<ShopeeProduct[]> {
     let shopeeSort = filters.sort_by === "sales" ? 3 : 2;
     if (typeof filters.sort_by === "number") shopeeSort = filters.sort_by;
 
-    var { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
+    const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
       body: {
         action: "search_products",
         params: {
@@ -49,81 +50,91 @@ export class ShopeeService {
     });
 
     console.group(`🔍 Shopee Search: "${filters.keyword}"`);
-    console.log("Filters applied:", filters);
-    
+    console.log("Filtros:", filters);
+
     if (error || !result?.success) {
-      console.error("Error searching Shopee products:", error || result?.error || result?.errors);
+      console.error("Erro na busca:", error || result?.error || result?.errors);
       console.groupEnd();
       throw error || new Error(result?.error || result?.errors?.[0]?.message || "Erro na busca da Shopee");
     }
 
     const nodes = result.data?.nodes || result.data?.productOfferV2?.nodes || [];
-    console.log(`Success: Found ${nodes.length} items`);
+    console.log(`✅ Encontrados: ${nodes.length} itens`);
     console.groupEnd();
-    
+
     if (nodes.length === 0) return [];
 
+    // ── CONVERSÃO DE LINKS ────────────────────────────────────────────────────────
+    // Sempre converter para shortLink (s.shopee.com.br/xxx).
+    // O shortLink:
+    //   1. Nunca aciona captcha
+    //   2. Já tem rastreamento da conta de afiliado da API
+    //   3. Redireciona corretamente para o app/site da Shopee
     const urlToShortLink = new Map<string, string>();
-    
-    if (userShopeeId) {
+
+    const productLinks = nodes.map((n: any) => n.productLink).filter(Boolean) as string[];
+
+    if (productLinks.length > 0) {
       try {
-        const urlList = nodes.map((n: any) => n.productLink).filter(Boolean);
-        const resultLinks = await this.convertLinks(urlList, userShopeeId);
-        
-        urlList.forEach((url: string, i: number) => {
-          if (resultLinks[i]) {
-            urlToShortLink.set(url, resultLinks[i]);
+        // Sempre chamar generate_links, independente de ter userShopeeId
+        const shortLinks = await this.convertLinks(productLinks, userShopeeId);
+        productLinks.forEach((url: string, i: number) => {
+          if (shortLinks[i]) {
+            urlToShortLink.set(url, shortLinks[i]);
           }
         });
+        console.log(`🔗 Short links gerados: ${urlToShortLink.size}/${productLinks.length}`);
       } catch (err) {
-        console.error("Erro ao encurtar links em lote:", err);
+        // Em caso de falha na conversão, usar productLink original da API
+        // (já tem rastreamento do app_id, porém é uma URL longa)
+        console.warn("⚠️ Falha ao gerar short links — usando productLink original:", err);
       }
     }
-    
+
     return nodes.map((item: any) => {
       let price = Number(item.price) || 0;
       let originalPrice = Number(item.originalPrice) || Number(item.price_before_discount) || price;
 
-      // HEURISTIC: Fix Shopee API v2 scale issue (100x too high for some international items)
-      // If the integer part has 5+ digits (>= 10.000,00), it's almost certainly scaled by 100
+      // Correção de escala: API v2 às vezes retorna valores 100x maiores
       if (price >= 10000) {
         price = price / 100;
         if (originalPrice >= 10000) originalPrice = originalPrice / 100;
       }
-      
+
+      // Calcula desconto real (campo da API pode ser 0 mesmo com preço reduzido)
+      let discount = Number(item.discount) || 0;
+      if (discount === 0 && originalPrice > price && originalPrice > 0) {
+        discount = Math.round((1 - price / originalPrice) * 100);
+      }
+
       const commissionRate = Number(item.commissionRate) || 0;
-      const originalUrl = item.productLink || "";
-      let finalLink = "";
-      
       const itemId = item.itemId || item.item_id || 0;
       const shopId = item.shopId || item.shop_id || 0;
+      const originalUrl = item.productLink || "";
 
-      if (urlToShortLink.get(originalUrl)) {
-        finalLink = urlToShortLink.get(originalUrl) || "";
-      }
-      else if (userShopeeId) {
-        finalLink = createUniversalLink(originalUrl, userShopeeId, shopId, itemId);
-      }
-      else {
-        finalLink = originalUrl;
-      }
+      // Preferência de link: shortLink > productLink original da API
+      // NUNCA usar createUniversalLink (URL bruta sem shortLink = captcha)
+      let finalLink = urlToShortLink.get(originalUrl) || originalUrl;
 
-      if (finalLink && userShopeeId) {
-        finalLink = sanitizeShopeeLink(finalLink, userShopeeId);
+      // Se ainda não tem link, construir URL direta limpa como último recurso
+      if (!finalLink && shopId && itemId) {
+        const base = `https://shopee.com.br/product/${shopId}/${itemId}`;
+        const afParams = userShopeeId
+          ? `?utm_source=an_${userShopeeId}&utm_medium=affiliates&af_siteid=an_${userShopeeId}`
+          : "";
+        finalLink = base + afParams;
       }
-
-      if (!finalLink) finalLink = originalUrl;
 
       return {
         item_id: itemId || Math.random(),
         shop_id: shopId,
         item_name: item.productName || item.product_name || item.item_name || "Produto Shopee",
         item_image: item.imageUrl || item.image_url || item.item_image || "",
-        price: price, 
+        price,
         original_price: originalPrice,
-        discount: Number(item.discount) || 0,
+        discount,
         commission_rate: Math.round(commissionRate * 100),
-        commission: (price * commissionRate) || 0,
+        commission: price * commissionRate || 0,
         sales: Number(item.sales) || Number(item.sold) || 0,
         shop_name: item.shop_name || item.shopName || "Shopee",
         product_link: finalLink,
@@ -132,7 +143,8 @@ export class ShopeeService {
   }
 
   /**
-   * Generates affiliate links for a list of Shopee URLs.
+   * Converte uma lista de URLs em short links de afiliado (s.shopee.com.br/xxx).
+   * O shortLink nunca aciona captcha e já carrega rastreamento de afiliado.
    */
   static async convertLinks(urls: string[], userShopeeId?: string): Promise<string[]> {
     const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
@@ -146,31 +158,35 @@ export class ShopeeService {
     });
 
     if (error || !result?.success) {
-      console.error("Error converting Shopee links:", error || result?.error || result?.errors);
+      console.error("Erro ao converter links:", error || result?.error || result?.errors);
       throw error || new Error(result?.error || result?.errors?.[0]?.message || "Erro ao converter link");
     }
 
     const urlResult = result.data?.urlGenerate || result.data?.generate_link || result.data?.generateLink;
     const links = Array.isArray(urlResult) ? urlResult : [urlResult].filter(Boolean);
-    return links.map((l: any) => l.short_link || l.shortLink || l.originLink || l.origin_link).filter(Boolean);
+
+    // Prioridade: shortLink > originLink (shortLink é o link limpo s.shopee.com.br/xxx)
+    return links
+      .map((l: any) => l.shortLink || l.short_link || l.originLink || l.origin_link)
+      .filter(Boolean);
   }
 
   /**
-   * Fetches full item details (including all carousel images)
+   * Busca detalhes completos de um produto (incluindo todas as imagens do carrossel).
    */
   static async getItemDetail(shopId: number, itemId: number): Promise<any> {
     try {
       const { data, error } = await supabase.functions.invoke("shopee-prod-search", {
         body: {
           action: "get_item_detail",
-          params: { shop_id: shopId, item_id: itemId }
-        }
+          params: { shop_id: shopId, item_id: itemId },
+        },
       });
 
-      if (error || !data?.success) throw error || new Error("Failed to fetch detail");
+      if (error || !data?.success) throw error || new Error("Falha ao buscar detalhe do produto");
       return data.data;
     } catch (error) {
-      console.error("Error fetching item detail:", error);
+      console.error("Erro ao buscar detalhe:", error);
       return null;
     }
   }
