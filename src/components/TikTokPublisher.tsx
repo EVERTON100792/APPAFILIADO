@@ -61,28 +61,40 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
   // Abrir TikTok
   const openTikTok = () => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const targetUrl = 'https://www.tiktok.com/tiktokstudio/upload?from=webapp';
+    
     if (isMobile) {
-      // Tentar abrir app do TikTok
+      // Disparo de Deep Link robusto
+      const now = Date.now();
       window.location.href = 'tiktok://';
+      
+      // Fallback silencioso após 1.2s se o app não responder
       setTimeout(() => {
-        window.location.href = 'https://www.tiktok.com/tiktokstudio/upload?from=webapp';
-      }, 1500);
+        if (document.visibilityState === 'visible' && (Date.now() - now) < 1500) {
+          window.location.href = targetUrl;
+        }
+      }, 1200);
     } else {
-      window.open('https://www.tiktok.com/tiktokstudio/upload?from=webapp', '_blank');
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
   // Abrir Shopee Videos
   const openShopeeVideos = () => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const targetUrl = 'https://shopee.com.br/videos';
+    
     if (isMobile) {
-      // Tentar abrir app Shopee
+      const now = Date.now();
       window.location.href = 'shopee://';
+      
       setTimeout(() => {
-        window.location.href = 'https://shopee.com.br/videos';
-      }, 1500);
+        if (document.visibilityState === 'visible' && (Date.now() - now) < 1500) {
+          window.location.href = targetUrl;
+        }
+      }, 1200);
     } else {
-      window.open('https://shopee.com.br/videos', '_blank');
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
     }
   };
 

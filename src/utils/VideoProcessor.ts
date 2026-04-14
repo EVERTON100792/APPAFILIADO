@@ -81,48 +81,141 @@ export class VideoProcessor {
     return url;
   }
 
-  private async loadAndResampleAudio(url: string, targetSampleRate: number): Promise<AudioBuffer> {
-    const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
-    const proxyUrl = `${PROXY_BASE}?url=${encodeURIComponent(url)}`;
-    
-    try {
-      console.log(`[VideoProcessor] Carregando √Åudio via Proxy: ${proxyUrl}`);
-      const response = await fetch(proxyUrl);
-      
-      if (!response.ok) {
-        console.error(`[VideoProcessor] Erro de Rede √Åudio: HTTP ${response.status} para URL: ${url}`);
-        throw new Error(`HTTP ${response.status}`);
+
+
+  private generateSyntheticBeat(sampleRate: number, bpm: number = 128, durationSec: number = 35, genre: string = 'house'): AudioBuffer {
+  // Beat sintetico com variacao por genero (house/phonk/funk/lofi/trap)
+    const buf = new AudioBuffer({ numberOfChannels: 2, length: sampleRate * durationSec, sampleRate });
+    const L = buf.getChannelData(0);
+    const R = buf.getChannelData(1);
+    const spb = (60 / bpm) * sampleRate; // samples per beat
+    const totalBeats = Math.floor(sampleRate * durationSec / spb);
+
+    // Padroes de bateria por genero (16 passos = 1 compasso)
+    const patterns: Record<string, { kick: number[], snare: number[], hihat: number[], bass: number[] }> = {
+      'house':  { kick:  [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], bass: [60,0,0,0,0,0,0,65,0,0,0,0,0,0,0,0] },
+      'phonk':  { kick:  [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0], snare: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0], hihat: [1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,1], bass: [55,0,0,55,0,0,69,0,55,0,0,55,0,0,73,0] },
+      'funk':   { kick:  [1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0], snare: [0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,1], hihat: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0], bass: [41,0,0,41,0,0,0,0,41,0,0,41,0,48,0,0] },
+      'lofi':   { kick:  [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0], snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat: [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0], bass: [48,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0] },
+      'trap':   { kick:  [1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0], snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat: [0,1,1,0,1,1,0,1,0,1,1,0,1,1,1,1], bass: [36,0,0,0,0,0,0,36,0,0,33,0,0,0,0,0] },
+    };
+
+    const p = patterns[genre] || patterns['house'];
+    const stepsPerBeat = 4;
+    const stepLen = Math.floor(spb / stepsPerBeat);
+    const totalSteps = Math.floor(sampleRate * durationSec / stepLen);
+
+    const addSine = (ch: Float32Array, offset: number, freq: number, dur: number, amp: number, decay: number) => {
+      for (let s = 0; s < dur && (offset + s) < ch.length; s++) {
+        ch[offset + s] += Math.sin(2 * Math.PI * freq * s / sampleRate) * amp * Math.exp(-s / decay);
       }
-      
-      const arrayBuffer = await response.arrayBuffer();
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const originalBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    };
+    const addNoise = (ch: Float32Array, offset: number, dur: number, amp: number, decay: number) => {
+      for (let s = 0; s < dur && (offset + s) < ch.length; s++) {
+        ch[offset + s] += (Math.random() * 2 - 1) * amp * Math.exp(-s / decay);
+      }
+    };
 
-      if (originalBuffer.sampleRate === targetSampleRate) {
-        return originalBuffer;
+    for (let step = 0; step < totalSteps; step++) {
+      const pat = step % 16;
+      const off = step * stepLen;
+
+      // KICK: sine sweep grave
+      if (p.kick[pat]) {
+        [L, R].forEach(ch => {
+          for (let s = 0; s < stepLen && (off + s) < ch.length; s++) {
+            const env = Math.exp(-s / (sampleRate * 0.055));
+            const freq = 80 + 150 * Math.exp(-s / (sampleRate * 0.025));
+            ch[off + s] += Math.sin(2 * Math.PI * freq * s / sampleRate) * env * 0.75;
+          }
+        });
       }
 
-      // Resampling logic if needed
-      const offlineCtx = new OfflineAudioContext(
-        originalBuffer.numberOfChannels,
-        originalBuffer.duration * targetSampleRate,
-        targetSampleRate
-      );
+      // SNARE: ruido + harmonico
+      if (p.snare[pat]) {
+        [L, R].forEach(ch => { addNoise(ch, off, Math.floor(sampleRate * 0.12), 0.55, sampleRate * 0.04); });
+        [L, R].forEach(ch => { addSine(ch, off, 200, Math.floor(sampleRate * 0.1), 0.2, sampleRate * 0.03); });
+      }
 
-      const source = offlineCtx.createBufferSource();
-      source.buffer = originalBuffer;
-      source.connect(offlineCtx.destination);
-      source.start();
+      // HIHAT: ruido agudo breve
+      if (p.hihat[pat]) {
+        const hhDur = genre === 'trap' ? Math.floor(sampleRate * 0.04) : Math.floor(stepLen / 3);
+        [L, R].forEach(ch => { addNoise(ch, off, hhDur, 0.18, sampleRate * 0.008); });
+      }
 
-      const resampledBuffer = await offlineCtx.startRendering();
-      await audioCtx.close();
-      return resampledBuffer;
-
-    } catch (err) {
-      console.error("[VideoProcessor] Falha fatal no √°udio (usando fallback silencioso):", err);
-      const audioCtx = new AudioContext({ sampleRate: targetSampleRate });
-      return audioCtx.createBuffer(1, targetSampleRate, targetSampleRate);
+      // BASS: nota sinusoidal grave (nota MIDI ? Hz)
+      const bassNote = p.bass[pat];
+      if (bassNote > 0) {
+        const bassFreq = 440 * Math.pow(2, (bassNote - 69) / 12);
+        const bassDur = Math.floor(stepLen * 3.5);
+        [L, R].forEach(ch => { addSine(ch, off, bassFreq, bassDur, 0.35, sampleRate * 0.18); });
+        // HarmÙnico do baixo (oitava + quinta)
+        [L, R].forEach(ch => { addSine(ch, off, bassFreq * 2, bassDur, 0.08, sampleRate * 0.10); });
+      }
     }
+
+    // LoFi: adicionar crackle de vinil
+    if (genre === 'lofi') {
+      for (let s = 0; s < L.length; s++) {
+        if (Math.random() < 0.003) { L[s] += (Math.random() - 0.5) * 0.12; R[s] += (Math.random() - 0.5) * 0.12; }
+      }
+    }
+
+    // Normalizar para evitar clipping
+    let mx = 0;
+    for (let i = 0; i < L.length; i++) mx = Math.max(mx, Math.abs(L[i]), Math.abs(R[i]));
+    if (mx > 0.9) {
+      const gain = 0.88 / mx;
+      for (let i = 0; i < L.length; i++) { L[i] *= gain; R[i] *= gain; }
+    }
+    return buf;
+  }
+
+
+  private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house'): Promise<AudioBuffer> {
+    const SUPABASE_PROXY = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
+    // NUNCA tenta URL direta (CORS no browser). Sempre via proxy.
+    const proxies = [
+      `${SUPABASE_PROXY}?url=${encodeURIComponent(url)}`,
+      `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    ];
+
+    for (const proxyUrl of proxies) {
+      try {
+        const response = await fetch(proxyUrl, { cache: 'no-store' });
+        if (!response.ok) continue;
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength < 1000) continue;
+
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const originalBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+
+        if (originalBuffer.sampleRate === targetSampleRate) {
+          await audioCtx.close();
+          return originalBuffer;
+        }
+        const offlineCtx = new OfflineAudioContext(
+          originalBuffer.numberOfChannels,
+          Math.ceil(originalBuffer.duration * targetSampleRate),
+          targetSampleRate
+        );
+        const src = offlineCtx.createBufferSource();
+        src.buffer = originalBuffer;
+        src.connect(offlineCtx.destination);
+        src.start();
+        const resampled = await offlineCtx.startRendering();
+        await audioCtx.close();
+        return resampled;
+
+      } catch (e) {
+        console.warn(`[Audio] Proxy falhou: ${proxyUrl.substring(0, 50)}`);
+      }
+    }
+
+    // Fallback definitivo: gerar beat sintetico (100% funciona, sem CORS)
+    console.warn('[Audio] Usando beat sintetico como fallback');
+    return this.generateSyntheticBeat(targetSampleRate, bpm, 35, genre);
   }
 
 
@@ -424,14 +517,28 @@ export class VideoProcessor {
         let audioBuffer: AudioBuffer | null = null;
         if (options.musicUrl) {
           try {
-            audioBuffer = await this.loadAndResampleAudio(options.musicUrl, 44100);
+            audioBuffer = await this.loadAndResampleAudio(options.musicUrl, 44100, (options as any).musicBpm || 128, (options as any).musicGenre || 'house');
           } catch (e) {
             console.warn("Falha ao carregar √°udio, seguindo sem som");
           }
         }
 
         const filterCSS = this.getFilterCSS(options.filter || 'elite');
-        const transitionTypes = options.transitionList || ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash'];
+        const CAPCUT_TRANSITIONS = [
+          'zoomPunch', 'whipLeft', 'whipRight', 'lightLeak', 'beatFlash', 'glitch',
+          'slideUp', 'slideDown', 'zoomOut', 'shake', 'spin', 'fade'
+        ];
+        const shuffledTransitions = [...CAPCUT_TRANSITIONS].sort(() => Math.random() - 0.5);
+        const getSlideTransition = (slideNum: number) => shuffledTransitions[slideNum % shuffledTransitions.length];
+
+        // DireÁıes Ken Burns ˙nicas por slide (aleatÛrias)
+        const kbDirections = [
+          { panX: 0, panY: -1 }, { panX: 0, panY: 1 },
+          { panX: -1, panY: 0 }, { panX: 1, panY: 0 },
+          { panX: -0.5, panY: -0.5 }, { panX: 0.5, panY: 0.5 }
+        ].sort(() => Math.random() - 0.5);
+
+        // Sequencia unica de transicoes por slide (embaralhada por video - nunca repete igual)
 
         // 4. Render Loop (Sync Video + Audio)
         for (let i = 0; i < totalFrames; i++) {
@@ -479,14 +586,28 @@ export class VideoProcessor {
             this.ctx.fillText("OU LINK NA BIO", W / 2, H / 2 + 60);
           }
 
-          // Premium Transitions
-          const transitionZone = 0.6; // 600ms transition
-          if (progress < transitionZone && i > 0 && !isCTA) {
-            const tType = transitionTypes[Math.floor(currentTime / slideChangeInterval) % transitionTypes.length];
-            // Normalize progress for the transition zone
-            const tp = progress / transitionZone;
-            // Fake the timestamp for applyTransition
-            this.applyTransitionEffect(tType, tp * 1.5, [0], W, H);
+          // Growth Hack Overlays (Novidade!)
+          this.drawGrowthHacks(currentTime, W, H);
+
+          // CapCut Pro Transitions - unicas por slide, nunca repetem na mesma ordem
+          const slideNum = Math.floor(currentTime / slideChangeInterval);
+          const tType = getSlideTransition(slideNum);
+          const tZone = 0.35; // 35% do slide = transicao de entrada (beat-sync)
+
+          if (progress < tZone && slideNum > 0 && !isCTA) {
+            const tp = progress / tZone; // 0 ? 1 dentro da zona de transicao
+            this.applyCapCutTransition(tType, tp, W, H);
+          }
+
+          // Mid-slide: pulse sutil no beat (sincroniza com BPM)
+          const musicBpm = (options as any).musicBpm || 128;
+          const beatInterval = 60 / musicBpm;
+          const beatPhase = (currentTime % beatInterval) / beatInterval;
+          if (beatPhase < 0.05 && !isCTA) {
+            const beatPulse = 1 + (1 - beatPhase / 0.05) * 0.015;
+            this.ctx.save();
+            this.ctx.transform(beatPulse, 0, 0, beatPulse, W * (1 - beatPulse) / 2, H * (1 - beatPulse) / 2);
+            this.ctx.restore();
           }
 
           // Encode Video Frame
@@ -544,6 +665,127 @@ export class VideoProcessor {
         reject(err);
       }
     });
+  }
+
+  // CapCut Pro: 12 transicoes unicas com qualidade cinematografica
+  private applyCapCutTransition(type: string, progress: number, W: number, H: number) {
+    const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
+    const ep = ease(progress); // 0 -> 1
+
+    this.ctx.save();
+    switch (type) {
+
+      case 'zoomPunch': {
+        // Zoom rapido para dentro ó efeito "punch in" do CapCut
+        const scale = 1 + (1 - ep) * 0.4;
+        this.ctx.transform(scale, 0, 0, scale, W * (1 - scale) / 2, H * (1 - scale) / 2);
+        this.ctx.globalAlpha = ep;
+        break;
+      }
+      case 'zoomOut': {
+        const scale = 0.6 + ep * 0.4;
+        this.ctx.transform(scale, 0, 0, scale, W * (1 - scale) / 2, H * (1 - scale) / 2);
+        this.ctx.globalAlpha = ep;
+        break;
+      }
+      case 'whipLeft': {
+        // Whip pan horizontal ó filmes de acao
+        const offsetX = W * (1 - ep) * -1;
+        this.ctx.translate(offsetX, 0);
+        // Motion blur simulado com rect semitransparente
+        const blur = (1 - ep);
+        this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
+        this.ctx.fillRect(-W, 0, W * 2, H);
+        break;
+      }
+      case 'whipRight': {
+        const offsetX = W * (1 - ep);
+        this.ctx.translate(offsetX, 0);
+        const blur = (1 - ep);
+        this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
+        this.ctx.fillRect(-W, 0, W * 2, H);
+        break;
+      }
+      case 'slideUp': {
+        const offsetY = H * (1 - ep) * -1;
+        this.ctx.translate(0, offsetY);
+        this.ctx.globalAlpha = Math.min(1, ep * 1.5);
+        break;
+      }
+      case 'slideDown': {
+        const offsetY = H * (1 - ep);
+        this.ctx.translate(0, offsetY);
+        this.ctx.globalAlpha = Math.min(1, ep * 1.5);
+        break;
+      }
+      case 'lightLeak': {
+        // Vazamento de luz premium ó simula lens flare
+        this.ctx.globalAlpha = ep;
+        const leakIntensity = (1 - ep) * 0.8;
+        const grad = this.ctx.createRadialGradient(W * 0.2, H * 0.15, 0, W * 0.2, H * 0.15, W * 0.8);
+        grad.addColorStop(0, `rgba(255,220,100,${leakIntensity})`);
+        grad.addColorStop(0.5, `rgba(255,160,80,${leakIntensity * 0.3})`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, 0, W, H);
+        break;
+      }
+      case 'beatFlash': {
+        // Flash branco + zoom ó tipico CapCut viral
+        const flashEnv = Math.exp(-progress * 6);
+        this.ctx.globalAlpha = ep;
+        if (flashEnv > 0.01) {
+          this.ctx.fillStyle = `rgba(255,255,255,${flashEnv * 0.9})`;
+          this.ctx.fillRect(0, 0, W, H);
+        }
+        const s = 1 + flashEnv * 0.1;
+        this.ctx.transform(s, 0, 0, s, W * (1 - s) / 2, H * (1 - s) / 2);
+        break;
+      }
+      case 'glitch': {
+        // Glitch horizontal slices
+        this.ctx.globalAlpha = ep;
+        const slices = 6;
+        const sliceH = H / slices;
+        for (let s = 0; s < slices; s++) {
+          const shift = (Math.random() - 0.5) * W * 0.08 * (1 - progress);
+          const srcY = s * sliceH;
+          try {
+            const imgData = this.ctx.getImageData(0, srcY, W, sliceH);
+            this.ctx.putImageData(imgData, shift, srcY);
+            // Color aberration
+            this.ctx.fillStyle = `rgba(255,0,128,${(1 - progress) * 0.08})`;
+            this.ctx.fillRect(shift + 4, srcY, W, sliceH);
+          } catch(e) {}
+        }
+        break;
+      }
+      case 'shake': {
+        // Camera shake ó impacto
+        const intensity = (1 - ep) * 12;
+        this.ctx.translate(
+          (Math.random() - 0.5) * intensity,
+          (Math.random() - 0.5) * intensity
+        );
+        this.ctx.globalAlpha = Math.min(1, ep * 2);
+        break;
+      }
+      case 'spin': {
+        // Rotacao leve ó 3D tilt
+        const angle = (1 - ep) * Math.PI * 0.08;
+        this.ctx.translate(W / 2, H / 2);
+        this.ctx.rotate(angle);
+        this.ctx.translate(-W / 2, -H / 2);
+        this.ctx.globalAlpha = ep;
+        break;
+      }
+      case 'fade':
+      default: {
+        this.ctx.globalAlpha = ep;
+        break;
+      }
+    }
+    this.ctx.restore();
   }
 
   private applyTransitionEffect(type: string, ct: number, timestamps: number[], W: number, H: number) {
@@ -829,6 +1071,97 @@ export class VideoProcessor {
     this.ctx.fillText('#viral #shopee #achadinhos', W / 2, hashY);
 
     this.ctx.restore();
+  }
+
+  private drawGrowthHacks(time: number, W: number, H: number) {
+    // 1. Selo de Frete Gr√°tis (Efeito Emerg√™ncia)
+    if (time > 1 && time < 8) {
+      const sealSize = Math.floor(W * 0.18);
+      const pulse = 1 + Math.sin(time * 10) * 0.05;
+      
+      this.ctx.save();
+      this.ctx.translate(W * 0.82, H * 0.12);
+      this.ctx.scale(pulse, pulse);
+      this.ctx.rotate(Math.PI / 12);
+      
+      // C√≠rculo
+      this.ctx.fillStyle = '#ff4d4f';
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, sealSize/2, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Texto
+      this.ctx.fillStyle = 'white';
+      this.ctx.textAlign = 'center';
+      this.ctx.font = `bold ${Math.floor(sealSize * 0.22)}px Inter`;
+      this.ctx.fillText("FRETE", 0, -5);
+      this.ctx.fillText("GR√ÅTIS", 0, 15);
+      
+      this.ctx.restore();
+    }
+
+    // 2. Bal√£o de Prova Social (Pergunta do Cliente)
+    if (time > 12 && time < 17) {
+      const progress = (time - 12) / 5;
+      const opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.8 ? (1 - progress) / 0.2 : 1);
+      
+      this.ctx.save();
+      this.ctx.globalAlpha = opacity;
+      
+      const bW = W * 0.7;
+      const bH = H * 0.08;
+      const bX = (W - bW) / 2;
+      const bY = H * 0.25;
+      
+      // Fundo Bal√£o
+      this.ctx.fillStyle = 'white';
+      this.ctx.beginPath();
+      this.ctx.roundRect(bX, bY, bW, bH, 20);
+      this.ctx.fill();
+      
+      // Tri√¢ngulo do bal√£o
+      this.ctx.beginPath();
+      this.ctx.moveTo(bX + 40, bY + bH);
+      this.ctx.lineTo(bX + 60, bY + bH + 20);
+      this.ctx.lineTo(bX + 80, bY + bH);
+      this.ctx.fill();
+      
+      // Avatar Fake
+      this.ctx.fillStyle = '#f0f0f0';
+      this.ctx.beginPath();
+      this.ctx.arc(bX + 40, bY + bH/2, 20, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Texto da Pergunta
+      this.ctx.fillStyle = '#333';
+      this.ctx.textAlign = 'left';
+      this.ctx.font = `500 ${Math.floor(W * 0.03)}px Inter`;
+      this.ctx.fillText("Ainda tem estoque? Chega r√°pido?", bX + 75, bY + bH/2 + 8);
+      
+      this.ctx.restore();
+    }
+
+    // 3. Selo de Cupom (Efeito Glow)
+    if (time > 20 && time < 26) {
+      this.ctx.save();
+      const cW = W * 0.6;
+      const cH = H * 0.06;
+      const cX = (W - cW) / 2;
+      const cY = H * 0.15;
+      
+      this.ctx.shadowColor = '#fbbf24';
+      this.ctx.shadowBlur = 15;
+      this.ctx.fillStyle = '#fbbf24';
+      this.ctx.beginPath();
+      this.ctx.roundRect(cX, cY, cW, cH, 12);
+      this.ctx.fill();
+      
+      this.ctx.fillStyle = 'black';
+      this.ctx.textAlign = 'center';
+      this.ctx.font = `black ${Math.floor(W * 0.035)}px Inter`;
+      this.ctx.fillText("üéüÔ∏è USE SEU CUPOM AQU√ç!", W / 2, cY + cH/2 + 10);
+      this.ctx.restore();
+    }
   }
 
   private wrapText(text: string, fontSize: number, maxWidth: number): string[] {

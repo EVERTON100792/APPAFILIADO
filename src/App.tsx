@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import "./index.css";
 import {
+  Globe,
+  Music,
   ShoppingBag,
   Search,
   Video,
@@ -29,7 +31,7 @@ import {
   Unlock,
   Home,
   Type,
-  Clock,
+  Clock
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -566,48 +568,13 @@ const App: React.FC = () => {
   const [treatingProgress, setTreatingProgress] = useState(8);
   const [treatingChecklist, setTreatingChecklist] = useState<string[]>([]);
 
-  const viralTracks: { id: string; name: string; url: string }[] = [
-    {
-      id: "phonk",
-      name: "Phonk Viral 🏎️",
-      url: "https://cdn.pixabay.com/download/audio/2022/11/22/audio_feb499f57d.mp3?filename=phonk-125039.mp3",
-    },
-    {
-      id: "bass",
-      name: "Bass Boosted 🔊",
-      url: "https://cdn.pixabay.com/download/audio/2023/09/11/audio_141662243d.mp3?filename=bass-164744.mp3",
-    },
-    {
-      id: "happy",
-      name: "Happy Shopee 🛍️",
-      url: "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=funny-ukulele-11721.mp3",
-    },
-    {
-      id: "tension",
-      name: "Suspense Build 🕒",
-      url: "https://cdn.pixabay.com/download/audio/2022/03/10/audio_c36395dc6c.mp3?filename=suspense-7071.mp3",
-    },
-    {
-      id: "lofi",
-      name: "Lofi Chill ☕",
-      url: "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1002e1c944.mp3?filename=lofi-study-112191.mp3",
-    },
-    {
-      id: "funk",
-      name: "Funk Brasil 🇧🇷",
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    },
-    {
-      id: "electronic",
-      name: "Electronic ⚡",
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-    },
-    {
-      id: "upbeat",
-      name: "Upbeat Energy 🚀",
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
-    },
-  ];
+  // Músicas da MusicLibrary — embaralhadas para sempre mostrar opções diferentes
+  const viralTracks = useMemo(() => {
+    return [...VIRAL_MUSIC]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 12)
+      .map(m => ({ id: m.id, name: m.name, url: m.url }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bio Store Quick Add State
   const [bioTitle, setBioTitle] = useState("");
@@ -1108,8 +1075,8 @@ const App: React.FC = () => {
 
     const payload = {
       user_id: String(userId),
-      product_id: String(product.id || product.product_id || "sem-id"),
-      title: String(product.title || "Produto sem título"),
+      product_id: String(product.id || product.itemid || product.item_id || product.product_id || "sem-id"),
+      title: String(product.title || product.item_name || product.name || product.query || "Produto Sinc"),
       platform: String(platform || "Shopee"),
     };
 
@@ -1554,6 +1521,10 @@ const App: React.FC = () => {
       }
 
       console.log("[addToBio] Success! Inserted:", JSON.stringify(data));
+      
+      // Registrar no histórico global (Cloud Sinc)
+      await saveToSupabase(p, "loja");
+      
       showToast("PRODUTO ADICIONADO À BIO! 🔗");
     } catch (err: any) {
       console.error("[addToBio] Error:", err?.message || err);
@@ -2058,7 +2029,9 @@ const App: React.FC = () => {
         transitionList: newTransitions,
         legend: "",
         isMuted: false,
-        musicUrl: music.url
+        musicUrl: music.url,
+        musicBpm: music.bpm || 128,
+        musicGenre: music.genre || 'house',
       } as any;
 
       const price = product.price || 0;
@@ -2210,7 +2183,12 @@ const App: React.FC = () => {
         `Encontradas ${images.length} imagens`
       ]);
 
-      const copy = Copywriter.generateCopy(product.item_name, `R$ ${product.price}`, activeNiche || 'default');
+      const copy = Copywriter.generateCopy(
+        product.item_name, 
+        `R$ ${product.price}`, 
+        activeNiche || 'default',
+        storeSlug
+      );
       
       const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
       const music = VIRAL_MUSIC[musicIndex];
@@ -2783,13 +2761,39 @@ const App: React.FC = () => {
 
     const openPublishingDestination = () => {
       const target = getPlatformUrl(selectedPlatform);
-      if (isMobile && selectedPlatform === "tiktok") {
-        // No mobile, usamos href para disparar o deep link do app com máxima prioridade
-        window.location.href = target;
+      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ("ontouchstart" in window);
+      
+      if (isMobileDevice) {
+        // Redirecionamento robusto para mobile em App.tsx
+        const now = Date.now();
+        const protocol = selectedPlatform === "tiktok" ? "tiktok://" : "shopee://";
+        addLog(`Tentando abrir protocolo ${protocol}...`, "info");
+        window.location.href = protocol;
+        
+        setTimeout(() => {
+          if (document.visibilityState === "visible" && (Date.now() - now) < 2000) {
+            addLog("App não detectado. Redirecionando para Web...", "warn");
+            window.location.href = target;
+          }
+        }, 1500);
       } else {
         window.open(target, "_blank", "noopener,noreferrer");
       }
     };
+    /* EX-LOGIC:
+    if (isMobile && selectedPlatform === "tiktok") {
+      window.location.href = target;
+    } else {
+      window.open(target, "_blank", "noopener,noreferrer");
+    } */
+
+
+
+
+
+
+
+
 
     const createMp4File = (blob: Blob) => {
       const fileName = `viral_squad_${Date.now()}.mp4`;
@@ -4641,42 +4645,53 @@ const App: React.FC = () => {
 
                     return (
                       <motion.div
-                        key={h.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="tech-card p-5 flex justify-between items-center group relative overflow-hidden bg-slate-900/40"
-                      >
-                        <div className="absolute inset-y-0 left-0 w-1.5 bg-accent" />
+  key={h.id}
+  initial={{ opacity: 0, x: -10 }}
+  animate={{ opacity: 1, x: 0 }}
+  className="tech-card p-4 flex justify-between items-center group relative overflow-hidden bg-slate-900/60 border-white/5 hover:border-accent/30 transition-all"
+>
+  <div className={`absolute inset-y-0 left-0 w-1 ${
+    h.platform === 'tiktok' ? 'bg-[#ff0050]' : 
+    h.platform === 'shopee' ? 'bg-[#ee4d2d]' : 
+    'bg-emerald-500'
+  }`} />
 
-                        <div className="space-y-2 min-w-0 pr-4">
-                          <h3 className="text-sm font-black uppercase text-slate-100 truncate italic tracking-tight">
-                            {h.title || item?.title || "PRODUTO SINC"}
-                          </h3>
-                          <div className="flex items-center gap-4">
-                            <span className="text-[10px] text-accent font-black uppercase tracking-[0.2em]">
-                              {getTimeAgo(new Date(h.timestamp).getTime())}
-                            </span>
-                            <div className="w-1 h-1 bg-white/10 rounded-full" />
-                            <div className="flex items-center gap-1.5 opacity-40">
-                              <Database size={10} />
-                              <span className="text-[8px] font-black uppercase tracking-widest">
-                                Local Sinc
-                              </span>
-                            </div>
-                          </div>
-                        </div>
+  <div className="flex items-center gap-4 min-w-0 flex-1 pr-4">
+    <div className="w-10 h-10 rounded-xl bg-slate-950 flex items-center justify-center border border-white/5">
+      {h.platform === 'tiktok' && <Music size={18} className="text-[#ff0050]" />}
+      {h.platform === 'shopee' && <ShoppingBag size={18} className="text-[#ee4d2d]" />}
+      {h.platform === 'loja' && <Globe size={18} className="text-emerald-500" />}
+      {(!h.platform || h.platform === 'Shopee') && <ShoppingBag size={18} className="text-orange-500" />}
+    </div>
+    
+    <div className="space-y-1.5 min-w-0 pr-4">
+      <h3 className="text-[11px] font-black uppercase text-slate-100 truncate italic tracking-tight">
+        {h.title || "PRODUTO SINC"}
+      </h3>
+      <div className="flex items-center gap-3">
+        <span className="text-[8px] text-white/40 font-black uppercase tracking-[0.2em]">
+          {getTimeAgo(new Date(h.timestamp).getTime())}
+        </span>
+        <div className="w-1 h-1 bg-white/10 rounded-full" />
+        <span className="text-[8px] font-black uppercase tracking-widest text-accent/60">
+          {h.platform?.toUpperCase() || "SINC"}
+        </span>
+      </div>
+    </div>
+  </div>
 
-                        <motion.button
-                          whileHover={{
-                            backgroundColor: "rgba(239, 68, 68, 0.2)",
-                          }}
-                          whileTap={{ scale: 0.9 }}
-                          className="w-12 h-12 rounded-2xl bg-red-500/5 border border-red-500/10 text-red-400/40 flex items-center justify-center transition-all"
-                          onClick={() => unblock(h.id)}
-                        >
-                          <Unlock size={20} />
-                        </motion.button>
-                      </motion.div>
+  <motion.button
+    whileHover={{
+      backgroundColor: "rgba(239, 68, 68, 0.2)",
+      scale: 1.05
+    }}
+    whileTap={{ scale: 0.9 }}
+    className="w-10 h-10 rounded-xl bg-red-500/5 border border-red-500/10 text-red-400/40 flex items-center justify-center transition-all"
+    onClick={() => unblock(h.id)}
+  >
+    <Unlock size={16} />
+  </motion.button>
+</motion.div>
                     );
                   })}
                 </div>
@@ -4697,6 +4712,7 @@ const App: React.FC = () => {
               <ShopeeHub 
                 onShowToast={showToast} 
                 userStoreSlug={storeSlug} 
+                onSaveHistory={saveToSupabase}
                 onViralize={(p, videoType, customImages) => {
                   if (videoType === 'autoral') {
                     handleCreateAutoralVideo(p, customImages);
