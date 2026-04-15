@@ -96,18 +96,18 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
   const niches = [
-    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensilios cozinha panela" },
-    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem skincare cuidados" },
-    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "gadgets eletronicos fone" },
-    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoracao casa almofada" },
-    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador gaveta guarda roupa" },
-    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "produto limpeza esponja" },
-    { id: "setup",     name: "Setup",        icon: "🖥️", keyword: "suporte notebook teclado mouse" },
-    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "acessorios cachorro gato petshop" },
-    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo infantil educativo" },
-    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achado shopee viral" },
-    { id: "moda",      name: "Moda",         icon: "👗", keyword: "roupa feminina vestido tendencia" },
-    { id: "fitness",   name: "Fitness",      icon: "💪", keyword: "academia treino fitness" },
+    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensilio cozinha" },
+    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem" },
+    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "eletronico fone" },
+    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoração casa" },
+    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador" },
+    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "limpeza pratico" },
+    { id: "setup",     name: "Setup",        icon: "🖥️", keyword: "setup gamer" },
+    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "gato cachorro" },
+    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo infantil" },
+    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achadinhos shopee" },
+    { id: "moda",      name: "Moda",         icon: "👗", keyword: "moda feminina" },
+    { id: "fitness",   name: "Fitness",      icon: "💪", keyword: "treino casa" },
   ];
 
   useEffect(() => {
@@ -229,7 +229,19 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
           ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 2, page_number: 1 }, userShopeeId || undefined).catch(() => []),
         ]);
         finalProducts = deduplicate([...p1, ...p2, ...p3]);
-        if (overrideKeyword === undefined) finalProducts = finalProducts.sort(() => Math.random() - 0.5);
+        if (overrideKeyword !== undefined) {
+          // Filtrar focando em "Achadinhos": Preço baixo (impulse buy), boas vendas, boa comissão
+          finalProducts = finalProducts
+            .filter(p => p.price >= 5 && p.price <= 160) // Ticket ideal para conversão viral
+            .sort((a, b) => {
+               // Ordena mixando volume de vendas e taxa de comissão
+               const scoreA = (a.sales || 0) * (a.commission_rate || 1);
+               const scoreB = (b.sales || 0) * (b.commission_rate || 1);
+               return scoreB - scoreA;
+            });
+        } else {
+          finalProducts = finalProducts.sort(() => Math.random() - 0.5);
+        }
 
       // ── MODO RELÂMPAGO ─────────────────────────────────────────────────────────
       } else if (activeTab === "lightning") {
@@ -277,12 +289,26 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
       // ── FALLBACK GLOBAL ────────────────────────────────────────────────────────
       if (finalProducts.length === 0) {
-        console.warn('Busca zerou — executando fallback global');
-        const fallback = await ShopeeService.searchProducts(
-          { keyword: "achadinhos shopee", sort_by: 3, page_number: 1 },
+        console.warn('Busca zerou — executando fallback estrito ao nicho atual');
+        const fallbackKw = activeTab === "all" && overrideKeyword !== undefined ? overrideKeyword : (keyword || "achadinhos shopee");
+        
+        let fallback = await ShopeeService.searchProducts(
+          { keyword: fallbackKw, sort_by: 3, page_number: 1 },
           userShopeeId || undefined
         );
-        finalProducts = deduplicate(fallback);
+        
+        // Se ainda não trouxer nada (muito raro em buscas largas sem filtro API), testa com as configs default da API
+        if (fallback.length === 0) {
+           fallback = await ShopeeService.searchProducts(
+            { keyword: fallbackKw, sort_by: 0, page_number: 1 },
+            userShopeeId || undefined
+          );
+        }
+
+        finalProducts = deduplicate(fallback)
+          // Filtro mais relaxado para fallback (para não zerar 2x): até 280 reais
+          .filter(p => p.price <= 280)
+          .sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
       }
 
       setProducts(finalProducts);

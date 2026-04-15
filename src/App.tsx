@@ -2453,22 +2453,33 @@ const App: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      const processor = new VideoProcessor();
-      const options: ProcessingOptions = {
-        filter: activeFilter,
-        legend: videoLegend,
-        isMuted: isMuted,
-        transition: activeTransition as any,
-        trimStart: trimStart,
-        trimEnd: trimEnd || undefined,
-        transitionTimestamps: transitionTimestamps,
-        existingVideoEl: videoRef.current || undefined,
-        musicUrl: selectedMusic || undefined,
-        audioMixMode: audioMixOption,
-      };
+      const hasEdits = activeFilter !== 'none' || videoLegend.trim() !== '' || activeTransition !== 'none' || (trimEnd > 0 && trimEnd !== trimStart) || selectedMusic !== null || isMuted;
 
-      showToast("RENDERIZANDO VÍDEO... ⚙️");
-      const blob = await processor.renderVideo(videoData.url, options);
+      let blob: Blob;
+
+      if (!hasEdits && videoData.url.startsWith('blob:')) {
+        const resp = await fetch(videoData.url);
+        blob = await resp.blob();
+      } else {
+        const processor = new VideoProcessor();
+        const options: ProcessingOptions = {
+          filter: activeFilter,
+          legend: videoLegend,
+          isMuted: isMuted,
+          transition: activeTransition as any,
+          trimStart: trimStart,
+          trimEnd: trimEnd || undefined,
+          transitionTimestamps: transitionTimestamps,
+          existingVideoEl: videoRef.current || undefined,
+          musicUrl: selectedMusic || undefined,
+          audioMixMode: audioMixOption,
+        };
+
+        const blobResult = await processor.renderVideo(videoData.url, options);
+        blob = blobResult;
+      }
+
+
       setPreviewBlob(blob);
 
       if (!isAuto) {
