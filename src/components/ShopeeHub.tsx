@@ -72,6 +72,92 @@ const deduplicate = (items: ShopeeProduct[]) => {
   return uniqueItems;
 };
 
+const SwipeableImageCard: React.FC<{ product: ShopeeProduct }> = ({ product }) => {
+  const [images, setImages] = useState<string[]>([product.item_image]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+
+  const fetchCarousel = async () => {
+    if (fetched || loading) return;
+    setLoading(true);
+    try {
+      const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
+      let newImages: string[] = [];
+      const rawImages = detail?.item?.images || detail?.images || detail?.image_list || detail?.edge_images || [];
+      
+      if (Array.isArray(rawImages) && rawImages.length > 0) {
+        newImages = rawImages.map((h: any) => {
+          const hash = typeof h === "string" ? h : h.hash || h.url || h;
+          if (hash.startsWith("http")) return hash;
+          return `https://down-br.img.susercontent.com/file/${hash}`;
+        });
+        
+        // Remove duplicates and ensure fallback is preserved if API fails
+        if (newImages.length > 0) {
+           setImages([...new Set([...newImages, product.item_image])]);
+        }
+      }
+    } catch(err) {
+    } finally {
+      setFetched(true);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div 
+      className="aspect-square rounded-xl overflow-hidden relative border border-white/10 bg-slate-950 flex overflow-x-auto snap-x snap-mandatory niche-selector scroll-smooth"
+      onMouseEnter={fetchCarousel}
+      onTouchStart={fetchCarousel}
+    >
+      {images.map((imgUrl, i) => (
+        <div key={i} className="min-w-full h-full shrink-0 snap-center relative">
+          <img 
+            src={imgUrl} 
+            draggable={false}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110" 
+            alt={product.item_name} 
+          />
+          {i === 0 && (
+            <>
+              <div className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[9px] font-black px-2 py-0.5 rounded-md pointer-events-none z-10">
+                {product.commission_rate}%
+              </div>
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 transition-all duration-300 flex items-center justify-center pointer-events-none z-10">
+                <span className="text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                  <ArrowRight size={12} /> Ver na Shopee
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      ))}
+      
+      {images.length > 1 && (
+        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 z-20 pointer-events-none">
+          {images.slice(0, 5).map((_, i) => (
+            <div key={i} className="w-1.5 h-1.5 rounded-full bg-white/80 shadow-[0_0_3px_rgba(0,0,0,0.8)]" />
+          ))}
+        </div>
+      )}
+
+      {!fetched && !loading && images.length === 1 && (
+        <div className="absolute bottom-2 right-2 flex gap-0.5 z-20 pointer-events-none opacity-50">
+           <div className="w-1 h-1 rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
+           <div className="w-1 h-1 rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
+           <div className="w-1 h-1 rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
+        </div>
+      )}
+
+      {loading && (
+        <div className="absolute bottom-2 right-2 z-20 pointer-events-none">
+           <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin shadow-xl" />
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug: propStoreSlug, onViralize, onSaveHistory }) => {
   const [keyword, setKeyword] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("all");
@@ -332,7 +418,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       
       const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
       let images: string[] = [];
-      const rawImages = detail?.item?.images || detail?.images || detail?.image_list || [];
+      const rawImages = detail?.item?.images || detail?.images || detail?.image_list || detail?.edge_images || [];
       
       if (Array.isArray(rawImages) && rawImages.length > 0) {
         images = rawImages.map((h: any) => {
@@ -528,17 +614,27 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       </div>
 
       {activeTab === "all" && (
-        <div className="grid grid-cols-4 gap-2">
-          {niches.map((n) => (
-            <button
-              key={n.id}
-              onClick={() => { setKeyword(n.name); handleSearch(n.keyword); }}
-              className="h-16 bg-slate-900/40 border border-white/5 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95"
-            >
-              <span className="text-lg">{n.icon}</span>
-              <span className="text-[8px] font-bold text-white/50 uppercase truncate w-full px-1 text-center">{n.name}</span>
-            </button>
-          ))}
+        <div className="flex overflow-x-auto gap-3 pb-4 px-1 mt-1 niche-selector snap-x">
+          {niches.map((n) => {
+            const isSelected = keyword === n.name;
+            return (
+              <button
+                key={n.id}
+                onClick={() => { setKeyword(n.name); handleSearch(n.keyword, true); }}
+                className={`flex flex-col items-center justify-center gap-1.5 min-w-[72px] shrink-0 snap-start active:scale-95 transition-all outline-none relative group`}
+              >
+                <div className={`w-[60px] h-[60px] rounded-[1.25rem] flex items-center justify-center text-2xl transition-all shadow-xl ${isSelected ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-emerald-500/20 scale-105' : 'bg-slate-900 border border-white/5 shadow-black/40 group-hover:bg-slate-800'}`}>
+                  {n.icon}
+                </div>
+                <span className={`text-[9px] font-black uppercase tracking-widest text-center transition-colors ${isSelected ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                  {n.name}
+                </span>                
+                {isSelected && (
+                  <div className="absolute -bottom-1.5 w-1 h-1 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,1)]" />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -564,17 +660,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
               onClick={(e) => e.stopPropagation()}
               className="block relative group/img"
             >
-              <div className="aspect-square rounded-xl overflow-hidden relative border border-white/10 bg-slate-950">
-                <img src={product.item_image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
-                <div className="absolute top-2 left-2 bg-emerald-500 text-slate-950 text-[9px] font-black px-2 py-0.5 rounded-md">
-                  {product.commission_rate}%
-                </div>
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 transition-all duration-300 flex items-center justify-center rounded-xl">
-                  <span className="text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                    <ArrowRight size={12} /> Ver na Shopee
-                  </span>
-                </div>
-              </div>
+              <SwipeableImageCard product={product} />
             </a>
             <div className="flex flex-col gap-1.5 px-1">
               <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
@@ -759,3 +845,9 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     </div>
   );
 };
+
+
+
+
+
+

@@ -184,10 +184,13 @@ export class ShopeeService {
       });
 
       if (error || !data?.success) throw error || new Error("Falha ao buscar detalhe do produto");
-      return data.data;
+        const out = data.data || {};
+        out.edge_images = data.images || [];
+        return out;
     } catch (error) {
       console.error("Erro ao buscar detalhe:", error);
       return null;
     }
   }
 }
+
