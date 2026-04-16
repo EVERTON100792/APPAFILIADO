@@ -180,7 +180,18 @@ export class VideoProcessor {
 
   private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house'): Promise<AudioBuffer> {
     const SUPABASE_PROXY = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
-    // NUNCA tenta URL direta (CORS no browser). Sempre via proxy.
+    
+    // 1. Detecta URLs locais/blob e busca direto (Ignora Proxy)
+    if (url.startsWith('blob:') || url.startsWith('http://localhost') || url.startsWith('/')) {
+      try {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        return this.processAudioBuffer(arrayBuffer, targetSampleRate);
+      } catch (e) {
+        console.warn("[Audio] Falha ao carregar áudio local direto:", e);
+      }
+    }
+
     const proxies = [
       `${SUPABASE_PROXY}?url=${encodeURIComponent(url)}`,
       `https://corsproxy.io/?${encodeURIComponent(url)}`,
@@ -191,37 +202,35 @@ export class VideoProcessor {
       try {
         const response = await fetch(proxyUrl, { cache: 'no-store' });
         if (!response.ok) continue;
-        const arrayBuffer = await response.arrayBuffer();
-        if (arrayBuffer.byteLength < 1000) continue;
-
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const originalBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-
-        if (originalBuffer.sampleRate === targetSampleRate) {
-          await audioCtx.close();
-          return originalBuffer;
-        }
-        const offlineCtx = new OfflineAudioContext(
-          originalBuffer.numberOfChannels,
-          Math.ceil(originalBuffer.duration * targetSampleRate),
-          targetSampleRate
-        );
-        const src = offlineCtx.createBufferSource();
-        src.buffer = originalBuffer;
-        src.connect(offlineCtx.destination);
-        src.start();
-        const resampled = await offlineCtx.startRendering();
-        await audioCtx.close();
-        return resampled;
-
+        return this.processAudioBuffer(arrayBuffer, targetSampleRate);
       } catch (e) {
         console.warn(`[Audio] Proxy falhou: ${proxyUrl.substring(0, 50)}`);
       }
     }
 
-    // Fallback definitivo: gerar beat sintetico (100% funciona, sem CORS)
-    console.warn('[Audio] Usando beat sintetico como fallback');
-    return this.generateSyntheticBeat(targetSampleRate, bpm, 35, genre);
+  }
+
+  private async processAudioBuffer(arrayBuffer: ArrayBuffer, targetSampleRate: number): Promise<AudioBuffer> {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    try {
+      const originalBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      if (originalBuffer.sampleRate === targetSampleRate) {
+        return originalBuffer;
+      }
+      const offlineCtx = new OfflineAudioContext(
+        originalBuffer.numberOfChannels,
+        Math.ceil(originalBuffer.duration * targetSampleRate),
+        targetSampleRate
+      );
+      const src = offlineCtx.createBufferSource();
+      src.buffer = originalBuffer;
+      src.connect(offlineCtx.destination);
+      src.start();
+      const resampled = await offlineCtx.startRendering();
+      return resampled;
+    } finally {
+      await audioCtx.close();
+    }
   }
 
 
@@ -281,12 +290,14 @@ export class VideoProcessor {
 
         // MODO 8K / ESTABILIDADE MOBILE
         // Se ultra8k, miramos em 1080p (Full HD de cinema). Se normal, 720p (Segurança Mobile).
-        const isUltra = options.filter === 'ultra8k';
-        const targetH = isUltra ? 1920 : 1280;
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isUltra = options.filter === 'ultra8k' && !isMobile; // Desativar 8K real no mobile para estabilidade
+        const targetH = isUltra ? 1920 : (isMobile ? 720 : 1280);
         
         let scale = targetH / vH;
         // Impedir upscale exagerado que trava o Chrome Mobile
         if (scale > 2.5) scale = 2.5; 
+        if (isMobile && scale > 1.2) scale = 1.2; // Mais conservador no Mobile
 
         const W = Math.floor((vW * scale) / 2) * 2;
         const H = Math.floor((vH * scale) / 2) * 2;
@@ -300,63 +311,50 @@ export class VideoProcessor {
         this.auxCtx.imageSmoothingEnabled = true;
         this.auxCtx.imageSmoothingQuality = 'low';
 
-        video.muted = false;
-        video.volume = 1;
-        await video.play();
+        video.muted = true; // Mute original to avoid conflict
+        video.pause(); // IMPORTANT: Pause UI playback to allow deterministic seeking
         
-        this.stream = this.canvas.captureStream(30); 
-        let audioTrackToEncode: MediaStreamTrack | null = null;
-
+        // 1. Setup determinístico de Áudio (Sync Perfeito)
+        let mainAudioBuffer: AudioBuffer | null = null;
+        const targetSampleRate = 44100;
+        
         if (!options.isMuted) {
           try {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
-              sampleRate: 44100
-            });
-            if (audioCtx.state === 'suspended') {
-              await audioCtx.resume();
-            }
-            const destination = audioCtx.createMediaStreamDestination();
+            // Pegar o áudio do próprio vídeo original (essencial para vídeos autorais)
+            mainAudioBuffer = await this.loadAndResampleAudio(videoUrl, targetSampleRate);
             
-            const originalSource = audioCtx.createMediaElementSource(video);
-            const originalGain = audioCtx.createGain();
-            const mode = options.audioMixMode || 'original';
-            
-            if (mode === 'original') originalGain.gain.value = 1;
-            else if (mode === 'mix') originalGain.gain.value = 0.4;
-            else originalGain.gain.value = 0;
+            // Se tiver música de fundo, precisamos mixar
+            if (options.musicUrl && (options.audioMixMode === 'mix' || options.audioMixMode === 'music')) {
+              const bgMusicBuffer = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
+              // Lógica de mixagem simples (soma ponderada)
+              const mixed = new AudioBuffer({ 
+                numberOfChannels: 2, 
+                length: Math.max(mainAudioBuffer.length, bgMusicBuffer.length), 
+                sampleRate: targetSampleRate 
+              });
+              
+              const mGain = options.audioMixMode === 'mix' ? 0.4 : 0;
+              const bgGain = options.audioMixMode === 'mix' ? 0.8 : 1.0;
 
-            originalSource.connect(originalGain);
-            originalGain.connect(destination);
-            // originalGain.connect(audioCtx.destination); // No monitor during render
-
-            if (options.musicUrl && mode !== 'original' && mode !== 'mute') {
-                const musicAudio = new Audio();
-                musicAudio.crossOrigin = "anonymous";
-                musicAudio.onerror = () => {
-                  if (musicAudio.src === options.musicUrl) {
-                    musicAudio.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(options.musicUrl!)}`;
-                  }
-                };
-                musicAudio.src = options.musicUrl;
-                musicAudio.loop = true;
-                
-                const musicSource = audioCtx.createMediaElementSource(musicAudio);
-                const musicGain = audioCtx.createGain();
-                musicGain.gain.value = mode === 'mix' ? 0.8 : 1;
-                
-                musicSource.connect(musicGain);
-                musicGain.connect(destination);
-                musicAudio.currentTime = Math.random() * 20;
-                musicAudio.play().catch(() => {});
-                video.addEventListener('pause', () => musicAudio.pause(), { once: true });
+              for (let ch = 0; ch < 2; ch++) {
+                const mCh = mainAudioBuffer.getChannelData(ch % mainAudioBuffer.numberOfChannels);
+                const bgCh = bgMusicBuffer.getChannelData(ch % bgMusicBuffer.numberOfChannels);
+                const outCh = mixed.getChannelData(ch);
+                for (let s = 0; s < mixed.length; s++) {
+                  const mVal = s < mCh.length ? mCh[s] : 0;
+                  const bgVal = bgCh[s % bgCh.length]; // Loop background
+                  outCh[s] = (mVal * mGain) + (bgVal * bgGain);
+                }
+              }
+              mainAudioBuffer = mixed;
             }
-            
-            audioTrackToEncode = destination.stream.getAudioTracks()[0];
-            if (audioTrackToEncode) this.stream.addTrack(audioTrackToEncode);
           } catch (audioErr) {
-            console.warn("AudioContext falhou.");
+            console.warn("Falha ao preparar buffer de áudio deterministicamente.");
           }
         }
+
+        this.stream = this.canvas.captureStream(30); 
+        let audioTrackToEncode: MediaStreamTrack | null = null;
 
         const muxer = new Muxer({
           target: new ArrayBufferTarget(),
@@ -371,17 +369,21 @@ export class VideoProcessor {
           error: () => console.error("Erro no video encoder")
         });
 
+        const isMobileBitrate = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const targetBitrate = isUltra ? 12_000_000 : (isMobileBitrate ? 3_500_000 : 7_000_000);
+
         videoEncoder.configure({
           codec: 'avc1.4d0033', // High Profile, Level 5.1
           width: W,
           height: H,
-          bitrate: isUltra ? 12_000_000 : 6_000_000,
+          bitrate: targetBitrate,
           avc: { format: 'avc' }
         });
 
+        // Áudio Encoder Setup (AAC)
         const audioEncoder = new AudioEncoder({
           output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-          error: () => console.error("Erro no audio encoder")
+          error: (e) => console.error("Erro no audio encoder", e)
         });
 
         audioEncoder.configure({
@@ -390,20 +392,6 @@ export class VideoProcessor {
           sampleRate: 44100,
           bitrate: 128_000
         });
-
-        if (audioTrackToEncode) {
-          const processor = new (window as any).MediaStreamTrackProcessor({ track: audioTrackToEncode });
-          const reader = processor.readable.getReader();
-          const readAudio = async () => {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              if (audioEncoder.state === 'configured') audioEncoder.encode(value);
-              value.close();
-            }
-          };
-          readAudio();
-        }
 
         const filterCSS = this.getFilterCSS(options.filter || 'none');
         const transition = options.transition || 'none';
@@ -427,24 +415,47 @@ export class VideoProcessor {
             // Força o vídeo para o tempo exato e espera o processamento
             video.currentTime = currentTime;
             await new Promise<void>(res => {
+              let resolved = false;
               const onSeeked = () => {
+                if (resolved) return;
+                resolved = true;
                 video.removeEventListener('seeked', onSeeked);
                 res();
               };
               video.addEventListener('seeked', onSeeked);
-              // Fallback para não travar infinitamente
-              setTimeout(res, 500); 
+              // Fallback para não travar infinitamente (aumentado para mobile lento)
+              setTimeout(() => {
+                if (!resolved) {
+                  resolved = true;
+                  video.removeEventListener('seeked', onSeeked);
+                  res();
+                }
+              }, isMobile ? 1500 : 600); 
             });
 
             this.auxCtx.clearRect(0, 0, W, H);
             this.auxCtx.drawImage(video, 0, 0, W, H);
             this.ctx.clearRect(0, 0, W, H);
+            
+            // --- LÓGICA DE LIMPEZA AUTORAL ---
+            this.ctx.save();
+            // 1. Mirroring (Espelhamento para conteúdo único)
+            this.ctx.translate(W, 0);
+            this.ctx.scale(-1, 1);
+            // 2. Subtle Zoom (1.02x para remover artefatos de borda originais)
+            const sOffset = 1.02;
+            this.ctx.translate(W * (1 - sOffset) / 2, H * (1 - sOffset) / 2);
+            this.ctx.scale(sOffset, sOffset);
+            
             this.ctx.filter = filterCSS;
             this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
+            this.ctx.restore();
+            // ---------------------------------
+
             this.ctx.filter = 'none';
 
             if (options.script) {
-              this.drawSpintaxOverlay(options.script, currentTime - startTime, W, H, options.storeSlug);
+              this.drawSpintaxOverlay(options.script, currentTime - startTime, W, H, options.storeSlug, duration);
             }
 
             const isTransition = transitionTs.some(t => currentTime >= t && currentTime < t + 1.2);
@@ -455,20 +466,57 @@ export class VideoProcessor {
             
             try {
               videoEncoder.encode(frame, { keyFrame: i % 45 === 0 });
+              
+              // 2. Encode Audio Chunk (Sync Determinístico)
+              if (mainAudioBuffer && audioEncoder.state === 'configured') {
+                const samplesPerFrame = targetSampleRate / fps;
+                const startSample = Math.floor(i * samplesPerFrame);
+                const numSamples = Math.floor(samplesPerFrame);
+                
+                if (startSample < mainAudioBuffer.length) {
+                  const audioData = new Float32Array(numSamples * 2);
+                  for (let channel = 0; channel < 2; channel++) {
+                    const chData = mainAudioBuffer.getChannelData(channel % mainAudioBuffer.numberOfChannels);
+                    for (let s = 0; s < numSamples; s++) {
+                      const sampleIdx = startSample + s;
+                      audioData[s * 2 + channel] = sampleIdx < chData.length ? chData[sampleIdx] : 0;
+                    }
+                  }
+
+                  const aData = new AudioData({
+                    format: 'f32-planar',
+                    sampleRate: targetSampleRate,
+                    numberOfFrames: numSamples,
+                    numberOfChannels: 2,
+                    timestamp: timestamp, 
+                    data: audioData
+                  });
+
+                  audioEncoder.encode(aData);
+                  aData.close();
+                }
+              }
             } catch (e) {
               console.error("Erro ao codificar frame:", e);
             } finally {
               frame.close();
             }
 
-            // Reporta algum progresso se necessário ou cede CPU
-            if (i % 30 === 0) await new Promise(r => setTimeout(r, 0));
+            // Reporta algum progresso se necessário ou cede CPU (Yield progressivo)
+            const yieldRate = isMobile ? 12 : 30;
+            if (i % yieldRate === 0) {
+              await new Promise(r => setTimeout(r, 0));
+              // Controle de pressão do Encoder para não estourar memória do celular
+              if (videoEncoder.encodeQueueSize > 5) {
+                await new Promise(r => setTimeout(r, 100));
+              }
+            }
           }
 
           this.finishEncoding(videoEncoder, audioEncoder, muxer, options, wasMuted, wasVolume, blobUrl, resolve, reject);
         };
 
-        renderLoop();
+        await renderLoop().catch(reject);
       } catch (err) {
         if (options.existingVideoEl) options.existingVideoEl.loop = true;
         reject(err);
@@ -528,7 +576,7 @@ export class VideoProcessor {
           output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
           error: e => console.error("VideoEncoder error", e)
         });
-        const videoBitrate = isMobile ? 2_500_000 : 6_000_000;
+        const videoBitrate = isMobile ? 2_800_000 : 6_000_000;
         videoEncoder.configure({
           codec: 'avc1.4d0033', width: W, height: H, bitrate: videoBitrate, avc: { format: 'avc' }
         });
@@ -674,7 +722,13 @@ export class VideoProcessor {
           }
           
           // Yield to UI sometimes for feedback (not really needed in for loop but good practice)
-          if (i % 60 === 0) await new Promise(r => setTimeout(r, 0));
+          const yieldRateSlideshow = isMobile ? 15 : 45;
+          if (i % yieldRateSlideshow === 0) {
+            await new Promise(r => setTimeout(r, 0));
+            if (videoEncoder.encodeQueueSize > 4) {
+              await new Promise(r => setTimeout(r, 80));
+            }
+          }
         }
 
         // Flush encoders with state check
@@ -979,11 +1033,12 @@ export class VideoProcessor {
         break;
       }
       case 'pan_cinematic': {
-        const panX = Math.sin(progress * Math.PI) * W * 0.05;
+        // Fix: Substituído movimento "ondulado" de seno por um pan suave e linear
+        const panX = (progress - 0.5) * W * 0.08;
         this.ctx.save();
         this.ctx.translate(panX, 0);
-        this.ctx.scale(1.1, 1.1);
-        this.ctx.drawImage(this.canvas, -W * 0.05, -H * 0.05);
+        this.ctx.scale(1.15, 1.15);
+        this.ctx.drawImage(this.canvas, -W * 0.075, -H * 0.075);
         this.ctx.restore();
         break;
       }
@@ -1291,17 +1346,22 @@ export class VideoProcessor {
     }
   }
 
-  private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string) {
+  private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string, totalDuration: number = 15) {
     let text = "";
     let type: 'hook' | 'presentation' | 'cta' = 'hook';
     
-    if (time < 3) {
+    // Fix: Legendas agora adaptativas ao tempo total do vídeo
+    const hookEnd = totalDuration * 0.20;
+    const presEnd = totalDuration * 0.65;
+    const ctaEnd = totalDuration * 0.95;
+
+    if (time < hookEnd) {
       text = script.hook;
       type = 'hook';
-    } else if (time < 8) {
+    } else if (time < presEnd) {
       text = script.presentation;
       type = 'presentation';
-    } else if (time < 13) {
+    } else if (time < ctaEnd) {
       text = script.cta;
       type = 'cta';
     } else {

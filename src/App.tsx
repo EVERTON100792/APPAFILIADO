@@ -1840,7 +1840,7 @@ const App: React.FC = () => {
           const maxPossibleMatch = coreWords.length + 1; // +1 pelo peso dobrado da primeira
           const matchRatio = maxPossibleMatch > 0 ? matchCount / maxPossibleMatch : 0;
           
-          if (matchRatio < 0.40) return null; // Aumento de rigor para evitar vídeos errados (ex: vestidos)
+          if (matchRatio < 0.55) return null; // Aumento de rigor para evitar vídeos errados (ex: vestidos)
 
           if (matchRatio >= 0.8) score += 600;
           else if (matchRatio >= 0.5) score += 300;
@@ -1884,9 +1884,9 @@ const App: React.FC = () => {
             (countsEnglish >= 2 && !hasAccents);
 
           if (hasMustHave || (hasPtBrKeywords && hasAccents)) {
-            score *= 6.0; // Bônus massivo para criativos brasileiros (x6)
+            score *= 10.0; // Bônus massivo para criativos brasileiros (x10) para garantir prioridade
           } else if (isForeign || (!hasPtBrKeywords && !hasAccents)) {
-            score /= 8.0; // Penalidade reduzida (era 15) para vídeos gringos se forem virais
+            score /= 15.0; // Penalidade aumentada para vídeos gringos irrefutáveis
           }
 
           // 4. Qualidade e Viralização (Engajamento Mínimo de 8%)
