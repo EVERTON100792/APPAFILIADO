@@ -930,7 +930,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                       <div className="mt-2 h-10 w-full bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl 
                         flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest 
                         shadow-lg shadow-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity translate-y-4 group-hover:translate-y-0">
-                        <CheckCircle size={16} /> Usar este roteiro
+                        <CheckCircle2 size={16} /> Usar este roteiro
                       </div>
                     </motion.div>
                   ))}
@@ -944,6 +944,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 </div>
   );
 };
+
 
 
 
