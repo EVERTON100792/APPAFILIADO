@@ -2395,7 +2395,8 @@ const App: React.FC = () => {
         transitionList: newTransitions,
         legend: "",
         isMuted: false,
-        musicUrl: newMusic.url
+        musicUrl: newMusic.url,
+        onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
       const price = selectedProduct.price || 0;
@@ -2548,6 +2549,7 @@ const App: React.FC = () => {
           existingVideoEl: videoRef.current || undefined,
           musicUrl: selectedMusic || undefined,
           audioMixMode: audioMixOption,
+          onProgress: (p: number) => setTreatingProgress(Math.floor(p))
         };
 
         const blobResult = await processor.renderVideo(videoData.url, options);
@@ -2872,10 +2874,6 @@ const App: React.FC = () => {
     } else {
       window.open(target, "_blank", "noopener,noreferrer");
     } */
-
-
-
-
 
 
 
