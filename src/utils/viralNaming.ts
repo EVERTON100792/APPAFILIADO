@@ -14,7 +14,8 @@ export function getSmartSearchName(title: string): string {
     'peça', 'novo', 'nova', 'original', 'oficial', 'compre', 'aqui', 'clique', 
     'veja', 'olha', 'frete', 'grátis', 'pronta', 'entrega', 'envio', 'imediato',
     'atacado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio em 24h',
-    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu'
+    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu', 'mini', 'grande', 
+    'portátil', 'colorido', 'pequeno', 'médio', 'super', 'ultra', 'top', 'melhor'
   ];
   
   const regexJunk = new RegExp(`\\b(${marketJunk.join('|')})\\b`, 'gi');
@@ -26,7 +27,8 @@ export function getSmartSearchName(title: string): string {
   // 5. Filtrar palavras curtas e stop words, mas MANTER as power words
   const stopWords = new Set([
     'a', 'o', 'e', 'de', 'do', 'da', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 
-    'na', 'no', 'que', 'dos', 'das', 'seu', 'sua', 'pelo', 'pela', 'como', 'mais'
+    'na', 'no', 'que', 'dos', 'das', 'seu', 'sua', 'pelo', 'pela', 'como', 'mais',
+    'com', 'seu', 'sua', 'tipo', 'seu'
   ]);
   
   let words = cleanTitle.split(/\s+/).filter(w => {
@@ -34,6 +36,16 @@ export function getSmartSearchName(title: string): string {
     return (w.length > 2 && !stopWords.has(low)) || powerWords.includes(low);
   });
   
+  // Garantir que a primeira palavra seja significativa (não um "Mini" que esquecemos)
+  if (words.length > 1) {
+    const genericAdjectives = ['mini', 'grande', 'portatil', 'portátil', 'colorido', 'pequeno', 'medio', 'médio', 'top'];
+    if (genericAdjectives.includes(words[0].toLowerCase())) {
+      // Rotaciona para dar prioridade ao substantivo
+      const adjunct = words.shift();
+      if (adjunct) words.push(adjunct);
+    }
+  }
+
   if (words.length === 0) return title.substring(0, 30).trim();
 
   return words.slice(0, 5).join(' ').trim();

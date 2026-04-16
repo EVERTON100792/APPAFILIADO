@@ -1830,16 +1830,20 @@ const App: React.FC = () => {
 
           // 2. Relevância de Palavras-Chave (Density Match)
           let matchCount = 0;
-          coreWords.forEach((word) => {
-            if (text.includes(word.toLowerCase())) matchCount++;
+          coreWords.forEach((word, idx) => {
+            if (text.includes(word.toLowerCase())) {
+              // A primeira palavra (substantivo principal) tem peso dobrado
+              matchCount += (idx === 0) ? 2 : 1;
+            }
           });
 
-          const matchRatio =
-            coreWords.length > 0 ? matchCount / coreWords.length : 0;
-          if (matchRatio < 0.15) return null; // Tolerância máxima para ganhar volume
+          const maxPossibleMatch = coreWords.length + 1; // +1 pelo peso dobrado da primeira
+          const matchRatio = maxPossibleMatch > 0 ? matchCount / maxPossibleMatch : 0;
+          
+          if (matchRatio < 0.40) return null; // Aumento de rigor para evitar vídeos errados (ex: vestidos)
 
           if (matchRatio >= 0.8) score += 600;
-          else if (matchRatio >= 0.4) score += 300;
+          else if (matchRatio >= 0.5) score += 300;
 
           // 3. Trava de Idioma Brasileira (PT-BR) de Elite
           const hasPtBrKeywords = ptBrKeywords.some((w) => text.includes(w));

@@ -5,8 +5,8 @@ export interface ProcessingOptions {
   filter: string;
   legend: string;
   isMuted: boolean;
-  transition: 'zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'none';
-  transitionList?: ('zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'none' | 'wave' | 'spiral' | 'pixelate')[];
+  transition: 'zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'none';
+  transitionList?: ('zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'wave' | 'spiral' | 'pixelate' | 'none')[];
   videoId?: string;
   trimStart?: number;
   trimEnd?: number;
@@ -45,6 +45,9 @@ export class VideoProcessor {
       case 'bloom':     return 'brightness(1.2) saturate(1.3)';
       case 'glitch':    return 'hue-rotate(90deg) brightness(1.2) contrast(1.25)';
       case 'ultra8k':   return 'contrast(1.4) saturate(1.8) brightness(1.12) drop-shadow(0 0 12px rgba(6, 182, 212, 0.25))';
+      case 'dramatic':  return 'contrast(1.5) saturate(0.9) brightness(0.9) sepia(0.1)';
+      case 'tealAndOrange': return 'contrast(1.2) saturate(1.4) hue-rotate(-10deg) sepia(0.1) brightness(1.1)';
+      case 'vintageGold': return 'sepia(0.4) contrast(1.1) brightness(1.1) saturate(1.3)';
       default:          return 'contrast(1.08) saturate(1.08)';
     }
   }
@@ -402,51 +405,70 @@ export class VideoProcessor {
           readAudio();
         }
 
-        let frameCount = 0;
-        const startTime = video.currentTime;
         const filterCSS = this.getFilterCSS(options.filter || 'none');
         const transition = options.transition || 'none';
         const transitionTs = options.transitionTimestamps || [];
 
-        const renderFrame = () => {
-          const ct = video.currentTime;
-          if ((options.trimEnd && ct >= options.trimEnd) || video.paused || video.ended) { 
-             this.finishEncoding(videoEncoder, audioEncoder, muxer, options, wasMuted, wasVolume, blobUrl, resolve, reject);
-             return; 
-          }
+        // LOOP DETERMINÍSTICO (Estabilidade Android)
+        // Em vez de requestAnimationFrame, processamos frame por frame manual
+        const fps = 30;
+        const frameInterval = 1 / fps;
+        let currentTime = video.currentTime;
+        const startTime = video.currentTime;
+        const duration = (options.trimEnd || video.duration) - startTime;
+        const totalFramesToRender = Math.floor(duration * fps);
 
-          this.auxCtx.clearRect(0, 0, W, H);
-          this.auxCtx.drawImage(video, 0, 0, W, H);
-          this.ctx.clearRect(0, 0, W, H);
-          this.ctx.filter = filterCSS;
-          this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
-          this.ctx.filter = 'none';
+        const renderLoop = async () => {
+          for (let i = 0; i <= totalFramesToRender; i++) {
+            if (videoEncoder.state !== 'configured') break;
 
-          if (options.script) {
-            this.drawSpintaxOverlay(options.script, ct - startTime, W, H, options.storeSlug);
-          }
+            currentTime = startTime + (i * frameInterval);
+            
+            // Força o vídeo para o tempo exato e espera o processamento
+            video.currentTime = currentTime;
+            await new Promise<void>(res => {
+              const onSeeked = () => {
+                video.removeEventListener('seeked', onSeeked);
+                res();
+              };
+              video.addEventListener('seeked', onSeeked);
+              // Fallback para não travar infinitamente
+              setTimeout(res, 500); 
+            });
 
-          const isTransition = transitionTs.some(t => ct >= t && ct < t + 1.5);
-          if (isTransition) this.applyTransitionEffect(transition, ct, transitionTs, W, H);
+            this.auxCtx.clearRect(0, 0, W, H);
+            this.auxCtx.drawImage(video, 0, 0, W, H);
+            this.ctx.clearRect(0, 0, W, H);
+            this.ctx.filter = filterCSS;
+            this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
+            this.ctx.filter = 'none';
 
-          const timestamp = (ct - startTime) * 1_000_000;
-          const frame = new VideoFrame(this.canvas, { timestamp });
-          
-          try {
-            if (videoEncoder.state === 'configured') {
-              videoEncoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
+            if (options.script) {
+              this.drawSpintaxOverlay(options.script, currentTime - startTime, W, H, options.storeSlug);
             }
-          } catch (e) {
-            console.error("Erro ao codificar frame do video");
-          } finally {
-            frame.close();
+
+            const isTransition = transitionTs.some(t => currentTime >= t && currentTime < t + 1.2);
+            if (isTransition) this.applyTransitionEffect(transition, currentTime, transitionTs, W, H);
+
+            const timestamp = (currentTime - startTime) * 1_000_000;
+            const frame = new VideoFrame(this.canvas, { timestamp });
+            
+            try {
+              videoEncoder.encode(frame, { keyFrame: i % 45 === 0 });
+            } catch (e) {
+              console.error("Erro ao codificar frame:", e);
+            } finally {
+              frame.close();
+            }
+
+            // Reporta algum progresso se necessário ou cede CPU
+            if (i % 30 === 0) await new Promise(r => setTimeout(r, 0));
           }
-          
-          frameCount++;
-          if (video.readyState >= 2) requestAnimationFrame(renderFrame);
+
+          this.finishEncoding(videoEncoder, audioEncoder, muxer, options, wasMuted, wasVolume, blobUrl, resolve, reject);
         };
 
-        renderFrame();
+        renderLoop();
       } catch (err) {
         if (options.existingVideoEl) options.existingVideoEl.loop = true;
         reject(err);
@@ -531,8 +553,8 @@ export class VideoProcessor {
 
         const filterCSS = this.getFilterCSS(options.filter || 'elite');
         const CAPCUT_TRANSITIONS = [
-          'zoomPunch', 'whipLeft', 'whipRight', 'lightLeak', 'beatFlash', 'glitch',
-          'slideUp', 'slideDown', 'zoomOut', 'shake', 'spin', 'fade'
+          'zoomPunch', 'whipLeft', 'whipRight', 'whipDown', 'zoomBlur', 'glassSplit', 'colorBurn',
+          'lightLeak', 'beatFlash', 'glitch', 'slideUp', 'slideDown', 'zoomOut', 'shake', 'spin', 'fade'
         ];
         const shuffledTransitions = [...CAPCUT_TRANSITIONS].sort(() => Math.random() - 0.5);
         const getSlideTransition = (slideNum: number) => shuffledTransitions[slideNum % shuffledTransitions.length];
@@ -673,16 +695,13 @@ export class VideoProcessor {
     });
   }
 
-  // CapCut Pro: 12 transicoes unicas com qualidade cinematografica
   private applyCapCutTransition(type: string, progress: number, W: number, H: number) {
-    const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
-    const ep = ease(progress); // 0 -> 1
+    const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; 
+    const ep = ease(progress); 
 
     this.ctx.save();
     switch (type) {
-
       case 'zoomPunch': {
-        // Zoom rapido para dentro � efeito "punch in" do CapCut
         const scale = 1 + (1 - ep) * 0.4;
         this.ctx.transform(scale, 0, 0, scale, W * (1 - scale) / 2, H * (1 - scale) / 2);
         this.ctx.globalAlpha = ep;
@@ -695,10 +714,8 @@ export class VideoProcessor {
         break;
       }
       case 'whipLeft': {
-        // Whip pan horizontal � filmes de acao
         const offsetX = W * (1 - ep) * -1;
         this.ctx.translate(offsetX, 0);
-        // Motion blur simulado com rect semitransparente
         const blur = (1 - ep);
         this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
         this.ctx.fillRect(-W, 0, W * 2, H);
@@ -710,6 +727,14 @@ export class VideoProcessor {
         const blur = (1 - ep);
         this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
         this.ctx.fillRect(-W, 0, W * 2, H);
+        break;
+      }
+      case 'whipDown': {
+        const offsetY = H * (1 - ep);
+        this.ctx.translate(0, offsetY);
+        const blur = (1 - ep);
+        this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
+        this.ctx.fillRect(0, -H, W, H * 2);
         break;
       }
       case 'slideUp': {
@@ -725,7 +750,6 @@ export class VideoProcessor {
         break;
       }
       case 'lightLeak': {
-        // Vazamento de luz premium � simula lens flare
         this.ctx.globalAlpha = ep;
         const leakIntensity = (1 - ep) * 0.8;
         const grad = this.ctx.createRadialGradient(W * 0.2, H * 0.15, 0, W * 0.2, H * 0.15, W * 0.8);
@@ -737,7 +761,6 @@ export class VideoProcessor {
         break;
       }
       case 'beatFlash': {
-        // Flash branco + zoom � tipico CapCut viral
         const flashEnv = Math.exp(-progress * 6);
         this.ctx.globalAlpha = ep;
         if (flashEnv > 0.01) {
@@ -749,7 +772,6 @@ export class VideoProcessor {
         break;
       }
       case 'glitch': {
-        // Glitch horizontal slices
         this.ctx.globalAlpha = ep;
         const slices = 6;
         const sliceH = H / slices;
@@ -759,15 +781,52 @@ export class VideoProcessor {
           try {
             const imgData = this.ctx.getImageData(0, srcY, W, sliceH);
             this.ctx.putImageData(imgData, shift, srcY);
-            // Color aberration
             this.ctx.fillStyle = `rgba(255,0,128,${(1 - progress) * 0.08})`;
             this.ctx.fillRect(shift + 4, srcY, W, sliceH);
           } catch(e) {}
         }
         break;
       }
+      case 'zoomBlur': {
+        const scale = 1 + (1 - ep) * 0.6;
+        this.ctx.translate(W / 2, H / 2);
+        this.ctx.scale(scale, scale);
+        this.ctx.translate(-W / 2, -H / 2);
+        this.ctx.filter = `blur(${Math.floor((1 - ep) * 15)}px)`;
+        this.ctx.globalAlpha = ep;
+        break;
+      }
+      case 'glassSplit': {
+        this.ctx.globalAlpha = ep;
+        const offset = (1 - ep) * 40;
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.rect(0, 0, W / 2, H);
+        this.ctx.clip();
+        this.ctx.translate(-offset, 0);
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.restore();
+        
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.rect(W / 2, 0, W / 2, H);
+        this.ctx.clip();
+        this.ctx.translate(offset, 0);
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.restore();
+        break;
+      }
+      case 'colorBurn': {
+        this.ctx.globalAlpha = ep;
+        if (progress < 0.3) {
+          this.ctx.fillStyle = '#ff3e00';
+          this.ctx.globalCompositeOperation = 'color-burn';
+          this.ctx.fillRect(0, 0, W, H);
+          this.ctx.globalCompositeOperation = 'source-over';
+        }
+        break;
+      }
       case 'shake': {
-        // Camera shake � impacto
         const intensity = (1 - ep) * 12;
         this.ctx.translate(
           (Math.random() - 0.5) * intensity,
@@ -777,7 +836,6 @@ export class VideoProcessor {
         break;
       }
       case 'spin': {
-        // Rotacao leve � 3D tilt
         const angle = (1 - ep) * Math.PI * 0.08;
         this.ctx.translate(W / 2, H / 2);
         this.ctx.rotate(angle);
