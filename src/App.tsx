@@ -49,6 +49,8 @@ import { ShopeeHub } from "./components/ShopeeHub";
 import { ShopeeService } from "./services/shopeeService";
 import { productDB } from './data/productDB';
 import { TikTokPublisher } from "./components/TikTokPublisher";
+
+import { generateViralScripts } from "./utils/viralScriptGenerator";
 import {
   generateViralProductName,
   getSmartSearchName,
@@ -1994,19 +1996,19 @@ const App: React.FC = () => {
   // Função para criar vídeo com imagens customizadas
   async function createVideoWithImages(product: any, images: string[], customScript?: any) {
     if (trialExpired && !hasAccessToPlatform) {
-      showToast("SEU TRIAL EXPIROU. FA�A UPGRADE PARA PRO.");
+      showToast("SEU TRIAL EXPIROU. FA�A UPGRADE PARA PRO.");
       return;
     }
 
     setSelectedProduct({ ...product, viralScript: customScript });
     resetVideoEditor();
     setStep("treating");
-    setTreatingStatus("Criando v�deo com suas imagens...");
+    setTreatingStatus("Criando v�deo com suas imagens...");
     setTreatingProgress(20);
-    setTreatingChecklist([`Criando v�deo com ${images.length} imagens...`]);
+    setTreatingChecklist([`Criando v�deo com ${images.length} imagens...`]);
 
     try {
-      // Sortear m�sica
+      // Sortear m�sica
       const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
       const music = VIRAL_MUSIC[musicIndex];
       setTreatingProgress(40);
@@ -2073,9 +2075,75 @@ const App: React.FC = () => {
     }
   }
 
+  async function handleTransformToAutoral() {
+    if (!videoData?.url || !selectedProduct) {
+      showToast("Nenhum vídeo para transformar");
+      return;
+    }
+    
+    if (trialExpired && !hasAccessToPlatform) {
+      showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
+      return;
+    }
+
+    setIsProcessing(true);
+    setTreatingStatus("Transformando em autoral...");
+    setTreatingProgress(10);
+
+    try {
+      const script = generateViralScripts(selectedProduct.item_name || selectedProduct.title)[0];
+      setTreatingProgress(30);
+
+      const processor = new VideoProcessor();
+      
+      // Gerar timestamps de transição automaticamente (a cada 3 segundos)
+      const autoTransitions: number[] = [3, 6, 9, 12, 15, 18, 21, 24, 27];
+      
+      const options: ProcessingOptions = {
+        filter: activeFilter || 'elite',
+        transition: 'glitch',
+        transitionList: ['zoom', 'glitch', 'shake', 'blur', 'fire', 'flash', 'beat'] as any,
+        transitionTimestamps: autoTransitions,
+        legend: videoLegend || '',
+        isMuted: isMuted,
+        script: script,
+        musicUrl: selectedMusic || undefined,
+        audioMixMode: isMuted ? 'mute' : 'original',
+        storeSlug: storeSlug
+      };
+
+      setTreatingProgress(50);
+      showToast("Renderizando com spintax...");
+
+      const blob = await processor.renderVideo(videoData.url, options);
+
+      setTreatingProgress(80);
+
+      const newUrl = URL.createObjectURL(blob);
+      
+      setVideoData({
+        ...videoData,
+        id: `autoral-${Date.now()}`,
+        url: newUrl,
+        isAutoral: true,
+        script: script
+      });
+
+      setTreatingProgress(100);
+      setTreatingStatus("Vídeo autoral pronto!");
+      showToast("✨ VÍDEO TRANSFORMADO EM AUTORAL!");
+      
+    } catch (err: any) {
+      console.error("Erro ao transformar:", err);
+      showToast("ERRO AO TRANSFORMAR: " + (err.message || "Tente novamente"));
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   async function handleCreateAutoralVideo(product: any, customImages?: string[], customScript?: any) {
     if (trialExpired && !hasAccessToPlatform) {
-      showToast("SEU TRIAL EXPIROU. FA�A UPGRADE PARA PRO.");
+      showToast("SEU TRIAL EXPIROU. FA�A UPGRADE PARA PRO.");
       return;
     }
 
@@ -4162,6 +4230,18 @@ const App: React.FC = () => {
                         {videoData?.isAutoral ? "Nova Versão 🎲" : "Trocar Vídeo"}
                       </motion.button>
                     </div>
+
+                    {!videoData?.isAutoral && (
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleTransformToAutoral()}
+                        disabled={isProcessing || !selectedProduct}
+                        className="w-full h-12 bg-gradient-to-r from-purple-600 to-pink-600 border border-purple-400/30 rounded-xl flex items-center justify-center gap-2 text-white text-[10px] font-black uppercase tracking-widest hover:from-purple-500 hover:to-pink-500 transition-all disabled:opacity-50 shadow-lg shadow-purple-500/20"
+                      >
+                        <Sparkles size={14} className="text-white" />
+                        Transformar em Autoral ✨
+                      </motion.button>
+                    )}
                   </div>
 
                   {videoData?.isAutoral && (
@@ -4380,15 +4460,13 @@ const App: React.FC = () => {
                           </div>
                           <div className="space-y-1">
                             <p className="text-[9px] font-black uppercase tracking-[0.28em] text-slate-500">
-                              Publicar agora
+                              Criar agora
                             </p>
                             <span className="block text-sm font-black uppercase tracking-[0.18em] text-slate-950">
-                              TikTok
+                              TikTok Viral
                             </span>
                             <span className="block text-[10px] text-slate-600 font-bold uppercase tracking-[0.14em]">
-                              {isMobile
-                                ? "Abre app e anexa o video"
-                                : "Download + upload guiado"}
+                              Download + script viral
                             </span>
                           </div>
                         </div>

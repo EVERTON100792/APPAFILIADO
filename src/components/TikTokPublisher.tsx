@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { UploadCloud, Clock, CheckCircle2, AlertCircle, Loader2, Download, Video } from 'lucide-react';
+import { UploadCloud, Clock, CheckCircle2, AlertCircle, Loader2, Download, Video, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TikTokPublisherProps {
@@ -11,9 +11,12 @@ interface TikTokPublisherProps {
   onSuccess?: () => void;
   productLink?: string;
   isAutoralVideo?: boolean;
+  onTransformToAutoral?: () => void;
 }
 
-export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoUrl, caption, isPro, onSuccess, productLink, isAutoralVideo }) => {
+export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ 
+  userId, videoUrl, caption, isPro, onSuccess, productLink, isAutoralVideo, onTransformToAutoral 
+}) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleDate, setScheduleDate] = useState<string>('');
@@ -219,6 +222,23 @@ export const TikTokPublisher: React.FC<TikTokPublisherProps> = ({ userId, videoU
           </p>
         </div>
       </div>
+
+      {!isAutoralVideo && onTransformToAutoral && (
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onTransformToAutoral}
+          className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-purple-500/20 border border-white/10 group mb-2"
+        >
+          <div className="bg-white/20 p-2 rounded-xl group-hover:bg-white/30 transition-colors">
+            <Sparkles size={20} className="text-white" />
+          </div>
+          <div className="flex flex-col items-start leading-tight">
+            <span className="text-[13px] uppercase tracking-tighter">🔮 Remover Marcas & Tornar Autoral</span>
+            <span className="text-[8px] text-white/60 uppercase tracking-[0.2em] font-black">Blindagem Anti-Plágio + Spintax HQ</span>
+          </div>
+        </motion.button>
+      )}
 
       <div className="pt-2 border-t border-slate-800">
         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">
