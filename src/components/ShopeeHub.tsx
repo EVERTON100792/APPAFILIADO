@@ -1,4 +1,4 @@
-import { generateViralScripts, ViralScript } from '../utils/viralScriptGenerator';
+import { generateViralScripts, type ViralScript } from '../utils/viralScriptGenerator';
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { 
@@ -943,6 +943,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 </div>
   );
 };
+
 
 
 
