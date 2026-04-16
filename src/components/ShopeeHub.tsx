@@ -11,6 +11,7 @@ import {
   Settings,
   X,
   MessageCircle,
+  MessageSquare,
   Plus,
   Rocket,
   Flame,
@@ -943,6 +944,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 </div>
   );
 };
+
 
 
 
