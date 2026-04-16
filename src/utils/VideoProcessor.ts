@@ -16,6 +16,7 @@ export interface ProcessingOptions {
   audioMixMode?: 'original' | 'music' | 'mix' | 'mute';
   script?: ViralScript;
   storeSlug?: string;
+  onProgress?: (p: number) => void;
 }
 
 export class VideoProcessor {
@@ -202,12 +203,16 @@ export class VideoProcessor {
       try {
         const response = await fetch(proxyUrl, { cache: 'no-store' });
         if (!response.ok) continue;
+        const arrayBuffer = await response.arrayBuffer();
         return this.processAudioBuffer(arrayBuffer, targetSampleRate);
       } catch (e) {
         console.warn(`[Audio] Proxy falhou: ${proxyUrl.substring(0, 50)}`);
       }
     }
 
+    // Fallback Final: Se tudo falhar, gera um beat sintético para não quebrar o vídeo
+    console.warn("[Audio] Todos os proxies falharam. Usando áudio sintético.");
+    return this.generateSyntheticBeat(targetSampleRate, bpm, 35, genre);
   }
 
   private async processAudioBuffer(arrayBuffer: ArrayBuffer, targetSampleRate: number): Promise<AudioBuffer> {
@@ -515,13 +520,16 @@ export class VideoProcessor {
               frame.close();
             }
 
+            // Reporta progresso real para a UI
+            options.onProgress?.((i / totalFramesToRender) * 100);
+
             // Reporta algum progresso se necessário ou cede CPU (Yield progressivo)
-            const yieldRate = isMobile ? 12 : 30;
+            const yieldRate = isMobile ? 8 : 30; // Mais frequente no mobile para fluidez
             if (i % yieldRate === 0) {
               await new Promise(r => setTimeout(r, 0));
               // Controle de pressão do Encoder para não estourar memória do celular
-              if (videoEncoder.encodeQueueSize > 5) {
-                await new Promise(r => setTimeout(r, 100));
+              if (videoEncoder.encodeQueueSize > (isMobile ? 3 : 8)) {
+                await new Promise(r => setTimeout(r, isMobile ? 150 : 100));
               }
             }
           }
@@ -734,12 +742,15 @@ export class VideoProcessor {
             aData.close();
           }
           
-          // Yield to UI sometimes for feedback (not really needed in for loop but good practice)
-          const yieldRateSlideshow = isMobile ? 15 : 45;
+          // Reporta progresso real para a UI
+          options.onProgress?.((i / totalFrames) * 100);
+          
+          // Yield to UI sometimes for feedback
+          const yieldRateSlideshow = isMobile ? 10 : 45;
           if (i % yieldRateSlideshow === 0) {
             await new Promise(r => setTimeout(r, 0));
-            if (videoEncoder.encodeQueueSize > 4) {
-              await new Promise(r => setTimeout(r, 80));
+            if (videoEncoder.encodeQueueSize > (isMobile ? 2 : 6)) {
+              await new Promise(r => setTimeout(r, isMobile ? 120 : 80));
             }
           }
         }
@@ -1030,7 +1041,11 @@ export class VideoProcessor {
       case 'whip_push': {
         const tx = -progress * W;
         this.ctx.save();
-        this.ctx.filter = `blur(${Math.min(20, progress * 40)}px)`;
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        // OTIMIZAÇÃO: Remover Blur no Mobile para evitar crash e lag extremo
+        if (!isMobile) {
+          this.ctx.filter = `blur(${Math.min(20, progress * 40)}px)`;
+        }
         this.ctx.translate(tx, 0);
         this.ctx.drawImage(this.canvas, 0, 0);
         this.ctx.restore();

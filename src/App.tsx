@@ -2038,6 +2038,7 @@ const App: React.FC = () => {
         musicUrl: music.url,
         musicBpm: music.bpm || 128,
         musicGenre: music.genre || 'house',
+        onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       } as any;
 
       const price = product.price || 0;
@@ -2113,7 +2114,8 @@ const App: React.FC = () => {
         script: script,
         musicUrl: selectedMusic || undefined,
         audioMixMode: isMuted ? 'mute' : 'original',
-        storeSlug: storeSlug
+        storeSlug: storeSlug,
+        onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
       setTreatingProgress(50);
@@ -2286,7 +2288,8 @@ const App: React.FC = () => {
         transitionList: allTransitions,
         legend: "",
         isMuted: false,
-        musicUrl: music.url
+        musicUrl: music.url,
+        onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
       setTreatingProgress(80);
