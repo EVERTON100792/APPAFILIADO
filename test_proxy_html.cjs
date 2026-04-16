@@ -5,17 +5,17 @@ async function run() {
   const data = await res.json(); 
   try { 
     const html = data.contents;
-    // shopee JSON state is usually in a script tag: window.__SHOPEE_ITEM_DETAIL__ or similar
-    // or inside json-ld
     console.log("HTML length:", html.length);
     if (html.includes("captcha")) {
       console.log("Found captcha!");
     }
-    const match = html.match(/("images":\[.*?\])/);
+    const match = html.match(/"images":\[(.*?)\]/);
     if (match) {
-      console.log("Found images in HTML:", match[1].substring(0, 100));
+      console.log("Found images in HTML:", match[0].substring(0, 300));
     } else {
       console.log("Images not found in HTML");
+      const match2 = html.match(/image: '(.*?)'/);
+      if (match2) console.log("Found single image", match2);
     }
   } catch(e) { 
     console.log('err', e.message); 
