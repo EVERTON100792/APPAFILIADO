@@ -186,6 +186,33 @@ export class ShopeeService {
       if (error || !data?.success) throw error || new Error("Falha ao buscar detalhe do produto");
         const out = data.data || {};
         out.edge_images = data.images || [];
+
+        // FALLBACK PODEROSO: Se a Edge falhar por bloqueio antibot (array vazio), tentamos via proxy de front-end
+        if (!out.edge_images.length && !out.item?.images?.length && !out.images?.length && !out.image_list?.length) {
+          try {
+            console.log("[ShopeeService] Edge falhou, tentando fallback via proxy HTML...");
+            const htmlUrl = `https://shopee.com.br/product/${shopId}/${itemId}`;
+            const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(htmlUrl);
+            const resHtml = await fetch(proxyUrl);
+            const html = await resHtml.text();
+            
+            const matches = [...html.matchAll(/"images":(\[.*?\])/g)];
+            let extractedImages: string[] = [];
+            for (let i = 0; i < matches.length; i++) {
+              try {
+                const arr = JSON.parse(matches[i][1]);
+                if (arr.length > extractedImages.length) extractedImages = arr;
+              } catch(e) {}
+            }
+            if (extractedImages.length > 0) {
+              console.log(`[ShopeeService] Sucesso no fallback! Extraídas ${extractedImages.length} imagens.`);
+              out.edge_images = extractedImages;
+            }
+          } catch(err) {
+            console.log("[ShopeeService] Fallback proxy falhou:", err);
+          }
+        }
+        
         return out;
     } catch (error) {
       console.error("Erro ao buscar detalhe:", error);
@@ -193,4 +220,5 @@ export class ShopeeService {
     }
   }
 }
+
 

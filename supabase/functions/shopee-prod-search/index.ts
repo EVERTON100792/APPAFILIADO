@@ -115,54 +115,41 @@ serve(async (req: Request) => {
       const { item_id, shop_id } = params;
       if (!item_id || !shop_id) throw new Error("Missing item_id or shop_id");
       
-      // Try multiple Shopee API endpoints to get images
-      const endpoints = [
-        `https://shopee.com.br/api/v2/item/get?itemid=${item_id}&shopid=${shop_id}`,
-        `https://shopee.com.br/api/v4/item/get?itemid=${item_id}&shopid=${shop_id}`,
-      ];
-      
       let images: string[] = [];
       let result: any = null;
       
-      for (const detailUrl of endpoints) {
-        console.log(`[Shopee] Trying: ${detailUrl}`);
-        
-        const response = await fetch(detailUrl, {
+      console.log(`[Shopee] Bypassing API to scrape HTML for: ${item_id}`);
+      
+      try {
+        const htmlUrl = `https://shopee.com.br/product/${shop_id}/${item_id}`;
+        const resHtml = await fetch(htmlUrl, {
           headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+            "Accept": "text/html"
           }
         });
+        const html = await resHtml.text();
+        const matches = [...html.matchAll(/"images":(\[.*?\])/g)];
         
-        const responseText = await response.text();
-        try {
-          result = JSON.parse(responseText);
-          console.log(`[Shopee] Response keys:`, Object.keys(result));
-          
-          // Check various paths for images
-          const possiblePaths = [
-            result?.data?.images,
-            result?.data?.items?.[0]?.images,
-            result?.data?.item?.images,
-            result?.item?.images,
-            result?.data?.image_info?.images,
-          ];
-          
-          for (const path of possiblePaths) {
-            if (Array.isArray(path) && path.length > 0) {
-              images = path;
-              console.log(`[Shopee] Found ${images.length} images at path`);
-              break;
-            }
-          }
-          
-          if (images.length > 0) break;
-        } catch (e) {
-          console.log(`[Shopee] Failed to parse:`, responseText.substring(0, 200));
+        for (let i = 0; i < matches.length; i++) {
+           try {
+             const arr = JSON.parse(matches[i][1]);
+             if (arr.length > images.length) {
+                images = arr;
+             }
+           } catch(e) {}
         }
+        
+        console.log(`[Shopee] Scraped ${images.length} images from HTML`);
+        
+        // Mock a result structure if needed
+        result = { item: { images: images } };
+      } catch (err) {
+         console.log("[Shopee] Failed to fetch HTML:", err);
       }
 
+      // If HTML failed, we could try the fallback endpoints, but they are returning 90309999 anyway.
+      
       return new Response(JSON.stringify({ 
         success: true, 
         data: result,
