@@ -437,20 +437,33 @@ export class VideoProcessor {
             this.auxCtx.drawImage(video, 0, 0, W, H);
             this.ctx.clearRect(0, 0, W, H);
             
-            // --- LÓGICA DE LIMPEZA AUTORAL ---
+            // --- LÓGICA DE LIMPEZA AUTORAL PRO (CROP & CONCEAL) ---
             this.ctx.save();
+            
             // 1. Mirroring (Espelhamento para conteúdo único)
             this.ctx.translate(W, 0);
             this.ctx.scale(-1, 1);
-            // 2. Subtle Zoom (1.02x para remover artefatos de borda originais)
-            const sOffset = 1.02;
-            this.ctx.translate(W * (1 - sOffset) / 2, H * (1 - sOffset) / 2);
+            
+            // 2. Safe-Zone Zoom (De 1.02x para 1.15x para remover legendas nas bordas)
+            const sOffset = 1.15;
+            
+            // 3. Vertical Offset: Empurra o vídeo 5% para cima (legendas originais costumam estar embaixo)
+            const vShift = H * 0.05; 
+            
+            this.ctx.translate(W * (1 - sOffset) / 2, (H * (1 - sOffset) / 2) - vShift);
             this.ctx.scale(sOffset, sOffset);
             
             this.ctx.filter = filterCSS;
             this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
             this.ctx.restore();
-            // ---------------------------------
+
+            // 4. Gradient Mask (Esconde resquícios na base e melhora estética)
+            const bottomGrad = this.ctx.createLinearGradient(0, H * 0.8, 0, H);
+            bottomGrad.addColorStop(0, 'rgba(0,0,0,0)');
+            bottomGrad.addColorStop(1, 'rgba(0,0,0,0.5)'); // Escurece a base para esconder texto original
+            this.ctx.fillStyle = bottomGrad;
+            this.ctx.fillRect(0, H * 0.8, W, H * 0.2);
+            // ------------------------------------------------------
 
             this.ctx.filter = 'none';
 
