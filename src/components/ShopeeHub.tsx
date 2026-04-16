@@ -37,7 +37,7 @@ import type { ShopeeProduct } from "../services/shopeeService";
 interface ShopeeHubProps {
   onShowToast: (msg: string) => void;
   userStoreSlug?: string;
-  onViralize?: (product: any, videoType?: 'tiktok' | 'autoral', customImages?: string[]) => void;
+  onViralize?: (product: any, videoType?: 'tiktok' | 'autoral', customImages?: string[], customScript?: any) => void;
   onSaveHistory?: (product: any, platform: string) => void;
 }
 
@@ -175,6 +175,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isLoadingPicker, setIsLoadingPicker] = useState(false);
   const [tempProduct, setTempProduct] = useState<any>(null);
+  
+  // States para Spintax (Roteiro Autoral)
+  const [showScriptSelector, setShowScriptSelector] = useState(false);
+  const [generatedScripts, setGeneratedScripts] = useState<ViralScript[]>([]);
+  const [tempSelectedImages, setTempSelectedImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // States para Radar Elite
@@ -811,12 +816,14 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                   <div className="flex gap-3">
                     <button 
                       onClick={() => {
-                        setSelectedImages([...pickerImages]);
-                        if (onViralize && tempProduct) {
-                          onViralize(tempProduct, 'autoral', [...pickerImages]);
-                          setShowImagePicker(false);
-                        }
-                      }}
+                          setSelectedImages([...pickerImages]);
+                          if (tempProduct) {
+                            setTempSelectedImages([...pickerImages]);
+                            setShowImagePicker(false);
+                            setGeneratedScripts(generateViralScripts(tempProduct.item_name));
+                            setShowScriptSelector(true);
+                          }
+                        }}
                       className="flex-1 h-14 bg-white/5 border border-white/10 rounded-2xl font-black text-[10px] text-white/60 uppercase hover:text-white transition-all flex items-center justify-center gap-2"
                     >
                       <RefreshCw size={14} /> Usar Todas
@@ -824,11 +831,13 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                     <button 
                       disabled={selectedImages.length === 0}
                       onClick={() => {
-                        if (onViralize && tempProduct) {
-                          onViralize(tempProduct, 'autoral', selectedImages);
-                          setShowImagePicker(false);
-                        }
-                      }}
+                          if (tempProduct) {
+                            setTempSelectedImages(selectedImages);
+                            setShowImagePicker(false);
+                            setGeneratedScripts(generateViralScripts(tempProduct.item_name));
+                            setShowScriptSelector(true);
+                          }
+                        }}
                       className={`flex-[2] h-14 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-3 transition-all ${selectedImages.length > 0 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30' : 'bg-white/5 text-white/10'}`}
                     >
                       Processar Seleção ({selectedImages.length}) <ArrowRight size={18} />
@@ -842,9 +851,103 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         </AnimatePresence>,
         document.body
       )}
-    </div>
+    
+        {/* Script Selector Modal (Portalized) */}
+        {createPortal(
+          <AnimatePresence>
+            {showScriptSelector && (
+              <div className="fixed inset-0 z-[3002] flex flex-col bg-slate-950 overflow-hidden text-white">
+                
+                {/* Header */}
+                <div className="flex-none p-5 pb-2 bg-slate-950/80 backdrop-blur-xl border-b border-white/5 
+                  flex justify-between items-center z-10 sticky top-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 p-[2px]">
+                      <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center">
+                        <MessageSquare size={20} className="text-purple-400" />
+                      </div>
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-black italic uppercase tracking-wider flex items-center gap-2">
+                        Roteiro Virais
+                        <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[9px] not-italic">NOVO</span>
+                      </h2>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Escolha a Vibe do V�deo</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setShowScriptSelector(false)}
+                    className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white transition"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+                
+                {/* Options List */}
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                  <p className="text-xs text-white/50 text-center uppercase tracking-widest font-bold mb-2">GERADOS PARA O PRODUTO</p>
+                  
+                  {generatedScripts.map((script, idx) => (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      key={script.id}
+                      onClick={() => {
+                        if (onViralize && tempProduct) {
+                          onViralize(tempProduct, 'autoral', tempSelectedImages, script);
+                          setShowScriptSelector(false);
+                        }
+                      }}
+                      className="group cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 
+                        p-5 rounded-2xl flex flex-col gap-3 relative overflow-hidden transition-all"
+                    >
+                      {/* Badge Vibe */}
+                      <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500/20 rounded-bl-xl border-l border-b border-purple-500/30">
+                        <span className="text-[9px] font-black uppercase text-purple-300 tracking-wider">
+                          VIBE: {script.vibe}
+                        </span>
+                      </div>
+                      
+                      {/* Texts */}
+                      <div className="mr-16">
+                        <p className="text-sm font-black text-white leading-tight mb-2">
+                          <span className="text-purple-400 mr-2">1.</span>
+                          "{script.hook}"
+                        </p>
+                        <p className="text-xs font-medium text-white/60 leading-relaxed mb-2">
+                          <span className="text-blue-400 mr-2">2.</span>
+                          "{script.presentation}"
+                        </p>
+                        <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                          # {script.cta}
+                        </p>
+                      </div>
+                      
+                      {/* Action Visual */}
+                      <div className="mt-2 h-10 w-full bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl 
+                        flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest 
+                        shadow-lg shadow-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity translate-y-4 group-hover:translate-y-0">
+                        <CheckCircle size={16} /> Usar este roteiro
+                      </div>
+                    </motion.div>
+                  ))}
+                  
+                </div>
+              </div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+</div>
   );
 };
+
+
+
+
+
+
 
 
 

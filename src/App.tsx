@@ -1992,21 +1992,21 @@ const App: React.FC = () => {
   }
 
   // FunÃ§Ã£o para criar vÃ­deo com imagens customizadas
-  async function createVideoWithImages(product: any, images: string[]) {
+  async function createVideoWithImages(product: any, images: string[], customScript?: any) {
     if (trialExpired && !hasAccessToPlatform) {
-      showToast("SEU TRIAL EXPIROU. FAÃ‡A UPGRADE PARA PRO.");
+      showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
       return;
     }
 
-    setSelectedProduct(product);
+    setSelectedProduct({ ...product, viralScript: customScript });
     resetVideoEditor();
     setStep("treating");
-    setTreatingStatus("Criando vÃ­deo com suas imagens...");
+    setTreatingStatus("Criando vídeo com suas imagens...");
     setTreatingProgress(20);
-    setTreatingChecklist([`Criando vÃ­deo com ${images.length} imagens...`]);
+    setTreatingChecklist([`Criando vídeo com ${images.length} imagens...`]);
 
     try {
-      // Sortear mÃºsica
+      // Sortear música
       const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
       const music = VIRAL_MUSIC[musicIndex];
       setTreatingProgress(40);
@@ -2073,16 +2073,16 @@ const App: React.FC = () => {
     }
   }
 
-  async function handleCreateAutoralVideo(product: any, customImages?: string[]) {
+  async function handleCreateAutoralVideo(product: any, customImages?: string[], customScript?: any) {
     if (trialExpired && !hasAccessToPlatform) {
-      showToast("SEU TRIAL EXPIROU. FAÃ‡A UPGRADE PARA PRO.");
+      showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
       return;
     }
 
     // Usar imagens customizadas se forem fornecidas
     if (customImages && customImages.length > 0) {
       console.log("[App] Usando imagens customizadas:", customImages.length);
-      await createVideoWithImages(product, customImages);
+      await createVideoWithImages(product, customImages, customScript);
       return;
     }
 
@@ -4724,9 +4724,9 @@ const App: React.FC = () => {
                 onShowToast={showToast} 
                 userStoreSlug={storeSlug} 
                 onSaveHistory={saveToSupabase}
-                onViralize={(p, videoType, customImages) => {
+                onViralize={(p, videoType, customImages, customScript) => {
                   if (videoType === 'autoral') {
-                    handleCreateAutoralVideo(p, customImages);
+                    handleCreateAutoralVideo(p, customImages, customScript);
                   } else {
                     researchTikTok({ ...p, title: p.item_name });
                   }
@@ -5059,3 +5059,6 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+
+
