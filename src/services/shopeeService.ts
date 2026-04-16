@@ -192,9 +192,10 @@ export class ShopeeService {
           try {
             console.log("[ShopeeService] Edge falhou, tentando fallback via proxy HTML...");
             const htmlUrl = `https://shopee.com.br/product/${shopId}/${itemId}`;
-            const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(htmlUrl);
-            const resHtml = await fetch(proxyUrl);
-            const html = await resHtml.text();
+            const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(htmlUrl);
+            const proxyRes = await fetch(proxyUrl);
+            const data = await proxyRes.json();
+            const html = data.contents;
             
             const matches = [...html.matchAll(/"images":(\[.*?\])/g)];
             let extractedImages: string[] = [];
@@ -220,5 +221,6 @@ export class ShopeeService {
     }
   }
 }
+
 
 
