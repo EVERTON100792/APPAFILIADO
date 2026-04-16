@@ -3288,14 +3288,14 @@ const App: React.FC = () => {
             >
               <div className="max-w-md mx-auto w-full space-y-10 pb-32">
                 <div className="text-center space-y-3">
-                  <h3 className="text-2xl font-black italic uppercase italic tracking-tighter">
+                  <h3 className="text-2xl font-black italic uppercase tracking-tighter">
                     CONFIGURAÇÃO DE{" "}
-                    <span className="text-accent underline decoration-accent/20">
-                      LINK
+                    <span className="text-emerald-500 underline decoration-emerald-500/20">
+                      LOJA E RASTREIO
                     </span>
                   </h3>
                   <p className="text-[10px] text-dim uppercase font-black tracking-[0.3em]">
-                    Defina seu slug único no ecossistema
+                    Defina seu link único e seu ID de Afiliado Shopee
                   </p>
                 </div>
                 <BioManager

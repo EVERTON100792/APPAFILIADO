@@ -725,7 +725,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                       const { data: { user } } = await supabase.auth.getUser();
                       if (user) {
                         await supabase.from("profiles").upsert({ id: user.id, shopee_id: userShopeeId });
-                        onShowToast("? Configurações Salvas");
+                        onShowToast("✨ Configurações Salvas");
                         setShowSettings(false);
                       }
                     }}
@@ -874,7 +874,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                         Roteiro Virais
                         <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[9px] not-italic">NOVO</span>
                       </h2>
-                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Escolha a Vibe do V�deo</p>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Escolha a Vibe do Vdeo</p>
                     </div>
                   </div>
                   <button 
@@ -944,7 +944,6 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 </div>
   );
 };
-
 
 
 

@@ -103,6 +103,7 @@ export const BioManager: React.FC<{
   const [storeSlug, setStoreSlug] = useState(() => initialStoreSlug || 'meu-link');
   const [slugInput, setSlugInput] = useState(storeSlug);
   const [editingSlug, setEditingSlug] = useState(false);
+  const [shopeeIdInput, setShopeeIdInput] = useState('');
 
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -178,7 +179,15 @@ export const BioManager: React.FC<{
 
   useEffect(() => {
     if (user && user.user_metadata) loadSettings();
+    if (user?.id) fetchProfile();
   }, [user]);
+
+  const fetchProfile = async () => {
+    const { data } = await supabase.from('profiles').select('shopee_id').eq('id', user.id).maybeSingle();
+    if (data?.shopee_id) {
+       setShopeeIdInput(data.shopee_id);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -251,13 +260,22 @@ export const BioManager: React.FC<{
     }
     setSaving(true);
     try {
+      // Salvar Slug e ID Shopee na tabela profiles
+      if (user?.id) {
+        await supabase.from('profiles').upsert({
+          id: user.id,
+          store_slug: clean,
+          shopee_id: shopeeIdInput || undefined
+        });
+      }
+
       setStoreSlug(clean);
       setSlugInput(clean);
       setEditingSlug(false);
       if (onStoreConfigured) {
         onStoreConfigured(clean);
       }
-      showToast(`✅ Link atualizado para: /?loja=${clean}`, 'success');
+      showToast(`✅ Configurações salvas!`, 'success');
     } catch (err: any) {
       showToast('Erro ao salvar: ' + (err?.message || 'Tente novamente'), 'error');
     } finally {
@@ -751,6 +769,21 @@ export const BioManager: React.FC<{
                   autoFocus
                 />
               </div>
+
+              {/* NOVO CAMPO: ID PARCEIRO SHOPEE */}
+              <div className="relative group">
+                 <div className="absolute inset-0 bg-emerald-500/5 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                 <Link size={16} className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-500 z-10" />
+                 <input
+                   type="text"
+                   value={shopeeIdInput}
+                   onChange={e => setShopeeIdInput(e.target.value.replace(/[^0-9]/g, ''))}
+                   placeholder="ID Parceiro Shopee (Apenas números)"
+                   className="w-full bg-emerald-950/20 border-2 border-emerald-500/30 rounded-2xl pl-12 pr-6 py-5 text-white font-mono font-bold focus:outline-none focus:border-emerald-400 focus:bg-emerald-950/40 shadow-inner shadow-emerald-900/20 transition-all text-base sm:text-sm relative z-10"
+                 />
+                 <p className="text-[9px] text-emerald-400/50 uppercase font-black tracking-widest mt-2 ml-1">Essencial para rastreio de comissão</p>
+              </div>
+
               <div className="flex items-center gap-3">
                 <button 
                   onClick={handleSaveSlug} 

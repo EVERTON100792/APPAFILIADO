@@ -81,6 +81,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<StoreSettings>(defaultSettings);
   const [error, setError] = useState<string | null>(null);
+  const [ownerShopeeId, setOwnerShopeeId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const cleanId = userId.trim().toLowerCase();
@@ -88,6 +89,17 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
     setError(null);
     
     const fetchData = async () => {
+      // 1. Buscar Shopee ID do dono da vitrine via slug (userId)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('shopee_id')
+        .eq('store_slug', cleanId)
+        .maybeSingle();
+      
+      const shopeeId = profile?.shopee_id;
+      setOwnerShopeeId(shopeeId);
+
+      // 2. Buscar itens da vitrine
       const { data: itemsData, error: itemsError } = await supabase
         .from('bio_store')
         .select('*')
@@ -109,6 +121,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       console.log('[BioStore] Fetch result:', { 
         items: itemsData?.length || 0, 
         settings: settingsData,
+        shopeeId,
         cleanId 
       });
       
@@ -118,7 +131,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       if (itemsData) {
         setItems(itemsData.map((item: BioItem) => ({
           ...item,
-          affiliate_link: sanitizeShopeeLink(item.affiliate_link, undefined),
+          affiliate_link: sanitizeShopeeLink(item.affiliate_link, shopeeId),
         })));
       }
       
