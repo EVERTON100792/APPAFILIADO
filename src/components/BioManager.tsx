@@ -252,7 +252,7 @@ export const BioManager: React.FC<{
     setLoading(false);
   };
 
-  const handleSaveSlug = () => {
+  const handleSaveSlug = async () => {
     const clean = slugInput.toLowerCase().replace(/[^a-z0-9-_]/g, '').trim();
     if (!clean) {
       showToast('URL inválida! Use apenas letras, números ou hífens.', 'error');

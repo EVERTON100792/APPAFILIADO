@@ -16,6 +16,8 @@ export interface ProcessingOptions {
   audioMixMode?: 'original' | 'music' | 'mix' | 'mute';
   script?: ViralScript;
   storeSlug?: string;
+  useNarration?: boolean;
+  narrationVoice?: 'M' | 'F';
   onProgress?: (p: number) => void;
 }
 
@@ -178,6 +180,53 @@ export class VideoProcessor {
     return buf;
   }
 
+
+  private async fetchNarration(text: string, voice: 'M' | 'F' = 'F'): Promise<AudioBuffer | null> {
+    const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=pt-BR&client=tw-ob&ttsspeed=1.04`;
+    const proxyUrl = `${PROXY_BASE}?url=${encodeURIComponent(ttsUrl)}`;
+
+    try {
+      const res = await fetch(proxyUrl);
+      if (!res.ok) return null;
+      const arrayBuffer = await res.arrayBuffer();
+      
+      // GARANTIA: Sempre resampa para 44100Hz para evitar voz grossa no mobile
+      const buffer = await this.processAudioBuffer(arrayBuffer, 44100);
+      
+      if (voice === 'M') {
+        const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.5, buffer.sampleRate);
+        const source = offlineCtx.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = 1.14; // Afinado: Voz masculina mais leve e clara, sem ser robótica
+        source.connect(offlineCtx.destination);
+        source.start();
+        const pitchShifted = await offlineCtx.startRendering();
+        return pitchShifted;
+      } else if (voice === 'F') {
+        const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.5, buffer.sampleRate);
+        const source = offlineCtx.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = 1.18; // Afinado: Voz feminina com maior clareza, brilho e tom agudo natural
+        source.connect(offlineCtx.destination);
+        source.start();
+        const pitchShifted = await offlineCtx.startRendering();
+        return pitchShifted;
+      }
+      
+      // Voz feminina levemente mais nítida
+      const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.1, buffer.sampleRate);
+      const source = offlineCtx.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = 1.02; 
+      source.connect(offlineCtx.destination);
+      source.start();
+      return await offlineCtx.startRendering();
+    } catch (e) {
+      console.error("[Narração] Erro ao buscar voz:", e);
+      return null;
+    }
+  }
 
   private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house'): Promise<AudioBuffer> {
     const SUPABASE_PROXY = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
@@ -353,6 +402,52 @@ export class VideoProcessor {
               }
               mainAudioBuffer = mixed;
             }
+
+            // 1.1 Narração IA (Sobrepõe ou Substitui Voz Original dependendo do Mix)
+            if (options.useNarration && options.script) {
+              console.log("[Audio] Gerando narração IA...");
+              const hookBuf = await this.fetchNarration(options.script.hook, options.narrationVoice);
+              const presBuf = await this.fetchNarration(options.script.presentation, options.narrationVoice);
+              const ctaBuf = await this.fetchNarration(options.script.cta, options.narrationVoice);
+
+              const totalDur = mainAudioBuffer ? mainAudioBuffer.duration : 15;
+              const narrations = [
+                { buffer: hookBuf, time: 0 },
+                { buffer: presBuf, time: totalDur * 0.20 },
+                { buffer: ctaBuf, time: totalDur * 0.65 }
+              ];
+
+              const finalWithNarration = new AudioBuffer({
+                numberOfChannels: 2,
+                length: Math.max(mainAudioBuffer?.length || 0, targetSampleRate * totalDur),
+                sampleRate: targetSampleRate
+              });
+
+              // Neutralização Total: Silencia áudio original se houver narração para evitar confusão
+              const originalGain = (options.useNarration) ? 0.0 : (options.audioMixMode === 'original' || options.audioMixMode === 'mix' ? 0.4 : 0.05);
+
+              for (let ch = 0; ch < 2; ch++) {
+                const outCh = finalWithNarration.getChannelData(ch);
+                if (mainAudioBuffer) {
+                  const mCh = mainAudioBuffer.getChannelData(ch % mainAudioBuffer.numberOfChannels);
+                  for (let s = 0; s < Math.min(outCh.length, mCh.length); s++) {
+                    outCh[s] = mCh[s] * originalGain;
+                  }
+                }
+
+                // Mixa narrações nos tempos corretos
+                for (const narr of narrations) {
+                  if (narr.buffer) {
+                    const nCh = narr.buffer.getChannelData(ch % narr.buffer.numberOfChannels);
+                    const startS = Math.floor(narr.time * targetSampleRate);
+                    for (let s = 0; s < nCh.length && (startS + s) < outCh.length; s++) {
+                      outCh[startS + s] += nCh[s] * 1.5; // Narração ganha destaque
+                    }
+                  }
+                }
+              }
+              mainAudioBuffer = finalWithNarration;
+            }
           } catch (audioErr) {
             console.warn("Falha ao preparar buffer de áudio deterministicamente.");
           }
@@ -449,11 +544,9 @@ export class VideoProcessor {
             this.ctx.translate(W, 0);
             this.ctx.scale(-1, 1);
             
-            // 2. Safe-Zone Zoom (De 1.02x para 1.15x para remover legendas nas bordas)
-            const sOffset = 1.15;
-            
-            // 3. Vertical Offset: Empurra o vídeo 5% para cima (legendas originais costumam estar embaixo)
-            const vShift = H * 0.05; 
+            // 2. Ultra-Zoom & Vertical Offset (Para cortar as legendas originais de vez)
+            const sOffset = 1.08; // Zoom Mínimo: Apenas para originalidade algorítmica (foco em vídeos limpos)
+            const vShift = 0; // Mantém enquadramento original centralizado
             
             this.ctx.translate(W * (1 - sOffset) / 2, (H * (1 - sOffset) / 2) - vShift);
             this.ctx.scale(sOffset, sOffset);
@@ -461,23 +554,25 @@ export class VideoProcessor {
             this.ctx.filter = filterCSS;
             this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
             this.ctx.restore();
+            
+            // IMPORTANTE: Reset explícito para garantir que legendas seguintes não herdem transformações
+            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-            // 4. Gradient Mask (Esconde resquícios na base e melhora estética)
-            const bottomGrad = this.ctx.createLinearGradient(0, H * 0.8, 0, H);
-            bottomGrad.addColorStop(0, 'rgba(0,0,0,0)');
-            bottomGrad.addColorStop(1, 'rgba(0,0,0,0.5)'); // Escurece a base para esconder texto original
-            this.ctx.fillStyle = bottomGrad;
-            this.ctx.fillRect(0, H * 0.8, W, H * 0.2);
+            // 4. Solid Mask (Remove de vez legendas originais do rodapé)
+            this.ctx.fillStyle = '#000000';
+            this.ctx.fillRect(0, H * 0.82, W, H * 0.18);
             // ------------------------------------------------------
 
             this.ctx.filter = 'none';
 
+            // 4. Aplica transições ANTES das legendas para evitar que o texto gire/suma
+            const isTransition = transitionTs.some(t => currentTime >= t && currentTime < t + 1.2);
+            if (isTransition) this.applyTransitionEffect(transition, currentTime, transitionTs, W, H);
+
+            // 5. Desenha legendas no topo de tudo (sempre fixas e corretas)
             if (options.script) {
               this.drawSpintaxOverlay(options.script, currentTime - startTime, W, H, options.storeSlug, duration);
             }
-
-            const isTransition = transitionTs.some(t => currentTime >= t && currentTime < t + 1.2);
-            if (isTransition) this.applyTransitionEffect(transition, currentTime, transitionTs, W, H);
 
             const timestamp = (currentTime - startTime) * 1_000_000;
             const frame = new VideoFrame(this.canvas, { timestamp });
@@ -610,21 +705,69 @@ export class VideoProcessor {
           codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000
         });
 
-        // 3. Setup Audio Buffer (Sincronização Perfeita)
-        let audioBuffer: AudioBuffer | null = null;
+        // 3. Setup Audio Buffer (Sincronização Perfeita de Música + Narração)
+        let pianoAudioBuffer: AudioBuffer | null = null;
         if (options.musicUrl) {
           try {
-            audioBuffer = await this.loadAndResampleAudio(options.musicUrl, 44100, (options as any).musicBpm || 128, (options as any).musicGenre || 'house');
+            pianoAudioBuffer = await this.loadAndResampleAudio(options.musicUrl, 44100, (options as any).musicBpm || 128, (options as any).musicGenre || 'house');
           } catch (e) {
-            console.warn("Falha ao carregar áudio, seguindo sem som");
+            console.warn("Falha ao carregar música, seguindo sem som");
           }
+        }
+
+        // 3.1 Narração IA para Slideshow
+        let finalAudioBuffer = pianoAudioBuffer;
+        if (options.useNarration && options.script) {
+          console.log("[Slideshow] Gerando narração IA...");
+          const hookBuf = await this.fetchNarration(options.script.hook, options.narrationVoice);
+          const presBuf = await this.fetchNarration(options.script.presentation, options.narrationVoice);
+          const ctaBuf = await this.fetchNarration(options.script.cta, options.narrationVoice);
+
+          const totalDur = targetDuration;
+          const narrations = [
+            { buffer: hookBuf, time: 0 },
+            { buffer: presBuf, time: totalDur * 0.20 },
+            { buffer: ctaBuf, time: totalDur * 0.65 }
+          ];
+
+          const mixed = new AudioBuffer({
+            numberOfChannels: 2,
+            length: Math.max(pianoAudioBuffer?.length || 0, 44100 * totalDur),
+            sampleRate: 44100
+          });
+
+          // Mixagem: Música fica mais baixa quando há narração
+          const musicGain = 0.35; 
+          for (let ch = 0; ch < 2; ch++) {
+            const outCh = mixed.getChannelData(ch);
+            if (pianoAudioBuffer) {
+              const bgCh = pianoAudioBuffer.getChannelData(ch % pianoAudioBuffer.numberOfChannels);
+              for (let s = 0; s < mixed.length; s++) {
+                outCh[s] = bgCh[s % bgCh.length] * musicGain;
+              }
+            }
+
+            for (const narr of narrations) {
+              if (narr.buffer) {
+                const nCh = narr.buffer.getChannelData(ch % narr.buffer.numberOfChannels);
+                const startOff = Math.floor(narr.time * 44100);
+                for (let s = 0; s < nCh.length; s++) {
+                  if (startOff + s < outCh.length) {
+                    outCh[startOff + s] += nCh[s];
+                  }
+                }
+              }
+            }
+          }
+          finalAudioBuffer = mixed;
         }
 
         const filterCSS = this.getFilterCSS(options.filter || 'elite');
         const CAPCUT_TRANSITIONS = [
           'zoomPunch', 'whipLeft', 'whipRight', 'whipDown', 'zoomBlur', 'glassSplit', 'colorBurn',
-          'lightLeak', 'beatFlash', 'glitch', 'slideUp', 'slideDown', 'zoomOut', 'shake', 'spin', 'fade'
-        ];
+          'lightLeak', 'beatFlash', 'slideUp', 'slideDown', 'zoomOut', 'spin', 'fade',
+          'doorH', 'doorV', 'pixelate', 'expoFlash', 'glitchPass'
+        ]; // Removidos: 'shake', 'glitch' (tremulações)
         const shuffledTransitions = [...CAPCUT_TRANSITIONS].sort(() => Math.random() - 0.5);
         const getSlideTransition = (slideNum: number) => shuffledTransitions[slideNum % shuffledTransitions.length];
 
@@ -644,7 +787,7 @@ export class VideoProcessor {
           const img = finalImages[slideIdx];
           const progress = (currentTime % slideChangeInterval) / slideChangeInterval;
           const isCTA = currentTime > (targetDuration - 3.5);
-
+          
           this.ctx.clearRect(0, 0, W, H);
           this.ctx.fillStyle = "#020617";
           this.ctx.fillRect(0, 0, W, H);
@@ -652,10 +795,8 @@ export class VideoProcessor {
           if (!isCTA) {
             // High-End Ken Burns
             const baseScale = Math.max(W / img.width, H / img.height);
-            // Alternate scale directions
             const zoomIn = Math.floor(currentTime / slideChangeInterval) % 2 === 0;
-            const scale = zoomIn ? baseScale * (1 + progress * 0.2) : baseScale * (1.2 - progress * 0.2);
-            
+            const scale = zoomIn ? baseScale * (1 + progress * 0.1) : baseScale * (1.1 - progress * 0.1);
             const scrollY = (H - img.height * scale) / 2;
             const scrollX = (W - img.width * scale) / 2;
 
@@ -663,84 +804,58 @@ export class VideoProcessor {
             this.ctx.filter = filterCSS;
             this.ctx.drawImage(img, scrollX, scrollY, img.width * scale, img.height * scale);
             this.ctx.restore();
+          }
 
-            // CTA Messages - primeiro 12 segundos
+          // CapCut Pro Transitions - Aplicadas à imagem ANTES do Overlay de texto
+          const slideNum = Math.floor(currentTime / slideChangeInterval);
+          const tType = getSlideTransition(slideNum);
+          const tZone = 0.35; 
+
+          if (progress < tZone && slideNum > 0 && !isCTA) {
+            const tp = progress / tZone; 
+            this.applyCapCutTransition(tType, tp, W, H);
+          }
+
+          // Mid-slide: pulse sutil no beat (PUMP EFFECT)
+          const musicBpm = (options as any).musicBpm || 128;
+          const beatInterval = 60 / musicBpm;
+          const beatPhase = (currentTime % beatInterval) / beatInterval;
+          if (beatPhase < 0.08 && !isCTA) {
+            const beatPulse = 1 + (1 - beatPhase / 0.08) * 0.025;
+            this.ctx.save();
+            const centerX = W / 2;
+            const centerY = H / 2;
+            this.ctx.translate(centerX, centerY);
+            this.ctx.scale(beatPulse, beatPulse);
+            this.ctx.translate(-centerX, -centerY);
+            this.ctx.restore();
+          }
+
+          // OVERLAYS (Desenhados por último para garantir fixação e orientação correta)
+          if (!isCTA) {
             this.drawCallToAction(currentTime, W, H, progress);
-            
-            // Product Info - aparece após 12 segundos
             this.drawProductInfo(`${productName}\n${price}`, W, H, currentTime);
           } else {
-            // CTA Final
+            this.ctx.save();
+            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
             this.ctx.fillStyle = "#10b981";
             this.ctx.font = "bold 90px Inter, sans-serif";
             this.ctx.textAlign = "center";
             this.ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
             this.ctx.shadowBlur = 30;
             this.ctx.fillText("PEÇA O LINK!", W / 2, H / 2 - 40);
-            this.ctx.shadowBlur = 0;
             this.ctx.font = "50px Inter";
             this.ctx.fillStyle = "white";
             this.ctx.fillText("OU LINK NA BIO", W / 2, H / 2 + 60);
-          }
-
-          // Growth Hack Overlays (Novidade!)
-          this.drawGrowthHacks(currentTime, W, H);
-
-          // CapCut Pro Transitions - unicas por slide, nunca repetem na mesma ordem
-          const slideNum = Math.floor(currentTime / slideChangeInterval);
-          const tType = getSlideTransition(slideNum);
-          const tZone = 0.35; // 35% do slide = transicao de entrada (beat-sync)
-
-          if (progress < tZone && slideNum > 0 && !isCTA) {
-            const tp = progress / tZone; // 0 ? 1 dentro da zona de transicao
-            this.applyCapCutTransition(tType, tp, W, H);
-          }
-
-          // Mid-slide: pulse sutil no beat (sincroniza com BPM)
-          const musicBpm = (options as any).musicBpm || 128;
-          const beatInterval = 60 / musicBpm;
-          const beatPhase = (currentTime % beatInterval) / beatInterval;
-          if (beatPhase < 0.05 && !isCTA) {
-            const beatPulse = 1 + (1 - beatPhase / 0.05) * 0.015;
-            this.ctx.save();
-            this.ctx.transform(beatPulse, 0, 0, beatPulse, W * (1 - beatPulse) / 2, H * (1 - beatPulse) / 2);
             this.ctx.restore();
           }
+
+          this.drawGrowthHacks(currentTime, W, H);
 
           // Encode Video Frame
           const vFrame = new VideoFrame(this.canvas, { timestamp: currentTime * 1_000_000 });
           videoEncoder.encode(vFrame, { keyFrame: i % 30 === 0 });
           vFrame.close();
-
-          // Encode Audio Chunk (matching the video frame)
-          if (audioBuffer) {
-            const samplesPerFrame = 44100 / fps;
-            const startSample = Math.floor(i * samplesPerFrame) % audioBuffer.length;
-            const endSample = startSample + samplesPerFrame;
-            
-            // Extract samples for this frame
-            const audioData = new Float32Array(Math.floor(samplesPerFrame) * 2);
-            for (let channel = 0; channel < 2; channel++) {
-                const channelData = audioBuffer.getChannelData(channel % audioBuffer.numberOfChannels);
-                for (let s = 0; s < samplesPerFrame; s++) {
-                    audioData[s * 2 + channel] = channelData[(startSample + s) % audioBuffer.length];
-                }
-            }
-
-            const aData = new AudioData({
-              format: 'f32-planar',
-              sampleRate: 44100,
-              numberOfFrames: Math.floor(samplesPerFrame),
-              numberOfChannels: 2,
-              timestamp: currentTime * 1_000_000,
-              data: audioData
-            });
-
-            if (audioEncoder.state === 'configured') {
-              audioEncoder.encode(aData);
-            }
-            aData.close();
-          }
           
           // Reporta progresso real para a UI
           options.onProgress?.((i / totalFrames) * 100);
@@ -755,15 +870,41 @@ export class VideoProcessor {
           }
         }
 
+        // 5. Encode Audio (Separado do loop de vídeo para maior estabilidade)
+        if (finalAudioBuffer) {
+            const totalSamples = finalAudioBuffer.length;
+            const samplesPerChunk = Math.floor(44100 / 10); // 100ms chunks
+            const totalChunks = Math.ceil(totalSamples / samplesPerChunk);
+
+            for (let c = 0; c < totalChunks; c++) {
+                const start = c * samplesPerChunk;
+                const end = Math.min(start + samplesPerChunk, totalSamples);
+                const frameCount = end - start;
+                
+                const audioData = new Float32Array(frameCount * 2);
+                for (let ch = 0; ch < 2; ch++) {
+                    const chData = finalAudioBuffer.getChannelData(ch);
+                    for (let s = 0; s < frameCount; s++) {
+                        audioData[s * 2 + ch] = chData[start + s];
+                    }
+                }
+
+                audioEncoder.encode(new AudioData({
+                    format: 'f32-planar', // Use planar for AAC usually
+                    sampleRate: 44100,
+                    numberOfFrames: frameCount,
+                    numberOfChannels: 2,
+                    timestamp: (start / 44100) * 1_000_000,
+                    data: audioData
+                }));
+            }
+        }
+
         // Flush encoders with state check
-        if (videoEncoder.state === 'configured') {
-          await videoEncoder.flush();
-        }
-        if (audioEncoder.state === 'configured') {
-          await audioEncoder.flush();
-        }
-        muxer.finalize();
+        if (videoEncoder.state === 'configured') await videoEncoder.flush();
+        if (audioEncoder.state === 'configured') await audioEncoder.flush();
         
+        muxer.finalize();
         const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
         resolve(blob);
       } catch (err) {
@@ -905,12 +1046,8 @@ export class VideoProcessor {
         break;
       }
       case 'shake': {
-        const intensity = (1 - ep) * 12;
-        this.ctx.translate(
-          (Math.random() - 0.5) * intensity,
-          (Math.random() - 0.5) * intensity
-        );
-        this.ctx.globalAlpha = Math.min(1, ep * 2);
+        // Removido do pool de transições para evitar tremulação
+        this.ctx.globalAlpha = ep;
         break;
       }
       case 'spin': {
@@ -919,6 +1056,68 @@ export class VideoProcessor {
         this.ctx.rotate(angle);
         this.ctx.translate(-W / 2, -H / 2);
         this.ctx.globalAlpha = ep;
+        break;
+      }
+      case 'doorH': {
+        const offset = (1 - ep) * W * 0.6;
+        this.ctx.globalAlpha = ep;
+        // Left part
+        this.ctx.save();
+        this.ctx.beginPath(); this.ctx.rect(0, 0, W/2, H); this.ctx.clip();
+        this.ctx.translate(-offset, 0);
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.restore();
+        // Right part
+        this.ctx.save();
+        this.ctx.beginPath(); this.ctx.rect(W/2, 0, W/2, H); this.ctx.clip();
+        this.ctx.translate(offset, 0);
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.restore();
+        break;
+      }
+      case 'doorV': {
+        const offset = (1 - ep) * H * 0.6;
+        this.ctx.globalAlpha = ep;
+        // Top part
+        this.ctx.save();
+        this.ctx.beginPath(); this.ctx.rect(0, 0, W, H/2); this.ctx.clip();
+        this.ctx.translate(0, -offset);
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.restore();
+        // Bottom part
+        this.ctx.save();
+        this.ctx.beginPath(); this.ctx.rect(0, H/2, W, H/2); this.ctx.clip();
+        this.ctx.translate(0, offset);
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.restore();
+        break;
+      }
+      case 'expoFlash': {
+        this.ctx.globalAlpha = ep;
+        const flashIntensity = (1 - ep) * 0.9;
+        this.ctx.fillStyle = `rgba(255,255,255,${flashIntensity})`;
+        this.ctx.fillRect(0, 0, W, H);
+        this.ctx.globalCompositeOperation = 'screen';
+        this.ctx.drawImage(this.canvas, 0, 0);
+        this.ctx.globalCompositeOperation = 'source-over';
+        break;
+      }
+      case 'pixelate': {
+        const size = Math.floor((1 - ep) * 40) + 1;
+        this.ctx.imageSmoothingEnabled = false;
+        this.ctx.drawImage(this.canvas, 0, 0, W/size, H/size, 0, 0, W, H);
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.globalAlpha = ep;
+        break;
+      }
+      case 'glitchPass': {
+        this.ctx.globalAlpha = ep;
+        const shiftX = (Math.random() - 0.5) * 60 * (1 - ep);
+        this.ctx.drawImage(this.canvas, shiftX, 0);
+        if (Math.random() > 0.8) {
+          this.ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
+          this.ctx.fillRect(0, Math.random() * H, W, 25);
+        }
         break;
       }
       case 'fade':
@@ -974,8 +1173,9 @@ export class VideoProcessor {
         break;
       }
       case 'shake': {
-        const sx = Math.sin(ct * 45) * 12 * sin;
-        const sy2 = Math.cos(ct * 38) * 12 * sin;
+        // Removido tremulação agressiva. Mantido apenas um leve drift cinematográfico.
+        const sx = Math.sin(ct * 2) * 4 * sin;
+        const sy2 = Math.cos(ct * 1.5) * 4 * sin;
         this.ctx.save();
         this.ctx.translate(sx, sy2);
         this.ctx.drawImage(this.canvas, -sx, -sy2, W, H);
@@ -1074,6 +1274,7 @@ export class VideoProcessor {
   }
 
   private drawCallToAction(time: number, W: number, H: number, progress: number) {
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     // Mensagens curtas de chamada para comprar
     const ctaMessages = [
       "🔥 COMPRE AGORA!",
@@ -1149,6 +1350,7 @@ export class VideoProcessor {
   }
 
   private drawProductInfo(text: string, W: number, H: number, time: number) {
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     // Aparece a partir de 10 segundos para dar tempo de ver as imagens
     if (time < 10) return;
 
@@ -1221,6 +1423,7 @@ export class VideoProcessor {
   }
 
   private drawGrowthHacks(time: number, W: number, H: number) {
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     // 1. Selo de Frete Grátis (Efeito Emergência)
     if (time > 1 && time < 8) {
       const sealSize = Math.floor(W * 0.18);
@@ -1375,13 +1578,14 @@ export class VideoProcessor {
   }
 
   private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string, totalDuration: number = 15) {
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0); // GARANTIA: Nunca desenha invertido
     let text = "";
     let type: 'hook' | 'presentation' | 'cta' = 'hook';
     
-    // Fix: Legendas agora adaptativas ao tempo total do vídeo
-    const hookEnd = totalDuration * 0.20;
-    const presEnd = totalDuration * 0.65;
-    const ctaEnd = totalDuration * 0.95;
+    // Sincronia baseada em blocos inteligentes (25% Hook, 50% Pres, 25% CTA)
+    const hookEnd = totalDuration * 0.25;
+    const presEnd = totalDuration * 0.75;
+    const ctaEnd = totalDuration * 0.98;
 
     if (time < hookEnd) {
       text = script.hook;

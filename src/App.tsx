@@ -31,7 +31,9 @@ import {
   Unlock,
   Home,
   Type,
-  Clock
+  Clock,
+  Mic,
+  Cpu
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -60,6 +62,29 @@ import { VIRAL_MUSIC, TRANSITIONS, FILTERS } from "./utils/MusicLibrary";
 
 const STRIPE_PRICE_ID = "price_1TIZKzKYzfLaHvnki5ZXmNG9";
 const HOTMART_CHECKOUT_URL = "https://pay.hotmart.com/S105263156D";
+
+const NICHE_KEYWORDS: Record<string, { positive: string[]; negative: string[] }> = {
+  Cozinha: {
+    positive: ["cozinha", "comida", "chef", "receita", "utilidade", "casa", "lar", "utensilio", "preparo", "fritadeira", "airfryer", "organizador"],
+    negative: ["maquiagem", "pc", "gamer", "pet", "cachorro", "bebe", "kids", "fitness", "cosplay"],
+  },
+  Tecnologia: {
+    positive: ["tech", "gadget", "unboxing", "setup", "pc", "smartphone", "eletronico", "acessorio", "inteligente", "smart", "bluetooth"],
+    negative: ["cozinha", "panela", "maquiagem", "bebe", "infantil", "pet", "limpeza"],
+  },
+  Beleza: {
+    positive: ["make", "maquiagem", "skin", "cabelo", "beleza", "beauty", "tutorial", "cuidado", "pele", "rosto", "cosmetico"],
+    negative: ["ferramenta", "carro", "moto", "gamer", "tecnologia", "comida", "pesca"],
+  },
+  Decoração: {
+    positive: ["casa", "decor", "quarto", "sala", "iluminação", "led", "reforma", "estilo", "design", "ambiente"],
+    negative: ["maquiagem", "carro", "pet", "comida", "eletronico"],
+  },
+  Pet: {
+    positive: ["pet", "gato", "cachorro", "dog", "cat", "animal", "fofo", "rastreador", "brinquedo", "coleira"],
+    negative: ["maquiagem", "cozinha", "gamer", "carro"],
+  },
+};
 
 // --- NOVOS COMPONENTES DE BRANDING ---
 const ViralSquadLogo = ({ size = "md", className = "", showText = true }: { size?: "sm" | "md" | "lg", className?: string, showText?: boolean }) => {
@@ -342,6 +367,8 @@ const App: React.FC = () => {
   const [activeTransition, setActiveTransition] = useState("none");
   const [isMuted, setIsMuted] = useState(false);
   const [videoLegend, setVideoLegend] = useState("");
+  const [useNarration, setUseNarration] = useState(true);
+  const [narrationVoice, setNarrationVoice] = useState<'M' | 'F'>('F');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activePlatform, setActivePlatform] = useState<"tiktok" | "shopee">(
     "tiktok",
@@ -448,6 +475,18 @@ const App: React.FC = () => {
 
     setStoreSlug(nextSlug || "meu-link");
     setStoreReady(nextReady);
+
+    // Carregar ID do Shopee do perfil
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("shopee_id")
+        .eq("id", authUser.id)
+        .single();
+      if (profile?.shopee_id) {
+        setUserShopeeId(profile.shopee_id);
+      }
+    } catch (e) {}
 
     if (
       (!metadataSlug && nextReady) ||
@@ -558,11 +597,13 @@ const App: React.FC = () => {
   const [videoResults, setVideoResults] = useState<any[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [databaseProducts, setDatabaseProducts] = useState<any[]>([]);
+  const [isFindingNewItems, setIsFindingNewItems] = useState(false);
+  const [userShopeeId, setUserShopeeId] = useState<string | null>(null);
 
   // ── SISTEMA DE ÁUDIO VIRAL ──
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
   const [audioMixOption, setAudioMixOption] = useState<
-    "original" | "music" | "mix"
+    "original" | "music" | "mix" | "mute"
   >("original");
   const [treatingStatus, setTreatingStatus] = useState(
     "Preparando pipeline viral...",
@@ -865,6 +906,10 @@ const App: React.FC = () => {
     // A ideia visual solicitada: trazer produtos focados nos mais vendidos + boa comissão
     // Usamos um multiplicador: Vendas absolutas x Modificador de Comissão %
     return salesValue * (1 + (comm / 100));
+  };
+
+  const addLog = (msg: string, type: "info" | "success" | "error" | "warn" = "info") => {
+    setConsoleLogs((prev) => [...prev.slice(-19), { msg, type }]);
   };
 
   const getInfinitePool = (niche: string) => {
@@ -1246,7 +1291,6 @@ const App: React.FC = () => {
       "É UM MILAGRE!",
       "MUDOU MINHA VIDA!",
       "TODO MUNDO QUER!",
-      "VENDI MEU RIM!",
       "MELHOR COMPRA!",
       "SUCESSO TOTAL!",
       "ACHADO VIP!",
@@ -1319,6 +1363,62 @@ const App: React.FC = () => {
 
     setActiveItems(items);
     await saveScoutedProducts(items);
+  };
+
+  const discoverNicheNews = async (nicheId: string) => {
+    if (isFindingNewItems) return;
+    
+    setIsFindingNewItems(true);
+    addLog(`INICIANDO BUSCA DE NOVIDADES PARA: ${nicheId.toUpperCase()}`, "info");
+    
+    try {
+      const config = NICHE_KEYWORDS[nicheId];
+      if (!config) throw new Error("Configuração de nicho não encontrada.");
+      
+      // Escolhe uma palavra-chave aleatória do nicho para variar os resultados
+      const randomKeyword = config.positive[Math.floor(Math.random() * config.positive.length)];
+      addLog(`EXPLORANDO TENDÊNCIAS: "${randomKeyword.toUpperCase()}"...`, "info");
+      
+      const newProducts = await ShopeeService.searchProducts({
+        keyword: randomKeyword,
+        sort_by: "sales", // Priorizar os mais vendidos
+      }, userShopeeId || undefined);
+      
+      if (newProducts.length === 0) {
+        showToast("Nenhuma novidade encontrada no momento.");
+        return;
+      }
+
+      // Atribui o nicho aos produtos encontrados
+      const taggedProducts = newProducts.map(p => ({
+        ...p,
+        niche: nicheId,
+        id: p.item_id // Garantir que tenha ID para a lógica de filtro
+      }));
+
+      // Atualiza o pool global e os itens ativos
+      setDatabaseProducts(prev => {
+        const existingIds = new Set(prev.map(p => p.item_id || p.id));
+        const nonDuplicates = taggedProducts.filter(p => !existingIds.has(p.item_id));
+        return [...nonDuplicates, ...prev];
+      });
+
+      setActiveItems(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const freshOnes = taggedProducts.filter(p => !existingIds.has(p.id)).slice(0, 15);
+        return [...freshOnes, ...prev].slice(0, 20); // Prioriza os novos no topo
+      });
+
+      addLog(`SUCESSO! ${taggedProducts.length} NOVOS ITENS ENCONTRADOS.`, "success");
+      showToast(`${taggedProducts.length} NOVIDADES ENCONTRADAS! 💎`);
+      
+    } catch (err: any) {
+      console.error("Erro na descoberta:", err);
+      addLog("FALHA NA BUSCA DE NOVIDADES.", "error");
+      showToast("ERRO AO BUSCAR NOVIDADES.");
+    } finally {
+      setIsFindingNewItems(false);
+    }
   };
 
   const handleCustomLinkSubmit = async (e: React.FormEvent) => {
@@ -1570,137 +1670,15 @@ const App: React.FC = () => {
 
       // 1. Identificar Âncoras Técnicas (Power Words) que definem o produto
       const powerWords = [
-        "levitação",
-        "magnética",
-        "magnético",
-        "usb",
-        "led",
-        "bluetooth",
-        "portátil",
-        "mini",
-        "inteligente",
-        "smart",
-        "flutuante",
-        "gamer",
-        "rgb",
-        "projetor",
+        "levitação", "magnética", "magnético", "usb", "led", "bluetooth",
+        "portátil", "mini", "inteligente", "smart", "flutuante", "gamer",
+        "rgb", "projetor",
       ];
       const productAnchors = coreWords.filter((w) =>
         powerWords.includes(w.toLowerCase()),
       );
 
-      const nicheKeywords: Record<
-        string,
-        { positive: string[]; negative: string[] }
-      > = {
-        Cozinha: {
-          positive: [
-            "cozinha",
-            "comida",
-            "chef",
-            "receita",
-            "utilidade",
-            "casa",
-            "lar",
-            "utensilio",
-            "preparo",
-            "fritadeira",
-            "airfryer",
-            "organizador",
-          ],
-          negative: [
-            "maquiagem",
-            "pc",
-            "gamer",
-            "pet",
-            "cachorro",
-            "bebe",
-            "kids",
-            "fitness",
-            "cosplay",
-          ],
-        },
-        Tecnologia: {
-          positive: [
-            "tech",
-            "gadget",
-            "unboxing",
-            "setup",
-            "pc",
-            "smartphone",
-            "eletronico",
-            "acessorio",
-            "inteligente",
-            "smart",
-            "bluetooth",
-          ],
-          negative: [
-            "cozinha",
-            "panela",
-            "maquiagem",
-            "bebe",
-            "infantil",
-            "pet",
-            "limpeza",
-          ],
-        },
-        Beleza: {
-          positive: [
-            "make",
-            "maquiagem",
-            "skin",
-            "cabelo",
-            "beleza",
-            "beauty",
-            "tutorial",
-            "cuidado",
-            "pele",
-            "rosto",
-            "cosmetico",
-          ],
-          negative: [
-            "ferramenta",
-            "carro",
-            "moto",
-            "gamer",
-            "tecnologia",
-            "comida",
-            "pesca",
-          ],
-        },
-        Decoração: {
-          positive: [
-            "casa",
-            "decor",
-            "quarto",
-            "sala",
-            "iluminação",
-            "led",
-            "reforma",
-            "estilo",
-            "design",
-            "ambiente",
-          ],
-          negative: ["maquiagem", "carro", "pet", "comida", "eletronico"],
-        },
-        Pet: {
-          positive: [
-            "pet",
-            "gato",
-            "cachorro",
-            "dog",
-            "cat",
-            "animal",
-            "fofo",
-            "rastreador",
-            "brinquedo",
-            "coleira",
-          ],
-          negative: ["maquiagem", "cozinha", "gamer", "carro"],
-        },
-      };
-
-      const currentNicheRules = nicheKeywords[productNiche] || {
+      const currentNicheRules = NICHE_KEYWORDS[productNiche] || {
         positive: [],
         negative: [],
       };
@@ -2110,10 +2088,12 @@ const App: React.FC = () => {
         transitionList: ['zoom', 'glitch', 'shake', 'blur', 'fire', 'flash', 'beat'] as any,
         transitionTimestamps: autoTransitions,
         legend: videoLegend || '',
-        isMuted: isMuted,
+        isMuted: audioMixOption === 'mute',
         script: script,
         musicUrl: selectedMusic || undefined,
-        audioMixMode: isMuted ? 'mute' : 'original',
+        audioMixMode: audioMixOption,
+        useNarration: useNarration,
+        narrationVoice: narrationVoice,
         storeSlug: storeSlug,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
@@ -2541,7 +2521,7 @@ const App: React.FC = () => {
         const options: ProcessingOptions = {
           filter: activeFilter,
           legend: videoLegend,
-          isMuted: isMuted,
+          isMuted: audioMixOption === 'mute',
           transition: activeTransition as any,
           trimStart: trimStart,
           trimEnd: trimEnd || undefined,
@@ -2549,6 +2529,9 @@ const App: React.FC = () => {
           existingVideoEl: videoRef.current || undefined,
           musicUrl: selectedMusic || undefined,
           audioMixMode: audioMixOption,
+          useNarration: useNarration,
+          narrationVoice: narrationVoice,
+          script: videoData?.script,
           onProgress: (p: number) => setTreatingProgress(Math.floor(p))
         };
 
@@ -2809,9 +2792,7 @@ const App: React.FC = () => {
     setConsoleLogs([]);
     setAutomationFinished(false);
 
-    const addLog = (msg: string, type: string = "info") => {
-      setConsoleLogs((prev) => [...prev, { msg, type }]);
-    };
+    // ...
 
     addLog(
       `INICIANDO PROTOCOLO [${selectedPlatform.toUpperCase()}]`,
@@ -3534,6 +3515,42 @@ const App: React.FC = () => {
                 ))}
               </div>
 
+              <AnimatePresence>
+                {activeNiche && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="mt-6 flex justify-center"
+                  >
+                    <motion.button
+                      whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(16,185,129,0.3)" }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => discoverNicheNews(activeNiche)}
+                      disabled={isFindingNewItems}
+                      className={`group relative flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-xs tracking-widest uppercase transition-all duration-500 overflow-hidden ${
+                        isFindingNewItems 
+                          ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
+                          : "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-[0_10px_40px_-10px_rgba(16,185,129,0.5)]"
+                      }`}
+                    >
+                      {isFindingNewItems ? (
+                        <>
+                          <RotateCcw className="w-4 h-4 animate-spin" />
+                          <span>MINERANDO NOVIDADES...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                          <span>BUSCAR NOVIDADES NO NICHO</span>
+                          <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 skew-x-12" />
+                        </>
+                      )}
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Lista de Produtos */}
               <div className="space-y-3">
                 {activeItems.map((p, i) => {
@@ -3930,17 +3947,10 @@ const App: React.FC = () => {
                           className={`absolute inset-0 pointer-events-none effect-overlay-${activeFilter}`}
                         />
 
-                        {videoLegend && (
-                          <div className="absolute inset-x-0 bottom-16 sm:bottom-20 flex justify-center z-20 px-4 sm:px-5">
-                            <motion.div
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              className="bg-gradient-to-r from-accent to-emerald-400 text-slate-950 px-5 py-2.5 rounded-2xl font-black text-[11px] sm:text-[13px] uppercase italic tracking-tight text-center shadow-[0_10px_24px_rgba(16,185,129,0.32)] border border-white/20 max-w-[94%] sm:max-w-[90%] break-words leading-tight"
-                            >
-                              {videoLegend}
-                            </motion.div>
-                          </div>
-                        )}
+                        {/* Elite Overlays System */}
+                        <div
+                          className={`absolute inset-0 pointer-events-none effect-overlay-${activeFilter}`}
+                        />
                       </>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900/50 space-y-4">
@@ -4407,6 +4417,44 @@ const App: React.FC = () => {
                           </span>
                         </button>
                       ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* NOVO: SEÇÃO DE NARRAÇÃO IA PROFISSIONAL */}
+                <div className="space-y-4 pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] flex items-center gap-2">
+                      <Mic size={12} className="text-accent" />
+                      Narração IA Profissional
+                    </p>
+                    <button 
+                      onClick={() => setUseNarration(!useNarration)}
+                      className={`px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all flex items-center gap-2 ${useNarration ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-white/30 border border-white/10'}`}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full ${useNarration ? 'bg-emerald-400 animate-pulse' : 'bg-white/20'}`} />
+                      {useNarration ? 'ATIVADA' : 'DESATIVADA'}
+                    </button>
+                  </div>
+                  
+                  {useNarration && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setNarrationVoice('F')}
+                        className={`h-12 rounded-xl border flex items-center justify-center gap-2 transition-all ${narrationVoice === 'F' ? 'bg-pink-500/10 border-pink-500/50 text-pink-400' : 'bg-slate-900 border-white/5 text-white/20'}`}
+                      >
+                        <span className="text-sm">👩</span>
+                        <span className="text-[10px] font-black uppercase tracking-tight">Voz Feminina</span>
+                      </motion.button>
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setNarrationVoice('M')}
+                        className={`h-12 rounded-xl border flex items-center justify-center gap-2 transition-all ${narrationVoice === 'M' ? 'bg-blue-500/10 border-blue-500/50 text-blue-400' : 'bg-slate-900 border-white/5 text-white/20'}`}
+                      >
+                        <span className="text-sm">👨</span>
+                        <span className="text-[10px] font-black uppercase tracking-tight">Voz Masculina</span>
+                      </motion.button>
                     </div>
                   )}
                 </div>
@@ -5052,42 +5100,133 @@ const App: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-2xl px-8 text-center"
+            className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-950/98 backdrop-blur-3xl px-6 text-center overflow-hidden"
           >
-            <div className="relative mb-12">
-              <motion.div
-                animate={{ rotate: 360, scale: [1, 1.1, 1] }}
-                transition={{ repeat: Infinity, duration: 4 }}
-                className="w-32 h-32 rounded-full border-2 border-accent/20 border-t-accent shadow-[0_0_50px_rgba(6,182,212,0.3)]"
-              />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Terminal size={32} className="text-accent animate-pulse" />
+            {/* Background Tech Ornaments */}
+            <div className="absolute inset-0 pointer-events-none opacity-20">
+              <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.1),transparent_70%)]" />
+              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10" />
+            </div>
+
+            <div className="relative z-10 w-full max-w-md flex flex-col items-center">
+              {/* Neural Core Animation */}
+              <div className="relative mb-10">
+                <motion.div
+                  animate={{ 
+                    rotate: 360,
+                    scale: [1, 1.05, 1],
+                  }}
+                  transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                  className="w-40 h-40 rounded-full border border-accent/30 border-t-accent/60 shadow-[0_0_80px_rgba(6,182,212,0.2)] flex items-center justify-center"
+                >
+                   <motion.div
+                    animate={{ rotate: -360 }}
+                    transition={{ repeat: Infinity, duration: 12, ease: "linear" }}
+                    className="absolute inset-2 rounded-full border border-dashed border-emerald-500/20"
+                  />
+                  <div className="w-24 h-24 rounded-full bg-slate-900/80 backdrop-blur-md border border-white/5 flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-t from-accent/10 to-transparent" />
+                    <Cpu size={40} className="text-accent animate-pulse relative z-10" />
+                  </div>
+                </motion.div>
+                
+                {/* Orbital Status */}
+                <motion.div 
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                  className="absolute -inset-4 pointer-events-none"
+                >
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2 h-2 bg-accent rounded-full shadow-[0_0_15px_#06b6d4]" />
+                </motion.div>
               </div>
-            </div>
 
-            <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-2 italic">
-              PROCESSANDO{" "}
-              <span className="text-accent underline decoration-accent/30 decoration-8 underline-offset-4">
-                VÍDEO VIRAL
-              </span>
-            </h2>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mb-12">
-              Renderizando Sincronização de Transições
-            </p>
+              {/* Status HUD */}
+              <div className="space-y-1 mb-8">
+                <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white flex items-center justify-center gap-3">
+                  NEURAL <span className="text-accent">HUB</span>
+                </h2>
+                <div className="flex items-center justify-center gap-4 text-[9px] font-black uppercase tracking-[0.3em] text-slate-500">
+                  <span className="flex items-center gap-1"><div className="w-1 h-1 bg-emerald-500 rounded-full" /> GPU ACTIVE</span>
+                  <span className="flex items-center gap-1"><div className="w-1 h-1 bg-accent rounded-full animate-ping" /> SYNCING</span>
+                </div>
+              </div>
 
-            <div className="w-full max-w-[200px] h-1.5 bg-white/5 rounded-full overflow-hidden mb-4 pr-[1px]">
-              <motion.div
-                initial={{ x: "-100%" }}
-                animate={{ x: "0%" }}
-                transition={{ duration: 15, ease: "linear" }}
-                className="h-full bg-gradient-to-r from-accent to-emerald-400 rounded-full"
-              />
-            </div>
+              {/* Progress System */}
+              <div className="w-full bg-slate-900/50 border border-white/5 rounded-3xl p-6 mb-6 backdrop-blur-xl relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-1 h-full bg-accent/50" />
+                
+                <div className="flex justify-between items-end mb-4 pr-1">
+                  <div className="text-left">
+                    <p className="text-[10px] font-black text-accent uppercase tracking-widest mb-1 italic">Processamento em Tempo Real</p>
+                    <p className="text-xs font-bold text-white uppercase italic">
+                      {treatingProgress < 30 ? "Iniciando Motores..." : 
+                       treatingProgress < 60 ? "Injetando Transições..." : 
+                       treatingProgress < 90 ? "Sincronizando Áudio IA..." : "Finalizando Master..."}
+                    </p>
+                  </div>
+                  <span className="text-2xl font-black italic text-accent tabular-nums">{treatingProgress}%</span>
+                </div>
 
-            <div className="space-y-2 opacity-30 font-mono text-[8px] uppercase tracking-widest text-center">
-              <p>Mapeando Batidas de Áudio...</p>
-              <p>Aplicando Filtro Cinematic...</p>
-              <p>Otimizando Compressão 4K...</p>
+                <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden p-0.5 border border-white/5">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-accent via-cyan-400 to-emerald-400 rounded-full relative"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${treatingProgress}%` }}
+                    transition={{ type: "spring", damping: 20 }}
+                  >
+                    <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.4),transparent)] animate-[shimmer_2s_infinite]" />
+                  </motion.div>
+                </div>
+              </div>
+
+              {/* Console Logs */}
+              <div className="w-full bg-black/60 rounded-2xl border border-white/5 p-4 font-mono text-[9px] text-left space-y-2 mb-8 relative">
+                <div className="absolute top-2 right-3 flex gap-1">
+                  <div className="w-1 h-1 bg-red-500/50 rounded-full" />
+                  <div className="w-1 h-1 bg-yellow-500/50 rounded-full" />
+                  <div className="w-1 h-1 bg-emerald-500/50 rounded-full" />
+                </div>
+                
+                <div className="space-y-1.5 opacity-60">
+                  <p className="text-accent flex items-center gap-2">
+                    <span className="opacity-30">[{new Date().toLocaleTimeString()}]</span>
+                    <span className="font-bold">&gt;</span> SYSTEM: BOOTING NEURAL_ENGINE_V4
+                  </p>
+                  <p className="text-white/80 flex items-center gap-2">
+                    <span className="opacity-30">[{new Date().toLocaleTimeString()}]</span>
+                    <span className="font-bold">&gt;</span> AUTH: SHAP-API-KEY CONNECTED
+                  </p>
+                  {treatingProgress > 20 && (
+                    <motion.p initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-emerald-400/80 flex items-center gap-2">
+                      <span className="opacity-30">[{new Date().toLocaleTimeString()}]</span>
+                      <span className="font-bold">&gt;</span> RENDER: APPLYING CINEMATIC_TRANSITIONS
+                    </motion.p>
+                  )}
+                  {treatingProgress > 50 && (
+                    <motion.p initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-accent/80 flex items-center gap-2">
+                      <span className="opacity-30">[{new Date().toLocaleTimeString()}]</span>
+                      <span className="font-bold">&gt;</span> AUDIO: INJECTING AI_VOICE_OVER (LATENCY: 12ms)
+                    </motion.p>
+                  )}
+                  {treatingProgress > 80 && (
+                    <motion.p initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-yellow-400/80 flex items-center gap-2">
+                      <span className="opacity-30">[{new Date().toLocaleTimeString()}]</span>
+                      <span className="font-bold">&gt;</span> FINAL: SYNCING METADATA_BUF
+                    </motion.p>
+                  )}
+                  <motion.p 
+                    animate={{ opacity: [0, 1] }} 
+                    transition={{ repeat: Infinity, duration: 0.8 }}
+                    className="text-accent font-bold"
+                  >
+                    _
+                  </motion.p>
+                </div>
+              </div>
+
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] italic">
+                Não feche o app. A inteligência está lapidando seu viral.
+              </p>
             </div>
           </motion.div>
         )}
