@@ -2083,6 +2083,9 @@ const App: React.FC = () => {
       showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
       return;
     }
+    
+    // Dica importante para o usuário
+    showToast("💡 Dica: Vídeos sem legendas originais ficam mais autênticos!");
 
     setIsProcessing(true);
     setTreatingStatus("Transformando em autoral...");

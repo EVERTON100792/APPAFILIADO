@@ -28,37 +28,37 @@ const HOOKS = [
 
 const PRESENTATIONS = [
   "Olha como [[NOME]] funciona na prática!",
-  "A qualidade é absurda, olha...",
-  "E o melhor? O preço que eu achei...",
-  "Testei por quinze dias e ele não me deixou na mão.",
-  "Olha o tamanho e o acabamento...",
-  "Isso aqui resolve muito a minha vida...",
-  "Esse produto é incrível...",
-  "A qualidade surpreende...",
-  "Super prático e automático...",
-  "Resolve mesmo a vida..."
+  "A qualidade é absurda, olha só...",
+  "E o melhor? O preço que eu encontrei...",
+  "Testei por quinze dias e não me deixou na mão.",
+  "Olha o tamanho e o acabamento lindo...",
+  "Isso aqui resolve muito a minha vida.",
+  "Esse produto é incrível, muito bem feito.",
+  "A qualidade me surpreendeu positively!",
+  "Super prático e automático demais!",
+  "Resolve mesmo a vida, recomendo!"
 ];
 
 const MIDROLLS = [
-  "Mais detalhes agora...",
+  "Mais detalhes aqui agora...",
   "Olha no close como é...",
-  "E tem ainda mais funções...",
-  "Vem comigo que eu te mostro...",
-  "Segura que tem mais...",
-  "Olha só isso..."
+  "E tem ainda mais funções interessante...",
+  "Vem comigo que eu te mostro detalhadamente...",
+  "Segura que tem mais coisas...",
+  "Olha só como ficou bonito..."
 ];
 
 const CTAS = [
   "Corre que está acabando! Link na minha Bio.",
   "Comenta 'EU QUERO' que te mando o link!",
-  "Quer economizar? Acessa o link exclusivo!",
+  "Quer economizar? Acesse o link exclusivo!",
   "Aproveita antes que o preço suba!",
-  "Não perde, acessa o link da bio!",
+  "Não perca, busque o link agora!",
   "Link na Bio! Correee!",
   "Clique na Bio agora!",
   "Corre que é oferta!",
-  "Garantir meu link na Bio!",
-  "Acessa agora!"
+  "Garanta agora no meu link!",
+  "Acesse agora mesmo!"
 ];
 
 const VIBES: ViralScript['vibe'][] = ['Agressivo', 'Curiosidade', 'Solução Direta', 'Desejo'];
