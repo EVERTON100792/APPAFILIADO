@@ -684,17 +684,17 @@ export class VideoProcessor {
         const nav = navigator as any;
         const isLowEndMobile = isMobile && ((nav.hardwareConcurrency || 8) <= 4 || (nav.deviceMemory || 8) <= 2);
         
-        // Ultra mobile optimization: 480x852 for low-end, 540x960 for regular mobile
-        const W = isLowEndMobile ? 480 : (isMobile ? 540 : 1080);
-        const H = isLowEndMobile ? 852 : (isMobile ? 960 : 1920); 
+        // Mobile: 540p (estabilidade) | Desktop: 1080p
+        const W = isMobile ? 540 : 1080;
+        const H = isMobile ? 960 : 1920; 
         this.canvas.width = W;
         this.canvas.height = H;
         
-        // Much shorter for mobile (15s low-end, 20s regular mobile, 38s desktop)
-        const targetDuration = isLowEndMobile ? 15 : (isMobile ? 20 : 38); 
-        const fps = isLowEndMobile ? 18 : (isMobile ? 20 : 30);
+        // Manter duração original (38s desktop, 30s mobile)
+        const targetDuration = isMobile ? 30 : 38; 
+        const fps = isMobile ? 24 : 30;
         const totalFrames = targetDuration * fps;
-        const slideChangeInterval = isLowEndMobile ? 2 : 3;
+        const slideChangeInterval = 3;
 
         // 1. Preload images with proxy support
         const images = await Promise.all(imageUrls.map(async url => {
@@ -732,7 +732,7 @@ export class VideoProcessor {
           output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
           error: e => console.error("VideoEncoder error", e)
         });
-        const videoBitrate = isLowEndMobile ? 1_500_000 : (isMobile ? 2_000_000 : 6_000_000);
+        const videoBitrate = isMobile ? 2_800_000 : 6_000_000;
         videoEncoder.configure({
           codec: 'avc1.4d0033', width: W, height: H, bitrate: videoBitrate, avc: { format: 'avc' }
         });
