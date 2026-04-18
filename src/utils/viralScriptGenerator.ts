@@ -7,6 +7,7 @@ export interface ViralScript {
   vibe: 'Agressivo' | 'Curiosidade' | 'Solução Direta' | 'Desejo';
 }
 
+// Hooks universais que funcionam para qualquer produto
 const HOOKS = [
   "Para tudo! Olha só o que eu achei...",
   "O negócio mais incrível que você vai ver hoje...",
@@ -23,41 +24,47 @@ const HOOKS = [
   "Olha o tamanho disso...",
   "Testado e aprovado!",
   "Não acredito que era tão bom!",
-  "Preciso te mostrar isso..."
+  "Preciso te mostrar isso...",
+  "Olha só que lindo!",
+  "Não believes quanto é bom!",
+  "Vem seeing o que chegou!"
 ];
 
+// Presentations universais sem referência a tempo/dias
 const PRESENTATIONS = [
   "Olha como [[NOME]] funciona na prática!",
   "A qualidade é absurda, olha só...",
-  "E o melhor? O preço que eu encontrei...",
-  "Testei por quinze dias e não me deixou na mão.",
-  "Olha o tamanho e o acabamento lindo...",
-  "Isso aqui resolve muito a minha vida.",
-  "Esse produto é incrível, muito bem feito.",
-  "A qualidade me surpreendeu positively!",
-  "Super prático e automático demais!",
-  "Resolve mesmo a vida, recomendo!"
+  "Olha só como ficou lindo!",
+  "A qualidade étop, simplesmente incr.",
+  "Olha o acabamento perfeito!",
+  "Isso aqui é muito bem feito.",
+  "Super prático e funciona mt bem!",
+  "A qualidade surpreende siempre!",
+  "É lindo e funciona perfeitamente!",
+  "Recomendo muito esse produto!"
 ];
 
+// Midrolls universais
 const MIDROLLS = [
-  "Mais detalhes aqui agora...",
-  "Olha no close como é...",
-  "E tem ainda mais funções interessante...",
-  "Vem comigo que eu te mostro detalhadamente...",
-  "Segura que tem mais coisas...",
-  "Olha só como ficou bonito..."
+  "Detalhes importantes...",
+  "Olha só como é feito...",
+  "E a melhor parte...",
+  "Vem ver de perto como é...",
+  "Olha só que demais!",
+  "Isso é demais!"
 ];
 
+// CTAs universais
 const CTAS = [
   "Corre que está acabando! Link na minha Bio.",
   "Comenta 'EU QUERO' que te mando o link!",
-  "Quer economizar? Acesse o link exclusivo!",
-  "Aproveita antes que o preço suba!",
-  "Não perca, busque o link agora!",
-  "Link na Bio! Correee!",
+  "Quer economizar? Acesse o link agora!",
+  "Aproveita antes que o preço sube!",
+  "Não perca,Link na Bio agora!",
+  "Link na Bio! Corre!",
   "Clique na Bio agora!",
   "Corre que é oferta!",
-  "Garanta agora no meu link!",
+  "Garantindo no link agora!",
   "Acesse agora mesmo!"
 ];
 
