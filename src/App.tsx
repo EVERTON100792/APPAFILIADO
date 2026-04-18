@@ -309,19 +309,15 @@ const CheckoutOverlay: React.FC<CheckoutOverlayProps> = ({
   );
 };
 
-// Variantes Premium para Transição de Abas
+// Transição instantânea sem animação para evitar pulos
 const stepVariants = {
-  initial: { opacity: 0, scale: 0.98, filter: "blur(4px)" },
-  animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
-  exit: { opacity: 0, scale: 1.02, filter: "blur(4px)" },
+  initial: { opacity: 1 },
+  animate: { opacity: 1 },
+  exit: { opacity: 1 },
 };
 
 const stepTransition = {
-  type: "spring",
-  stiffness: 400, // Mais rígido e rápido
-  damping: 30,
-  mass: 1,
-  filter: { type: "tween", ease: "easeOut", duration: 0.2 }, // Sincronizado com a mola mas sem overshoot
+  duration: 0.01,
 };
 
 const App: React.FC = () => {
