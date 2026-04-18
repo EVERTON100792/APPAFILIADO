@@ -1636,13 +1636,25 @@ const App: React.FC = () => {
     }
   };
 
-  async function researchTikTok(product: any) {
+  async function researchTikTok(product: any, originStep: Step = "list") {
+    console.log("[researchTikTok] PRODUCT:", JSON.stringify(product).slice(0, 200));
+    
     if (trialExpired && !hasAccessToPlatform) {
       showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
       return;
     }
-    // FIX: Define o produto selecionado imediatamente para evitar o estado "CARREGANDO..."
+    
+    const title = product?.title || product?.item_name || product?.name || "";
+    if (!product || !title) {
+      console.error("[researchTikTok] Produto inválido:", product);
+      showToast("Produto inválido. Tente outro.");
+      if (originStep === "shopee") setStep("shopee");
+      else setStep(originStep);
+      return;
+    }
+    
     setSelectedProduct(product);
+    const safeTitle = product?.title || product?.item_name || product?.name || "";
     
     resetVideoEditor();
     setStep("treating");
@@ -1683,12 +1695,15 @@ const App: React.FC = () => {
         negative: [],
       };
 
-      // 2. Estratégias de Busca (Máxima Precisão: Título literal primeiro)
+      // 2. Estratégias de Busca - Mais variações para garantir resultado
       const strategies = [
         { query: product.title?.substring(0, 50) || coreQuery, weight: 4.0 },
         { query: coreQuery, weight: 3.5 },
         { query: `${coreQuery} shopee`, weight: 3.0 },
-        { query: `${coreQuery} achadinho`, weight: 2.0 },
+        { query: `${coreQuery} achadinho`, weight: 2.5 },
+        { query: `${coreQuery} viral`, weight: 2.0 },
+        { query: `${coreQuery} br`, weight: 1.5 },
+        { query: coreQuery.split(" ")[0], weight: 1.0 }, // Primeira palavra só
       ];
 
       const ptBrKeywords = [
@@ -1903,12 +1918,12 @@ const App: React.FC = () => {
             _score: score,
           };
         })
-        .filter((v: any) => v !== null && v._score >= 180) // Threshold reduzido para garantir entrega
+        .filter((v: any) => v !== null && v._score >= 50) // Threshold reduzido para garantir entrega
         .sort((a: any, b: any) => b._score - a._score);
 
       if (scored.length === 0)
         throw new Error(
-          "Não encontramos vídeos virais para este produto agora. Experimente usar um nome mais simples.",
+          "Vídeos não encontrados. Tente outro produto ou busque manualmente no TikTok.",
         );
 
       // Pool de 10 vídeos para garantir variedade no Swap
@@ -2072,6 +2087,8 @@ const App: React.FC = () => {
     setIsProcessing(true);
     setTreatingStatus("Transformando em autoral...");
     setTreatingProgress(10);
+    
+    const isMobileRuntime = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ("ontouchstart" in window);
 
     try {
       const script = generateViralScripts(selectedProduct.item_name || selectedProduct.title)[0];
@@ -2083,10 +2100,10 @@ const App: React.FC = () => {
       const autoTransitions: number[] = [3, 6, 9, 12, 15, 18, 21, 24, 27];
       
       const options: ProcessingOptions = {
-        filter: activeFilter || 'elite',
-        transition: 'glitch',
-        transitionList: ['zoom', 'glitch', 'shake', 'blur', 'fire', 'flash', 'beat'] as any,
-        transitionTimestamps: autoTransitions,
+        filter: isMobileRuntime ? 'cinematic' : (activeFilter || 'elite'),
+        transition: 'zoom',
+        transitionList: ['zoom', 'glitch', 'shake', 'blur', 'slide', 'beat', 'flash', 'fire'] as any,
+        transitionTimestamps: [4, 8, 12, 16, 20, 24],
         legend: videoLegend || '',
         isMuted: audioMixOption === 'mute',
         script: script,
@@ -2094,6 +2111,8 @@ const App: React.FC = () => {
         audioMixMode: audioMixOption,
         useNarration: useNarration,
         narrationVoice: narrationVoice,
+        narrationStyle: narrationVoice === 'F' ? 'soft-female' : 'premium-male',
+        mobileTurbo: isMobileRuntime,
         storeSlug: storeSlug,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
@@ -4858,11 +4877,19 @@ const App: React.FC = () => {
                 onShowToast={showToast} 
                 userStoreSlug={storeSlug} 
                 onSaveHistory={saveToSupabase}
-                onViralize={(p, videoType, customImages, customScript) => {
+onViralize={(p, videoType, customImages, customScript) => {
+                  console.log("[ShopeeHub onViralize] produto:", p, "videoType:", videoType);
                   if (videoType === 'autoral') {
                     handleCreateAutoralVideo(p, customImages, customScript);
                   } else {
-                    researchTikTok({ ...p, title: p.item_name });
+                    const prodData = {
+                      ...p,
+                      title: p.item_name || p.title || p.name,
+                      query: p.query || p.item_name || p.title || p.name,
+                    };
+                    console.log("[onViralize] Enviando para researchTikTok:", prodData);
+                    showToast("🔍 Buscando vídeo viral...");
+                    researchTikTok(prodData, "shopee");
                   }
                 }}
               />

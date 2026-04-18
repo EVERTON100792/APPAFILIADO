@@ -492,18 +492,13 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       )}
 
       {activeTab === "elite" && products.length === 0 && (
-        <div className="flex flex-col gap-4 p-8 bg-emerald-500/5 border border-emerald-500/10 rounded-[2.5rem] text-center">
-          <ShieldCheck className="text-emerald-400 mx-auto" size={48} />
-          <h4 className="text-xl font-black italic text-white uppercase tracking-tighter">Radar Elite +10%</h4>
-          <p className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest">Busca automática por comissão máxima</p>
-          <button onClick={runGlobalSpy} className="w-full h-16 bg-emerald-500 text-slate-950 font-black italic uppercase tracking-widest rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3">
-            <Rocket size={20} /> INICIAR RADAR HACKER
-          </button>
+        <div className="flex flex-col gap-4 p-8 text-center">
+          <p className="text-[10px] font-bold text-slate-500/60 uppercase tracking-widest">Nenhum produto encontrado</p>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3.5">
-        {products.map((product) => (
+        {products.filter(p => p.item_name && p.item_name.length > 3).map((product) => (
           <motion.div layout key={product.item_id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="tech-card p-2 flex flex-col gap-3 group border-white/5 bg-slate-900/20">
             <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" className="block relative group/img">
               <SwipeableImageCard product={product} />
@@ -517,10 +512,10 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                 <span className="text-[9px] font-black text-emerald-400">R$ {product.commission.toFixed(2)}</span>
               </div>
               <div className="flex flex-col gap-2 mt-2">
-                <button onClick={() => onViralize?.(product, 'tiktok')} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-[10px] uppercase shadow-lg shadow-emerald-500/20">
+                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onViralize?.(product, 'tiktok'); }} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-[10px] uppercase shadow-lg shadow-emerald-500/20">
                   <Rocket size={14} /> VÍDEO VIRAL
                 </button>
-                <button onClick={() => handleImageSelection(product)} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[10px] uppercase shadow-lg shadow-blue-500/20">
+                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleImageSelection(product); }} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[10px] uppercase shadow-lg shadow-blue-500/20">
                   <Video size={14} /> VÍDEO AUTORAL
                 </button>
               </div>

@@ -2,32 +2,63 @@ export interface ViralScript {
   id: string;
   hook: string;
   presentation: string;
+  midroll: string;
   cta: string;
   vibe: 'Agressivo' | 'Curiosidade' | 'Solução Direta' | 'Desejo';
 }
 
 const HOOKS = [
-  "Para tudo! Você não vai acreditar no que eu achei...",
-  "O segredo para transformar sua casa gastando quase nada...",
-  "Testei o produto mais falado da internet e olha no que deu!",
-  "Se você sofre com isso, esse vídeo é pra você...",
-  "Achei o item mais satisfatório e útil de todos..."
+  "Para tudo! Olha só o que eu achei...",
+  "O negócio mais incrível que você vai ver hoje...",
+  "Você não vai acreditar nisso...",
+  "O segredo que ninguém te conta...",
+  "Testei e olha no que deu...",
+  "Achei e preciso te mostrar!",
+  "Vem ver essa belezinha...",
+  "Olha esse achado insano!",
+  "Esse resolve minha vida toda...",
+  "Gente, olha isso!",
+  "Você precisa ver isso!",
+  "Achei o melhor do mercado!",
+  "Olha o tamanho disso...",
+  "Testado e aprovado!",
+  "Não acredito que era tão bom!",
+  "Preciso te mostrar isso..."
 ];
 
 const PRESENTATIONS = [
-  "Olha como esse {{NOME}} funciona na prática! Absurdo...",
-  "A qualidade desse {{NOME}} me deixou sem palavras real.",
-  "E o melhor de tudo? Achei esse {{NOME}} num precinho secreto.",
-  "Resolvi testar o famoso {{NOME}} e ele entrega tudo que promete.",
-  "Veja por que todo mundo está comprando esse {{NOME}}."
+  "Olha como [[NOME]] funciona na prática!",
+  "A qualidade é absurda, olha...",
+  "E o melhor? O preço que eu achei...",
+  "Testei por quinze dias e ele não me deixou na mão.",
+  "Olha o tamanho e o acabamento...",
+  "Isso aqui resolve muito a minha vida...",
+  "Esse produto é incrível...",
+  "A qualidade surpreende...",
+  "Super prático e automático...",
+  "Resolve mesmo a vida..."
+];
+
+const MIDROLLS = [
+  "Mais detalhes agora...",
+  "Olha no close como é...",
+  "E tem ainda mais funções...",
+  "Vem comigo que eu te mostro...",
+  "Segura que tem mais...",
+  "Olha só isso..."
 ];
 
 const CTAS = [
-  "Corra que tá acabando! Link na minha Bio.",
-  "Comenta 'EU QUERO' que te mando o link agora!",
-  "Quer economizar? Acesse o link exclusivo no meu perfil.",
-  "Aproveite antes que o preço suba! Corre no link da bio.",
-  "Não perca, acesse o link na bio e garanta o seu!"
+  "Corre que está acabando! Link na minha Bio.",
+  "Comenta 'EU QUERO' que te mando o link!",
+  "Quer economizar? Acessa o link exclusivo!",
+  "Aproveita antes que o preço suba!",
+  "Não perde, acessa o link da bio!",
+  "Link na Bio! Correee!",
+  "Clique na Bio agora!",
+  "Corre que é oferta!",
+  "Garantir meu link na Bio!",
+  "Acessa agora!"
 ];
 
 const VIBES: ViralScript['vibe'][] = ['Agressivo', 'Curiosidade', 'Solução Direta', 'Desejo'];
@@ -46,14 +77,16 @@ export function generateViralScripts(productName: string): ViralScript[] {
   
   const selectedHooks = shuffleArray(HOOKS).slice(0, 3);
   const selectedPresentations = shuffleArray(PRESENTATIONS).slice(0, 3);
-  const selectedCTAs = shuffleArray(CTAS).slice(0, 3);
+  const selectedMidrolls = shuffleArray(MIDROLLS).slice(0, 2);
+  const selectedCTAs = shuffleArray(CTAS).slice(0, 4);
   const selectedVibes = shuffleArray(VIBES).slice(0, 3);
 
   return [0, 1, 2].map((i) => ({
     id: `script-${i + 1}-${Date.now()}`,
     vibe: selectedVibes[i],
     hook: selectedHooks[i],
-    presentation: selectedPresentations[i].replace(/{{NOME}}/g, shortName),
+    presentation: selectedPresentations[i].replace(/\[\[NOME\]\]/g, shortName),
+    midroll: selectedMidrolls[i],
     cta: selectedCTAs[i]
   }));
 }

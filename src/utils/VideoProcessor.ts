@@ -13,11 +13,15 @@ export interface ProcessingOptions {
   transitionTimestamps?: number[];
   existingVideoEl?: HTMLVideoElement;
   musicUrl?: string;
+  musicBpm?: number;
+  musicGenre?: string;
   audioMixMode?: 'original' | 'music' | 'mix' | 'mute';
   script?: ViralScript;
   storeSlug?: string;
   useNarration?: boolean;
   narrationVoice?: 'M' | 'F';
+  narrationStyle?: 'soft-female' | 'premium-male';
+  mobileTurbo?: boolean;
   onProgress?: (p: number) => void;
 }
 
@@ -194,7 +198,10 @@ export class VideoProcessor {
 
   private async fetchNarration(text: string, voice: 'M' | 'F' = 'F'): Promise<AudioBuffer | null> {
     const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
-    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=pt-BR&client=tw-ob&ttsspeed=1.04`;
+    // Velocidade mais baixa = voz mais natural e menos robotica
+    // Feminina mais devagar para soar mais suave e natural
+    const ttsSpeed = voice === 'M' ? '0.85' : '0.82';
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=pt-BR&client=tw-ob&ttsspeed=${ttsSpeed}`;
     const proxyUrl = `${PROXY_BASE}?url=${encodeURIComponent(ttsUrl)}`;
 
     try {
@@ -202,36 +209,56 @@ export class VideoProcessor {
       if (!res.ok) return null;
       const arrayBuffer = await res.arrayBuffer();
       
-      // GARANTIA: Sempre resampa para 44100Hz para evitar voz grossa no mobile
+      // Resampa para 44100Hz
       const buffer = await this.processAudioBuffer(arrayBuffer, 44100);
       
-      if (voice === 'M') {
-        const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.5, buffer.sampleRate);
-        const source = offlineCtx.createBufferSource();
-        source.buffer = buffer;
-        source.playbackRate.value = 1.18; // Afinado: Voz masculina mais nítida (antes 1.14)
-        source.connect(offlineCtx.destination);
-        source.start();
-        const pitchShifted = await offlineCtx.startRendering();
-        return pitchShifted;
-      } else if (voice === 'F') {
-        const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.5, buffer.sampleRate);
-        const source = offlineCtx.createBufferSource();
-        source.buffer = buffer;
-        source.playbackRate.value = 1.24; // Afinado: Voz feminina mais leve e menos 'grossa' (antes 1.18)
-        source.connect(offlineCtx.destination);
-        source.start();
-        const pitchShifted = await offlineCtx.startRendering();
-        return pitchShifted;
-      }
-      
-      // Voz feminina levemente mais nítida
-      const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.1, buffer.sampleRate);
+      // Processamento AVANÇADO para humanizar a voz
+      const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.4, buffer.sampleRate);
       const source = offlineCtx.createBufferSource();
       source.buffer = buffer;
-      source.playbackRate.value = 1.02; 
-      source.connect(offlineCtx.destination);
+      
+      // Playback diferente para M e F - Feminina mais aguda e suave
+      source.playbackRate.value = voice === 'M' ? 1.04 : 1.08;
+      
+      // Filtro highpass para remover ruido grave (voz mais limpa)
+      const hpFilter = offlineCtx.createBiquadFilter();
+      hpFilter.type = 'highpass';
+      hpFilter.frequency.value = voice === 'M' ? 100 : 150;
+      hpFilter.Q.value = 0.7;
+      
+      // Filtro de presencia para dar clareza
+      const presence = offlineCtx.createBiquadFilter();
+      presence.type = 'peaking';
+      presence.frequency.value = voice === 'M' ? 2500 : 3200;
+      presence.Q.value = 0.8;
+      presence.gain.value = voice === 'M' ? 2.0 : 2.5;
+      
+      // Filtro air para dar brilho natural
+      const air = offlineCtx.createBiquadFilter();
+      air.type = 'highshelf';
+      air.frequency.value = 5000;
+      air.gain.value = voice === 'M' ? 1.5 : 2.0;
+      
+      // Compressor leve para uniformizar
+      const compressor = offlineCtx.createDynamicsCompressor();
+      compressor.threshold.value = -18;
+      compressor.knee.value = 6;
+      compressor.ratio.value = 2.0;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.15;
+      
+      const gain = offlineCtx.createGain();
+      gain.gain.value = 0.75;
+      
+      // Conexao em cadeia: source -> hp -> presence -> air -> comp -> gain -> out
+      source.connect(hpFilter);
+      hpFilter.connect(presence);
+      presence.connect(air);
+      air.connect(compressor);
+      compressor.connect(gain);
+      gain.connect(offlineCtx.destination);
       source.start();
+      
       return await offlineCtx.startRendering();
     } catch (e) {
       console.error("[Narração] Erro ao buscar voz:", e);
@@ -419,13 +446,15 @@ export class VideoProcessor {
               console.log("[Audio] Gerando narração IA...");
               const hookBuf = await this.fetchNarration(options.script.hook, options.narrationVoice);
               const presBuf = await this.fetchNarration(options.script.presentation, options.narrationVoice);
+              const midrollBuf = await this.fetchNarration(options.script.midroll || options.script.presentation, options.narrationVoice);
               const ctaBuf = await this.fetchNarration(options.script.cta, options.narrationVoice);
 
               const totalDur = mainAudioBuffer ? mainAudioBuffer.duration : 15;
               const narrations = [
                 { buffer: hookBuf, time: 0 },
-                { buffer: presBuf, time: totalDur * 0.20 },
-                { buffer: ctaBuf, time: totalDur * 0.65 }
+                { buffer: presBuf, time: totalDur * 0.18 },
+                { buffer: midrollBuf, time: totalDur * 0.55 },
+                { buffer: ctaBuf, time: totalDur * 0.72 }
               ];
 
               const finalWithNarration = new AudioBuffer({
@@ -464,7 +493,7 @@ export class VideoProcessor {
           }
         }
 
-        this.stream = this.canvas.captureStream(30); 
+        this.stream = this.canvas.captureStream(24); 
         let audioTrackToEncode: MediaStreamTrack | null = null;
 
         const muxer = new Muxer({
@@ -548,28 +577,19 @@ export class VideoProcessor {
             this.auxCtx.drawImage(video, 0, 0, W, H);
             this.ctx.clearRect(0, 0, W, H);
             
-            // --- LÓGICA DE LIMPEZA AUTORAL PRO (CROP & CONCEAL) ---
+            // --- LIMPEZA AUTORAL: Apenas espelha + limpa área de legendas ---
             this.ctx.save();
             
-            // 1. Mirroring (Espelhamento para conteúdo único)
-            this.ctx.translate(W, 0);
-            this.ctx.scale(-1, 1);
-            
-            // 2. Ultra-Zoom & Vertical Offset (Para cortar as legendas originais de vez)
-            const sOffset = 1.08; // Zoom Mínimo: Apenas para originalidade algorítmica (foco em vídeos limpos)
-            const vShift = 0; // Mantém enquadramento original centralizado
-            
-            this.ctx.translate(W * (1 - sOffset) / 2, (H * (1 - sOffset) / 2) - vShift);
-            this.ctx.scale(sOffset, sOffset);
-            
+            // 1. Mirror leve para dar "originalidade" sem distorcer
+            // Removido - deixou original porque distorce muito
             this.ctx.filter = filterCSS;
             this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
             this.ctx.restore();
             
-            // IMPORTANTE: Reset explícito para garantir que legendas seguintes não herdem transformações
+            // Reset explícito
             this.ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-            // 4. Solid Mask (Remove de vez legendas originais do rodapé)
+            // 2. Solid Mask (Remove legendas originais do rodapé - área crítica)
             this.ctx.fillStyle = '#000000';
             this.ctx.fillRect(0, H * 0.82, W, H * 0.18);
             // ------------------------------------------------------
@@ -731,13 +751,15 @@ export class VideoProcessor {
           console.log("[Slideshow] Gerando narração IA...");
           const hookBuf = await this.fetchNarration(options.script.hook, options.narrationVoice);
           const presBuf = await this.fetchNarration(options.script.presentation, options.narrationVoice);
+          const midrollBuf = await this.fetchNarration(options.script.midroll || options.script.presentation, options.narrationVoice);
           const ctaBuf = await this.fetchNarration(options.script.cta, options.narrationVoice);
 
           const totalDur = targetDuration;
           const narrations = [
             { buffer: hookBuf, time: 0 },
-            { buffer: presBuf, time: totalDur * 0.20 },
-            { buffer: ctaBuf, time: totalDur * 0.65 }
+            { buffer: presBuf, time: totalDur * 0.18 },
+            { buffer: midrollBuf, time: totalDur * 0.55 },
+            { buffer: ctaBuf, time: totalDur * 0.72 }
           ];
 
           const mixed = new AudioBuffer({
@@ -1588,28 +1610,34 @@ export class VideoProcessor {
   }
 
   private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string, totalDuration: number = 15) {
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0); // GARANTIA: Nunca desenha invertido
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     let text = "";
-    let type: 'hook' | 'presentation' | 'cta' = 'hook';
+    let type: 'hook' | 'presentation' | 'midroll' | 'cta' = 'hook';
     
-    // Sincronia baseada em blocos inteligentes (25% Hook, 50% Pres, 25% CTA)
-    const hookEnd = totalDuration * 0.25;
-    const presEnd = totalDuration * 0.75;
+    // 4 blocos: hook -> presentation -> midroll -> CTA
+    const hookEnd = totalDuration * 0.18;
+    const presEnd = totalDuration * 0.55;
+    const midrollEnd = totalDuration * 0.72;
     const ctaEnd = totalDuration * 0.98;
 
     if (time < hookEnd) {
-      text = script.hook;
+      text = script.hook || "";
       type = 'hook';
     } else if (time < presEnd) {
-      text = script.presentation;
+      text = script.presentation || "";
       type = 'presentation';
+    } else if (time < midrollEnd) {
+      text = script.midroll || script.presentation || "";
+      type = 'midroll';
     } else if (time < ctaEnd) {
-      text = script.cta;
+      text = script.cta || "";
       type = 'cta';
     } else {
       return;
     }
 
+    if (!text) return;
+    
     const margin = W * 0.04;
     const fontSize = Math.floor(W * 0.055);
     const bigFontSize = Math.floor(W * 0.075);
@@ -1619,19 +1647,18 @@ export class VideoProcessor {
     const boxPadding = Math.floor(W * 0.025);
     const lineHeight = fontSize * 1.3;
     const boxHeight = (lines.length * lineHeight) + (boxPadding * 2) + 50;
-    const boxWidth = W * 0.85;
+    const boxWidth = W * 0.88;
     
     const x = (W - boxWidth) / 2;
-    const baseY = H * 0.12;
-    const pulse = Math.sin(time * 3) * 0.03 + 1;
+    const baseY = H * 0.10;
+    const pulse = Math.sin(time * 4) * 0.04 + 1;
     const y = baseY;
 
-    this.ctx.save();
+    const glowColor = type === 'hook' ? '#FF3131' : type === 'presentation' ? '#00BFFF' : type === 'midroll' ? '#FFD700' : '#00FF7F';
     
-    // Glow effect based on type
-    const glowColor = type === 'hook' ? '#FF3131' : type === 'presentation' ? '#FFD700' : '#00FF7F';
+    this.ctx.save();
     this.ctx.shadowColor = glowColor;
-    this.ctx.shadowBlur = 25 * pulse;
+    this.ctx.shadowBlur = 30 * pulse;
     
     // Gradient background with transparency
     const gradient = this.ctx.createLinearGradient(x, y, x + boxWidth, y + boxHeight);
