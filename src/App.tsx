@@ -2382,6 +2382,7 @@ const App: React.FC = () => {
       const price = selectedProduct.price || 0;
       const productName = selectedProduct.item_name || selectedProduct.title || "Produto";
       const videoBlob = await videoProcessor.renderSlideshow(images, options, `R$ ${price.toFixed(2)}`, productName);
+      videoProcessor.dispose();
 
       // Limpar URL anterior
       if (videoData?.url) {
@@ -2508,6 +2509,7 @@ const App: React.FC = () => {
     setIsPlaying(false);
     setIsProcessing(true);
 
+    let processor: VideoProcessor | null = null;
     try {
       const hasEdits = activeFilter !== 'none' || videoLegend.trim() !== '' || activeTransition !== 'none' || (trimEnd > 0 && trimEnd !== trimStart) || selectedMusic !== null || isMuted;
 
@@ -2517,7 +2519,7 @@ const App: React.FC = () => {
         const resp = await fetch(videoData.url);
         blob = await resp.blob();
       } else {
-        const processor = new VideoProcessor();
+        processor = new VideoProcessor();
         const options: ProcessingOptions = {
           filter: activeFilter,
           legend: videoLegend,
@@ -2552,6 +2554,7 @@ const App: React.FC = () => {
       showToast("ERRO AO RENDERIZAR — TENTE NOVAMENTE 📲");
       return null;
     } finally {
+      if (processor) processor.dispose();
       setIsProcessing(false);
       setIsPreparingDownload(false);
     }
@@ -5100,7 +5103,7 @@ const App: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-950/98 backdrop-blur-3xl px-6 text-center overflow-hidden"
+            className="fixed inset-0 z-[5000] flex flex-col items-center justify-center bg-slate-950/98 backdrop-blur-3xl px-6 text-center overflow-hidden"
           >
             {/* Background Tech Ornaments */}
             <div className="absolute inset-0 pointer-events-none opacity-20">

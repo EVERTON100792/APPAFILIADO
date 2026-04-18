@@ -39,6 +39,17 @@ export class VideoProcessor {
     this.ownedVideo.playsInline = true;
   }
 
+  public dispose() {
+    this.ownedVideo.pause();
+    this.ownedVideo.src = "";
+    this.ownedVideo.load();
+    this.ownedVideo.remove();
+    this.canvas.width = 0;
+    this.canvas.height = 0;
+    this.auxCanvas.width = 0;
+    this.auxCanvas.height = 0;
+  }
+
   private getFilterCSS(filter: string): string {
     switch (filter) {
       case 'elite':     return 'contrast(1.35) saturate(1.7) brightness(1.15)';
@@ -198,7 +209,7 @@ export class VideoProcessor {
         const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.5, buffer.sampleRate);
         const source = offlineCtx.createBufferSource();
         source.buffer = buffer;
-        source.playbackRate.value = 1.14; // Afinado: Voz masculina mais leve e clara, sem ser robótica
+        source.playbackRate.value = 1.18; // Afinado: Voz masculina mais nítida (antes 1.14)
         source.connect(offlineCtx.destination);
         source.start();
         const pitchShifted = await offlineCtx.startRendering();
@@ -207,7 +218,7 @@ export class VideoProcessor {
         const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.5, buffer.sampleRate);
         const source = offlineCtx.createBufferSource();
         source.buffer = buffer;
-        source.playbackRate.value = 1.18; // Afinado: Voz feminina com maior clareza, brilho e tom agudo natural
+        source.playbackRate.value = 1.24; // Afinado: Voz feminina mais leve e menos 'grossa' (antes 1.18)
         source.connect(offlineCtx.destination);
         source.start();
         const pitchShifted = await offlineCtx.startRendering();
@@ -342,16 +353,16 @@ export class VideoProcessor {
         const vH = video.videoHeight;
         if (!vW || !vH) { reject(new Error('Dimensões inválidas')); return; }
 
-        // MODO 8K / ESTABILIDADE MOBILE
-        // Se ultra8k, miramos em 1080p (Full HD de cinema). Se normal, 720p (Segurança Mobile).
+        // MODO ESTABILIDADE MOBILE (Resolução reduzida para evitar crash do navegador)
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isUltra = options.filter === 'ultra8k' && !isMobile; // Desativar 8K real no mobile para estabilidade
-        const targetH = isUltra ? 1920 : (isMobile ? 720 : 1280);
+        const isUltra = options.filter === 'ultra8k' && !isMobile;
+        
+        // Mobile: 540p (Estabilidade Máxima) | Desktop: 720p/1080p
+        const targetH = isUltra ? 1920 : (isMobile ? 540 : 1280);
         
         let scale = targetH / vH;
-        // Impedir upscale exagerado que trava o Chrome Mobile
-        if (scale > 2.5) scale = 2.5; 
-        if (isMobile && scale > 1.2) scale = 1.2; // Mais conservador no Mobile
+        if (scale > 2.0) scale = 2.0; 
+        if (isMobile && scale > 1.0) scale = 1.0; // Impedir upscale em mobile para economizar RAM e CPU
 
         const W = Math.floor((vW * scale) / 2) * 2;
         const H = Math.floor((vH * scale) / 2) * 2;
@@ -470,10 +481,10 @@ export class VideoProcessor {
         });
 
         const isMobileBitrate = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const targetBitrate = isUltra ? 12_000_000 : (isMobileBitrate ? 3_500_000 : 7_000_000);
+        const targetBitrate = isUltra ? 12_000_000 : (isMobileBitrate ? 2_000_000 : 7_000_000);
 
         videoEncoder.configure({
-          codec: 'avc1.4d0033', // High Profile, Level 5.1
+          codec: isMobileBitrate ? 'avc1.42e01f' : 'avc1.4d0033', // Baseline para mobile (estabilidade), High para desktop
           width: W,
           height: H,
           bitrate: targetBitrate,
@@ -618,13 +629,12 @@ export class VideoProcessor {
             // Reporta progresso real para a UI
             options.onProgress?.((i / totalFramesToRender) * 100);
 
-            // Reporta algum progresso se necessário ou cede CPU (Yield progressivo)
-            const yieldRate = isMobile ? 8 : 30; // Mais frequente no mobile para fluidez
+            // Reporta algum progresso com Yield agressivo (essencial para mobile não travar o Main Thread)
+            const yieldRate = isMobile ? 4 : 20; 
             if (i % yieldRate === 0) {
-              await new Promise(r => setTimeout(r, 0));
-              // Controle de pressão do Encoder para não estourar memória do celular
-              if (videoEncoder.encodeQueueSize > (isMobile ? 3 : 8)) {
-                await new Promise(r => setTimeout(r, isMobile ? 150 : 100));
+              await new Promise(r => setTimeout(r, isMobile ? 5 : 0));
+              if (videoEncoder.encodeQueueSize > (isMobile ? 2 : 8)) {
+                await new Promise(r => setTimeout(r, isMobile ? 250 : 100));
               }
             }
           }

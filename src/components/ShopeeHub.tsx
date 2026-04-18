@@ -55,12 +55,8 @@ const deduplicate = (items: ShopeeProduct[]) => {
 
   for (const item of items) {
     if (seenIds.has(item.item_id)) continue;
-
-    // Mesmo vendedor + mesmo preco = duplicata certa
     const shopPriceKey = `${item.shop_id}-${Math.round(item.price)}`;
     if (seenShopPrice.has(shopPriceKey)) continue;
-
-    // Fuzzy hash (20 chars + preco)
     const fuzzyName = item.item_name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
     const fuzzyHash = `${fuzzyName}-${Math.floor(item.price)}`;
     if (seenFuzzy.has(fuzzyHash)) continue;
@@ -70,7 +66,6 @@ const deduplicate = (items: ShopeeProduct[]) => {
     seenFuzzy.add(fuzzyHash);
     uniqueItems.push(item);
   }
-
   return uniqueItems;
 };
 
@@ -86,15 +81,12 @@ const SwipeableImageCard: React.FC<{ product: ShopeeProduct }> = ({ product }) =
       const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
       let newImages: string[] = [];
       const rawImages = detail?.item?.images || detail?.images || detail?.image_list || detail?.edge_images || [];
-      
       if (Array.isArray(rawImages) && rawImages.length > 0) {
         newImages = rawImages.map((h: any) => {
           const hash = typeof h === "string" ? h : h.hash || h.url || h;
           if (hash.startsWith("http")) return hash;
           return `https://down-br.img.susercontent.com/file/${hash}`;
         });
-        
-        // Remove duplicates and ensure fallback is preserved if API fails
         if (newImages.length > 0) {
            setImages([...new Set([...newImages, product.item_image])]);
         }
@@ -134,26 +126,11 @@ const SwipeableImageCard: React.FC<{ product: ShopeeProduct }> = ({ product }) =
           )}
         </div>
       ))}
-      
       {images.length > 1 && (
         <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 z-20 pointer-events-none">
           {images.slice(0, 5).map((_, i) => (
             <div key={i} className="w-1.5 h-1.5 rounded-full bg-white/80 shadow-[0_0_3px_rgba(0,0,0,0.8)]" />
           ))}
-        </div>
-      )}
-
-      {!fetched && !loading && images.length === 1 && (
-        <div className="absolute bottom-2 right-2 flex gap-0.5 z-20 pointer-events-none opacity-50">
-           <div className="w-1 h-1 rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
-           <div className="w-1 h-1 rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
-           <div className="w-1 h-1 rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.8)]" />
-        </div>
-      )}
-
-      {loading && (
-        <div className="absolute bottom-2 right-2 z-20 pointer-events-none">
-           <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin shadow-xl" />
         </div>
       )}
     </div>
@@ -171,20 +148,17 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isMiniScanning, setIsMiniScanning] = useState(false);
   
-  // States para Seletor de Imagens
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [pickerImages, setPickerImages] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isLoadingPicker, setIsLoadingPicker] = useState(false);
   const [tempProduct, setTempProduct] = useState<any>(null);
-  
-  // States para Spintax (Roteiro Autoral)
   const [showScriptSelector, setShowScriptSelector] = useState(false);
   const [generatedScripts, setGeneratedScripts] = useState<ViralScript[]>([]);
   const [tempSelectedImages, setTempSelectedImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const detailCache = useRef<Record<string, any>>({});
 
-  // States para Radar Elite
   const [isScanningGlobal, setIsScanningGlobal] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
@@ -208,19 +182,13 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const { data } = await supabase
-            .from("profiles")
-            .select("shopee_id")
-            .eq("id", user.id)
-            .single();
-          
+          const { data } = await supabase.from("profiles").select("shopee_id").eq("id", user.id).single();
           if (data?.shopee_id) setUserShopeeId(data.shopee_id);
           const meta = user.user_metadata || {};
           const slug = meta.store_slug || localStorage.getItem("bio_store_slug") || "meu-link";
           setUserStoreSlug(slug.toLowerCase());
         }
-      } catch (err: any) {
-        console.error("Error profile:", err);
+      } catch (err) {
       } finally {
         setIsLoadingProfile(false);
       }
@@ -234,53 +202,25 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     }
   }, [activeTab, isLoadingProfile]);
 
-  // ── KEYWORD POOLS ─────────────────────────────────────────────────────────────
-  // Cada aba usa 4 keywords buscadas em PARALELO → ~200 produtos antes de filtrar
+  const LIGHTNING_KEYWORDS = ["promoção relâmpago", "oferta especial shopee", "queima estoque", "liquidação shopee"];
+  const OFF50_KEYWORDS = ["desconto shopee", "liquidação total shopee", "mega desconto", "super promoção shopee"];
+  const TOP_KEYWORDS = ["mais vendidos shopee", "top achadinhos shopee", "produto viral shopee", "shopee best seller"];
 
-  const LIGHTNING_KEYWORDS = [
-    "promoção relâmpago", "oferta especial shopee",
-    "queima estoque", "liquidação shopee",
-  ];
-  const OFF50_KEYWORDS = [
-    "desconto shopee", "liquidação total shopee",
-    "mega desconto", "super promoção shopee",
-  ];
-  const TOP_KEYWORDS = [
-    "mais vendidos shopee", "top achadinhos shopee",
-    "produto viral shopee", "shopee best seller",
-  ];
-
-  // ── HELPER: calcula desconto real usando original_price vs price ─────────────
   const calcDiscount = (p: { price: number; original_price: number; discount: number }): number => {
-    // Usar campo discount da API se for razoável (> 0 e <= 99)
     if (p.discount > 0 && p.discount <= 99) return p.discount;
-    // Recalcular baseado nos preços quando o campo não é confiável
     if (p.original_price > 0 && p.original_price > p.price) {
       return Math.round((1 - p.price / p.original_price) * 100);
     }
     return 0;
   };
 
-  // ── HELPER: busca múltiplas keywords em paralelo e combina resultados ─────────
-  const parallelSearch = async (
-    keywords: string[],
-    sortBy: number = 3,
-    pagesPerKeyword: number = 2
-  ) => {
+  const parallelSearch = async (keywords: string[], sortBy: number = 3, pagesPerKeyword: number = 2) => {
     const requests: Promise<any[]>[] = [];
-
     keywords.forEach(kw => {
-      // Buscar 2 páginas por keyword (p1 + p2) para garantir volume
       for (let page = 1; page <= pagesPerKeyword; page++) {
-        requests.push(
-          ShopeeService.searchProducts(
-            { keyword: kw.trim(), sort_by: sortBy, page_number: page },
-            userShopeeId || undefined
-          ).catch(() => []) // ignora erros individuais para não quebrar o batch
-        );
+        requests.push(ShopeeService.searchProducts({ keyword: kw.trim(), sort_by: sortBy, page_number: page }, userShopeeId || undefined).catch(() => []));
       }
     });
-
     const batches = await Promise.all(requests);
     const allItems = ([] as any[]).concat(...batches);
     return deduplicate(allItems);
@@ -289,33 +229,17 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const handleSearch = async (overrideKeyword?: string, forceRefresh = false) => {
     setIsSearching(true);
     if (forceRefresh) setProducts([]);
-
-    if (activeTab === "elite" && forceRefresh) {
-      setIsSearching(false);
-      return;
-    }
-
+    if (activeTab === "elite" && forceRefresh) { setIsSearching(false); return; }
     if (forceRefresh) {
       setIsMiniScanning(true);
       await new Promise(r => setTimeout(r, 600));
       setIsMiniScanning(false);
     }
 
-    if (activeTab === "elite" && !forceRefresh && products.length === 0) {
-      setIsSearching(false);
-      return;
-    }
-
     try {
       let finalProducts: any[] = [];
-
-      // ── MODO EXPLORAR (all) ────────────────────────────────────────────────────
       if (activeTab === "all") {
-        const searchKw = overrideKeyword !== undefined
-          ? (overrideKeyword || "achadinhos shopee")
-          : (keyword || "achadinhos shopee");
-
-        // Busca simples em 3 páginas para explorar
+        const searchKw = overrideKeyword !== undefined ? (overrideKeyword || "achadinhos shopee") : (keyword || "achadinhos shopee");
         const [p1, p2, p3] = await Promise.all([
           ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 1 }, userShopeeId || undefined).catch(() => []),
           ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 2 }, userShopeeId || undefined).catch(() => []),
@@ -323,90 +247,41 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         ]);
         finalProducts = deduplicate([...p1, ...p2, ...p3]);
         if (overrideKeyword !== undefined) {
-          // Filtrar focando em "Achadinhos": Preço baixo (impulse buy), boas vendas, boa comissão
-          finalProducts = finalProducts
-            .filter(p => p.price >= 5 && p.price <= 160) // Ticket ideal para conversão viral
-            .sort((a, b) => {
-               // Ordena mixando volume de vendas e taxa de comissão
-               const scoreA = (a.sales || 0) * (a.commission_rate || 1);
-               const scoreB = (b.sales || 0) * (b.commission_rate || 1);
-               return scoreB - scoreA;
-            });
+          finalProducts = finalProducts.filter(p => p.price >= 5 && p.price <= 160).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
         } else {
           finalProducts = finalProducts.sort(() => Math.random() - 0.5);
         }
-
-      // ── MODO RELÂMPAGO ─────────────────────────────────────────────────────────
       } else if (activeTab === "lightning") {
-        // 4 keywords × 2 páginas = 8 chamadas paralelas → ~400 produtos brutos
         finalProducts = await parallelSearch(LIGHTNING_KEYWORDS, 3, 2);
-
-        // Calcular desconto real e filtrar apenas os que têm desconto
-        const withRealDiscount = finalProducts
-          .map(p => ({ ...p, _disc: calcDiscount(p) }))
-          .filter(p => p._disc > 0)
-          .sort((a, b) => b._disc - a._disc);
-
-        finalProducts = withRealDiscount.length >= 10
-          ? withRealDiscount
-          : finalProducts.sort((a, b) => a.price - b.price); // fallback: menor preço
-
-      // ── MODO 50% OFF ───────────────────────────────────────────────────────────
+        const withRealDiscount = finalProducts.map(p => ({ ...p, _disc: calcDiscount(p) })).filter(p => p._disc > 0).sort((a, b) => b._disc - a._disc);
+        finalProducts = withRealDiscount.length >= 10 ? withRealDiscount : finalProducts.sort((a, b) => a.price - b.price);
       } else if (activeTab === "50off") {
-        // 4 keywords × 2 páginas = ~400 produtos brutos
         finalProducts = await parallelSearch(OFF50_KEYWORDS, 3, 2);
-
-        // Calcular desconto real para todos
         const withCalcDisc = finalProducts.map(p => ({ ...p, _disc: calcDiscount(p) }));
-
-        // Filtro progressivo: 50%+ → 30%+ → 15%+ → ordenar por maior desconto
         const g50 = withCalcDisc.filter(p => p._disc >= 50).sort((a, b) => b._disc - a._disc);
         const g30 = withCalcDisc.filter(p => p._disc >= 30).sort((a, b) => b._disc - a._disc);
         const g15 = withCalcDisc.filter(p => p._disc >= 15).sort((a, b) => b._disc - a._disc);
         const gAny = withCalcDisc.filter(p => p._disc > 0).sort((a, b) => b._disc - a._disc);
-
-        if (g50.length >= 8)       finalProducts = g50;
-        else if (g30.length >= 8)  finalProducts = g30;
-        else if (g15.length >= 8)  finalProducts = g15;
+        if (g50.length >= 8) finalProducts = g50;
+        else if (g30.length >= 8) finalProducts = g30;
+        else if (g15.length >= 8) finalProducts = g15;
         else if (gAny.length >= 4) finalProducts = gAny;
-        else                        finalProducts = withCalcDisc.sort((a, b) => b._disc - a._disc);
-
-      // ── MODO DESTAQUES / TOP SEMANA ────────────────────────────────────────────
+        else finalProducts = withCalcDisc.sort((a, b) => b._disc - a._disc);
       } else if (activeTab === "top_day" || activeTab === "top_week") {
-        // 4 keywords × 2 páginas = ~400 produtos brutos
         finalProducts = await parallelSearch(TOP_KEYWORDS, 3, 2);
-
-        // Ordenar por sales (mais vendidos primeiro)
         finalProducts = finalProducts.sort((a, b) => (b.sales || 0) - (a.sales || 0));
       }
 
-      // ── FALLBACK GLOBAL ────────────────────────────────────────────────────────
       if (finalProducts.length === 0) {
-        console.warn('Busca zerou — executando fallback estrito ao nicho atual');
         const fallbackKw = activeTab === "all" && overrideKeyword !== undefined ? overrideKeyword : (keyword || "achadinhos shopee");
-        
-        let fallback = await ShopeeService.searchProducts(
-          { keyword: fallbackKw, sort_by: 3, page_number: 1 },
-          userShopeeId || undefined
-        );
-        
-        // Se ainda não trouxer nada (muito raro em buscas largas sem filtro API), testa com as configs default da API
+        let fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 3, page_number: 1 }, userShopeeId || undefined);
         if (fallback.length === 0) {
-           fallback = await ShopeeService.searchProducts(
-            { keyword: fallbackKw, sort_by: 0, page_number: 1 },
-            userShopeeId || undefined
-          );
+            fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 0, page_number: 1 }, userShopeeId || undefined);
         }
-
-        finalProducts = deduplicate(fallback)
-          // Filtro mais relaxado para fallback (para não zerar 2x): até 280 reais
-          .filter(p => p.price <= 280)
-          .sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
+        finalProducts = deduplicate(fallback).filter(p => p.price <= 280).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
       }
-
       setProducts(finalProducts);
     } catch (err) {
-      console.error("Erro busca:", err);
       onShowToast("⚠️ Erro na conexão Shopee");
     } finally {
       setIsSearching(false);
@@ -415,18 +290,19 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
   const handleImageSelection = async (product: any) => {
     try {
-      console.log("🎬 Iniciando Seletor Autoral para:", product.item_name);
       onShowToast("🎬 Abrindo Seletor Autoral...");
-      
       setTempProduct(product);
       setIsLoadingPicker(true);
       setShowImagePicker(true);
       setSelectedImages([]);
-      
-      const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
+      const cacheKey = `${product.shop_id}_${product.item_id}`;
+      let detail = detailCache.current[cacheKey];
+      if (!detail) {
+        detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
+        if (detail) detailCache.current[cacheKey] = detail;
+      }
       let images: string[] = [];
       const rawImages = detail?.item?.images || detail?.images || detail?.image_list || detail?.edge_images || [];
-      
       if (Array.isArray(rawImages) && rawImages.length > 0) {
         images = rawImages.map((h: any) => {
           const hash = typeof h === 'string' ? h : h.hash || h.url || h;
@@ -434,17 +310,10 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
           return `https://down-br.img.susercontent.com/file/${hash}`;
         });
       }
-      
-      // Se ainda n�o tiver imagens, usar a principal do produto como fallback
-      if (images.length === 0 && product.item_image) {
-        images = [product.item_image];
-      }
-      
+      if (images.length === 0 && product.item_image) images = [product.item_image];
       setPickerImages(images);
       setSelectedImages(images.length > 0 ? images.slice(0, 5) : []); 
     } catch (err) {
-      console.error("Erro images:", err);
-      // Fallback em caso de erro na API de detalhe
       if (product.item_image) {
         setPickerImages([product.item_image]);
         setSelectedImages([product.item_image]);
@@ -457,13 +326,8 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
     Array.from(files).forEach(file => {
-      if (file.size > 5 * 1024 * 1024) {
-        onShowToast("⚠️ Arquivo muito grande (Max 5MB)");
-        return;
-      }
-      
+      if (file.size > 5 * 1024 * 1024) { onShowToast("⚠️ Arquivo muito grande (Max 5MB)"); return; }
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = reader.result as string;
@@ -477,34 +341,23 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const runGlobalSpy = async () => {
     setIsScanningGlobal(true);
     setProducts([]);
-    
     const allEliteProds: any[] = [];
     const scanNiches = niches.slice(0, 12); 
     const totalNiches = scanNiches.length;
-    
     for (let i = 0; i < totalNiches; i++) {
       const niche = scanNiches[i];
       setScanProgress({ current: i + 1, total: totalNiches, niche: niche.name });
-      
       try {
-        const searchResults = await ShopeeService.searchProducts({ 
-          keyword: niche.keyword,
-          sort_by: 3 
-        }, userShopeeId || undefined);
-        
+        const searchResults = await ShopeeService.searchProducts({ keyword: niche.keyword, sort_by: 3 }, userShopeeId || undefined);
         const elite = searchResults.filter(p => {
           const rate = parseFloat(p.commission_rate?.toString() || "0");
           return rate >= 10;
         });
-
         allEliteProds.push(...elite);
         setProducts(deduplicate(allEliteProds).slice(0, 50));
         await new Promise(r => setTimeout(r, 400));
-      } catch (err) {
-        console.warn(`Erro nicho ${niche.name}:`, err);
-      }
+      } catch (err) {}
     }
-
     setProducts(allEliteProds.slice(0, 50));
     setIsScanningGlobal(false);
     onShowToast("Radar Elite Completo!");
@@ -523,9 +376,9 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         price: product.price.toFixed(2)
       });
       if (error) throw error;
-      onShowToast("? NA VITRINE!");
+      onShowToast("🛒 NA VITRINE!");
     } catch (err) {
-      onShowToast("? ERRO");
+      onShowToast("❌ ERRO");
     }
   };
 
@@ -549,11 +402,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
           <p className="text-green-500 font-mono text-[10px] mb-8 tracking-[0.2em] uppercase">Buscando Lucro Máximo...</p>
           <div className="space-y-6">
             <div className="h-4 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-              <motion.div 
-                className="h-full bg-gradient-to-r from-green-500 to-emerald-400"
-                initial={{ width: 0 }}
-                animate={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
-              />
+              <motion.div className="h-full bg-gradient-to-r from-green-500 to-emerald-400" initial={{ width: 0 }} animate={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }} />
             </div>
             <div className="bg-black/40 border border-green-500/10 rounded-xl p-4 font-mono text-[10px] text-left">
               <div className="text-green-500">PROCESSO: {scanProgress.current}/{scanProgress.total}</div>
@@ -636,9 +485,6 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                 <span className={`text-[9px] font-black uppercase tracking-widest text-center transition-colors ${isSelected ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
                   {n.name}
                 </span>                
-                {isSelected && (
-                  <div className="absolute -bottom-1.5 w-1 h-1 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,1)]" />
-                )}
               </button>
             );
           })}
@@ -659,18 +505,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       <div className="grid grid-cols-2 gap-3.5">
         {products.map((product) => (
           <motion.div layout key={product.item_id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="tech-card p-2 flex flex-col gap-3 group border-white/5 bg-slate-900/20">
-            {/* Imagem clicavel - abre produto na Shopee */}
-            <a
-              href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="block relative group/img"
-            >
+            <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" className="block relative group/img">
               <SwipeableImageCard product={product} />
             </a>
             <div className="flex flex-col gap-1.5 px-1">
-              <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+              <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer">
                 <h4 className="text-[10px] font-bold text-white/90 line-clamp-2 leading-snug h-7 hover:text-emerald-400 transition-colors">{product.item_name}</h4>
               </a>
               <div className="flex items-center justify-between mt-1">
@@ -696,43 +535,26 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
       <MatrixScanner />
 
-      {/* Settings Modal (Portalized) */}
       {createPortal(
         <AnimatePresence>
           {showSettings && (
             <div className="fixed inset-0 z-[3000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }} 
-                animate={{ scale: 1, opacity: 1 }} 
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl p-6 relative shadow-2xl"
-              >
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-3xl p-6 relative shadow-2xl">
                 <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 text-white/40"><X size={20} /></button>
                 <h3 className="text-xl font-black text-white uppercase mb-6 italic tracking-tight">Configurações</h3>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">ID Parceiro Shopee</label>
-                    <input 
-                      type="text" 
-                      value={userShopeeId || ""} 
-                      onChange={(e) => setUserShopeeId(e.target.value)}
-                      placeholder="Ex: 123456"
-                      className="w-full h-14 bg-slate-950 border border-white/10 rounded-xl px-4 text-white font-bold outline-none focus:border-emerald-500/50 transition-all font-mono"
-                    />
+                    <input type="text" value={userShopeeId || ""} onChange={(e) => setUserShopeeId(e.target.value)} placeholder="Ex: 123456" className="w-full h-14 bg-slate-950 border border-white/10 rounded-xl px-4 text-white font-bold outline-none focus:border-emerald-500/50 transition-all font-mono" />
                   </div>
-                  <button 
-                    onClick={async () => {
-                      const { data: { user } } = await supabase.auth.getUser();
-                      if (user) {
-                        await supabase.from("profiles").upsert({ id: user.id, shopee_id: userShopeeId });
-                        onShowToast("✨ Configurações Salvas");
-                        setShowSettings(false);
-                      }
-                    }}
-                    className="w-full h-14 bg-emerald-500 text-slate-950 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20"
-                  >
-                    Salvar Altera��es
-                  </button>
+                  <button onClick={async () => {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                      await supabase.from("profiles").upsert({ id: user.id, shopee_id: userShopeeId });
+                      onShowToast("✨ Configurações Salvas");
+                      setShowSettings(false);
+                    }
+                  }} className="w-full h-14 bg-emerald-500 text-slate-950 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20">Salvar Alterações</button>
                 </div>
               </motion.div>
             </div>
@@ -741,33 +563,18 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         document.body
       )}
 
-      {/* Image Picker Modal (Portalized) */}
       {createPortal(
         <AnimatePresence>
           {showImagePicker && (
             <div className="fixed inset-0 z-[3001] flex flex-col bg-slate-950 overflow-hidden">
-              <motion.div 
-                initial={{ y: "100%" }} 
-                animate={{ y: 0 }} 
-                exit={{ y: "100%" }}
-                transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="flex-1 flex flex-col h-full"
-              >
+              <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="flex-1 flex flex-col h-full">
                 <div className="p-6 border-b border-white/5 bg-slate-900/50 flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-black italic text-white uppercase flex items-center gap-2">
-                      <Video size={20} className="text-blue-500" /> SELETOR AUTORAL
-                    </h3>
+                    <h3 className="text-xl font-black italic text-white uppercase flex items-center gap-2"><Video size={20} className="text-blue-500" /> SELETOR AUTORAL</h3>
                     <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Crie seu vídeo premium</p>
                   </div>
-                  <button 
-                    onClick={() => setShowImagePicker(false)}
-                    className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40"
-                  >
-                    <X size={24} />
-                  </button>
+                  <button onClick={() => setShowImagePicker(false)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40"><X size={24} /></button>
                 </div>
-
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
                   {isLoadingPicker ? (
                     <div className="flex flex-col items-center justify-center py-24 gap-4">
@@ -776,74 +583,31 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
-                      <motion.div 
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="relative aspect-square rounded-[32px] overflow-hidden border-2 border-dashed border-white/10 bg-white/5 flex flex-col items-center justify-center gap-2 cursor-pointer group hover:border-blue-500/50 transition-all"
-                      >
+                      <motion.div whileTap={{ scale: 0.95 }} onClick={() => fileInputRef.current?.click()} className="relative aspect-square rounded-[32px] overflow-hidden border-2 border-dashed border-white/10 bg-white/5 flex flex-col items-center justify-center gap-2 cursor-pointer group hover:border-blue-500/50 transition-all">
                         <ImagePlus className="text-blue-500 group-hover:scale-110 transition-transform" size={32} />
                         <span className="text-[10px] font-black text-white/40 uppercase">Minhas Fotos</span>
                         <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple accept="image/*" className="hidden" />
                       </motion.div>
-
                       {pickerImages.map((img, idx) => {
                         const isSelected = selectedImages.includes(img);
                         return (
-                          <motion.div 
-                            key={idx}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => {
-                              if (isSelected) setSelectedImages(prev => prev.filter(i => i !== img));
-                              else setSelectedImages(prev => [...prev, img]);
-                            }}
-                            className={`relative aspect-square rounded-[32px] overflow-hidden border-2 transition-all cursor-pointer ${isSelected ? 'border-blue-500 shadow-xl shadow-blue-500/20' : 'border-white/5'}`}
-                          >
+                          <motion.div key={idx} whileTap={{ scale: 0.95 }} onClick={() => {
+                            if (isSelected) setSelectedImages(prev => prev.filter(i => i !== img));
+                            else setSelectedImages(prev => [...prev, img]);
+                          }} className={`relative aspect-square rounded-[32px] overflow-hidden border-2 transition-all cursor-pointer ${isSelected ? 'border-blue-500 shadow-xl shadow-blue-500/20' : 'border-white/5'}`}>
                             <img src={img} className="w-full h-full object-cover" alt="" />
-                            {isSelected && (
-                              <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
-                                <CheckCircle2 size={32} className="text-white drop-shadow-lg" />
-                              </div>
-                            )}
-                            <div className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-lg text-[9px] font-black text-white uppercase italic">
-                              CENA 0{idx + 1}
-                            </div>
+                            {isSelected && <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center"><CheckCircle2 size={32} className="text-white drop-shadow-lg" /></div>}
+                            <div className="absolute bottom-3 left-3 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-lg text-[9px] font-black text-white uppercase italic">CENA 0{idx + 1}</div>
                           </motion.div>
                         );
                       })}
                     </div>
                   )}
                 </div>
-
                 <div className="p-6 bg-slate-900 border-t border-white/10 flex flex-col gap-3">
                   <div className="flex gap-3">
-                    <button 
-                      onClick={() => {
-                          setSelectedImages([...pickerImages]);
-                          if (tempProduct) {
-                            setTempSelectedImages([...pickerImages]);
-                            setShowImagePicker(false);
-                            setGeneratedScripts(generateViralScripts(tempProduct.item_name));
-                            setShowScriptSelector(true);
-                          }
-                        }}
-                      className="flex-1 h-14 bg-white/5 border border-white/10 rounded-2xl font-black text-[10px] text-white/60 uppercase hover:text-white transition-all flex items-center justify-center gap-2"
-                    >
-                      <RefreshCw size={14} /> Usar Todas
-                    </button>
-                    <button 
-                      disabled={selectedImages.length === 0}
-                      onClick={() => {
-                          if (tempProduct) {
-                            setTempSelectedImages(selectedImages);
-                            setShowImagePicker(false);
-                            setGeneratedScripts(generateViralScripts(tempProduct.item_name));
-                            setShowScriptSelector(true);
-                          }
-                        }}
-                      className={`flex-[2] h-14 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-3 transition-all ${selectedImages.length > 0 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30' : 'bg-white/5 text-white/10'}`}
-                    >
-                      Processar Seleção ({selectedImages.length}) <ArrowRight size={18} />
-                    </button>
+                    <button onClick={() => { setSelectedImages([...pickerImages]); if (tempProduct) { setTempSelectedImages([...pickerImages]); setShowImagePicker(false); setGeneratedScripts(generateViralScripts(tempProduct.item_name)); setShowScriptSelector(true); } }} className="flex-1 h-14 bg-white/5 border border-white/10 rounded-2xl font-black text-[10px] text-white/60 uppercase hover:text-white transition-all flex items-center justify-center gap-2"><RefreshCw size={14} /> Usar Todas</button>
+                    <button disabled={selectedImages.length === 0} onClick={() => { if (tempProduct) { setTempSelectedImages(selectedImages); setShowImagePicker(false); setGeneratedScripts(generateViralScripts(tempProduct.item_name)); setShowScriptSelector(true); } }} className={`flex-[2] h-14 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-3 transition-all ${selectedImages.length > 0 ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30' : 'bg-white/5 text-white/10'}`}>Processar Seleção ({selectedImages.length}) <ArrowRight size={18} /></button>
                   </div>
                   <p className="text-[8px] font-bold text-center text-white/20 uppercase">Selecione as fotos da Shopee ou envie as suas para o vídeo</p>
                 </div>
@@ -854,108 +618,39 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         document.body
       )}
     
-        {/* Script Selector Modal (Portalized) */}
-        {createPortal(
-          <AnimatePresence>
-            {showScriptSelector && (
-              <div className="fixed inset-0 z-[3002] flex flex-col bg-slate-950 overflow-hidden text-white">
-                
-                {/* Header */}
-                <div className="flex-none p-5 pb-2 bg-slate-950/80 backdrop-blur-xl border-b border-white/5 
-                  flex justify-between items-center z-10 sticky top-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 p-[2px]">
-                      <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center">
-                        <MessageSquare size={20} className="text-purple-400" />
-                      </div>
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-black italic uppercase tracking-wider flex items-center gap-2">
-                        Roteiro Virais
-                        <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[9px] not-italic">NOVO</span>
-                      </h2>
-                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Escolha a Vibe do Vdeo</p>
-                    </div>
+      {createPortal(
+        <AnimatePresence>
+          {showScriptSelector && (
+            <div className="fixed inset-0 z-[3002] flex flex-col bg-slate-950 overflow-hidden text-white">
+              <div className="flex-none p-5 pb-2 bg-slate-950/80 backdrop-blur-xl border-b border-white/5 flex justify-between items-center z-10 sticky top-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 p-[2px]"><div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center"><MessageSquare size={20} className="text-purple-400" /></div></div>
+                  <div>
+                    <h2 className="text-sm font-black italic uppercase tracking-wider flex items-center gap-2">Roteiro Virais<span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[9px] not-italic">NOVO</span></h2>
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Escolha a Vibe do Vídeo</p>
                   </div>
-                  <button 
-                    onClick={() => setShowScriptSelector(false)}
-                    className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white transition"
-                  >
-                    <X size={24} />
-                  </button>
                 </div>
-                
-                {/* Options List */}
-                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-                  <p className="text-xs text-white/50 text-center uppercase tracking-widest font-bold mb-2">GERADOS PARA O PRODUTO</p>
-                  
-                  {generatedScripts.map((script, idx) => (
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.1 }}
-                      key={script.id}
-                      onClick={() => {
-                        if (onViralize && tempProduct) {
-                          onViralize(tempProduct, 'autoral', tempSelectedImages, script);
-                          setShowScriptSelector(false);
-                        }
-                      }}
-                      className="group cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 
-                        p-5 rounded-2xl flex flex-col gap-3 relative overflow-hidden transition-all"
-                    >
-                      {/* Badge Vibe */}
-                      <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500/20 rounded-bl-xl border-l border-b border-purple-500/30">
-                        <span className="text-[9px] font-black uppercase text-purple-300 tracking-wider">
-                          VIBE: {script.vibe}
-                        </span>
-                      </div>
-                      
-                      {/* Texts */}
-                      <div className="mr-16">
-                        <p className="text-sm font-black text-white leading-tight mb-2">
-                          <span className="text-purple-400 mr-2">1.</span>
-                          "{script.hook}"
-                        </p>
-                        <p className="text-xs font-medium text-white/60 leading-relaxed mb-2">
-                          <span className="text-blue-400 mr-2">2.</span>
-                          "{script.presentation}"
-                        </p>
-                        <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                          # {script.cta}
-                        </p>
-                      </div>
-                      
-                      {/* Action Visual */}
-                      <div className="mt-2 h-10 w-full bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl 
-                        flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest 
-                        shadow-lg shadow-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity translate-y-4 group-hover:translate-y-0">
-                        <CheckCircle2 size={16} /> Usar este roteiro
-                      </div>
-                    </motion.div>
-                  ))}
-                  
-                </div>
+                <button onClick={() => setShowScriptSelector(false)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white transition"><X size={24} /></button>
               </div>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
-</div>
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                <p className="text-xs text-white/50 text-center uppercase tracking-widest font-bold mb-2">GERADOS PARA O PRODUTO</p>
+                {generatedScripts.map((script, idx) => (
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} key={script.id} onClick={() => { if (onViralize && tempProduct) { onViralize(tempProduct, 'autoral', tempSelectedImages, script); setShowScriptSelector(false); } }} className="group cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 p-5 rounded-2xl flex flex-col gap-3 relative overflow-hidden transition-all">
+                    <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500/20 rounded-bl-xl border-l border-b border-purple-500/30"><span className="text-[9px] font-black uppercase text-purple-300 tracking-wider">VIBE: {script.vibe}</span></div>
+                    <div className="mr-16">
+                      <p className="text-sm font-black text-white leading-tight mb-2"><span className="text-purple-400 mr-2">1.</span>"{script.hook}"</p>
+                      <p className="text-xs font-medium text-white/60 leading-relaxed mb-2"><span className="text-blue-400 mr-2">2.</span>"{script.presentation}"</p>
+                      <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider"># {script.cta}</p>
+                    </div>
+                    <div className="mt-2 h-10 w-full bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest shadow-lg shadow-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity translate-y-4 group-hover:translate-y-0"><CheckCircle2 size={16} /> Usar este roteiro</div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+    </div>
   );
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
