@@ -1921,10 +1921,12 @@ const App: React.FC = () => {
         .filter((v: any) => v !== null && v._score >= 50) // Threshold reduzido para garantir entrega
         .sort((a: any, b: any) => b._score - a._score);
 
-      if (scored.length === 0)
-        throw new Error(
-          "Vídeos não encontrados. Tente outro produto ou busque manualmente no TikTok.",
-        );
+      if (scored.length === 0) {
+        // Volta para shopee sem mostrar tela antiga
+        showToast("Nenhum vídeo encontrado. Tente outro produto!");
+        setStep("shopee");
+        return;
+      }
 
       // Pool de 10 vídeos para garantir variedade no Swap
       const topScored = scored.slice(0, 10);
@@ -1985,8 +1987,8 @@ const App: React.FC = () => {
       showToast(`${topScored.length} VÍDEOS ENCONTRADOS! 🎬`);
     } catch (err: any) {
       console.error("Erro ao buscar TikTok:", err);
-      showToast(err.message || "TENTE NOVAMENTE COM OUTRO PRODUTO");
-      setStep("list");
+      showToast(err.message || "Nenhum vídeo encontrado. Tente outro produto!");
+      setStep("shopee");
     }
   }
 
