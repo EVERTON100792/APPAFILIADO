@@ -66,6 +66,8 @@ export class VideoProcessor {
       case 'dramatic':  return 'contrast(1.5) saturate(0.9) brightness(0.9) sepia(0.1)';
       case 'tealAndOrange': return 'contrast(1.2) saturate(1.4) hue-rotate(-10deg) sepia(0.1) brightness(1.1)';
       case 'vintageGold': return 'sepia(0.4) contrast(1.1) brightness(1.1) saturate(1.3)';
+      case 'professional': return 'contrast(1.15) saturate(1.15) brightness(1.08)';  // Visual limpo e profissional
+      case 'tiktok viral': return 'contrast(1.25) saturate(1.35) brightness(1.1) brightness(1.12)';  // Estilo TikTok
       default:          return 'contrast(1.08) saturate(1.08)';
     }
   }
@@ -577,12 +579,17 @@ export class VideoProcessor {
             this.auxCtx.drawImage(video, 0, 0, W, H);
             this.ctx.clearRect(0, 0, W, H);
             
-            // --- LIMPEZA AUTORAL: Apenas espelha + limpa área de legendas ---
+            // --- LIMPEZA AUTORAL +EFEITO PROFISSIONAL ---
             this.ctx.save();
             
-            // 1. Mirror leve para dar "originalidade" sem distorcer
-            // Removido - deixou original porque distorce muito
+            // Aplicar filtro profesional
             this.ctx.filter = filterCSS;
+            
+            //微小なパン movimiento natural (simula câmera humana)
+            const microPan = Math.sin(currentTime * 0.3) * 2;
+            const microMove = Math.cos(currentTime * 0.2) * 1;
+            
+            this.ctx.translate(microPan, microMove);
             this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
             this.ctx.restore();
             
