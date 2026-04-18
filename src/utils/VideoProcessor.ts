@@ -680,18 +680,21 @@ export class VideoProcessor {
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        // Mobile-optimized resolution (720x1280 instead of 1080x1920)
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const W = isMobile ? 720 : 1080;
-        const H = isMobile ? 1280 : 1920; 
+        const nav = navigator as any;
+        const isLowEndMobile = isMobile && ((nav.hardwareConcurrency || 8) <= 4 || (nav.deviceMemory || 8) <= 2);
+        
+        // Ultra mobile optimization: 480x852 for low-end, 540x960 for regular mobile
+        const W = isLowEndMobile ? 480 : (isMobile ? 540 : 1080);
+        const H = isLowEndMobile ? 852 : (isMobile ? 960 : 1920); 
         this.canvas.width = W;
         this.canvas.height = H;
         
-        // Reduced duration for mobile performance (30s mobile, 38s desktop)
-        const targetDuration = isMobile ? 30 : 38; 
-        const fps = isMobile ? 24 : 30;
+        // Much shorter for mobile (15s low-end, 20s regular mobile, 38s desktop)
+        const targetDuration = isLowEndMobile ? 15 : (isMobile ? 20 : 38); 
+        const fps = isLowEndMobile ? 18 : (isMobile ? 20 : 30);
         const totalFrames = targetDuration * fps;
-        const slideChangeInterval = 3;
+        const slideChangeInterval = isLowEndMobile ? 2 : 3;
 
         // 1. Preload images with proxy support
         const images = await Promise.all(imageUrls.map(async url => {
@@ -729,7 +732,7 @@ export class VideoProcessor {
           output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
           error: e => console.error("VideoEncoder error", e)
         });
-        const videoBitrate = isMobile ? 2_800_000 : 6_000_000;
+        const videoBitrate = isLowEndMobile ? 1_500_000 : (isMobile ? 2_000_000 : 6_000_000);
         videoEncoder.configure({
           codec: 'avc1.4d0033', width: W, height: H, bitrate: videoBitrate, avc: { format: 'avc' }
         });
