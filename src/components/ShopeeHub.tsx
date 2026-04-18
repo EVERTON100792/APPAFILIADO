@@ -108,8 +108,9 @@ const SwipeableImageCard: React.FC<{ product: ShopeeProduct }> = ({ product }) =
         <div key={i} className="min-w-full h-full shrink-0 snap-center relative">
           <img 
             src={imgUrl} 
+            loading="lazy"
             draggable={false}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110" 
+            className="w-full h-full object-cover" 
             alt={product.item_name} 
           />
           {i === 0 && (
@@ -498,8 +499,8 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       )}
 
       <div className="grid grid-cols-2 gap-3.5">
-        {products.filter(p => p.item_name && p.item_name.length > 3).map((product) => (
-          <motion.div layout key={product.item_id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="tech-card p-2 flex flex-col gap-3 group border-white/5 bg-slate-900/20">
+        {products.filter(p => p.item_name && p.item_name.length > 3).slice(0, 12).map((product) => (
+          <div key={product.item_id} className="tech-card p-2 flex flex-col gap-3 group border-white/5 bg-slate-900/20">
             <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" className="block relative group/img">
               <SwipeableImageCard product={product} />
             </a>
@@ -524,7 +525,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                 <button onClick={() => shareWhatsApp(product)} className="flex-1 h-9 bg-[#25D366]/5 border border-[#25D366]/10 rounded-xl flex items-center justify-center gap-2 text-[#25D366]/60"><MessageCircle size={14} /> <span className="text-[8px] font-black uppercase">Zap</span></button>
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
 
