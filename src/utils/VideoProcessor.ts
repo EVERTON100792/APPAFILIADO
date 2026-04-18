@@ -386,8 +386,8 @@ export class VideoProcessor {
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const isUltra = options.filter === 'ultra8k' && !isMobile;
         
-        // Mobile: 540p (Estabilidade Máxima) | Desktop: 720p/1080p
-        const targetH = isUltra ? 1920 : (isMobile ? 540 : 1280);
+        // Manter 1080p para qualidade TikTok (reduzir custo de processamento de outras formas)
+        const targetH = isUltra ? 1920 : 1080;
         
         let scale = targetH / vH;
         if (scale > 2.0) scale = 2.0; 
@@ -680,18 +680,13 @@ export class VideoProcessor {
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const nav = navigator as any;
-        const isLowEndMobile = isMobile && ((nav.hardwareConcurrency || 8) <= 4 || (nav.deviceMemory || 8) <= 2);
-        
-        // Mobile: 540p (estabilidade) | Desktop: 1080p
-        const W = isMobile ? 540 : 1080;
-        const H = isMobile ? 960 : 1920; 
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const W = 1080;
+        const H = 1920; 
         this.canvas.width = W;
         this.canvas.height = H;
         
-        // Manter duração original (38s desktop, 30s mobile)
-        const targetDuration = isMobile ? 30 : 38; 
+        const targetDuration = 38; 
         const fps = isMobile ? 24 : 30;
         const totalFrames = targetDuration * fps;
         const slideChangeInterval = 3;
