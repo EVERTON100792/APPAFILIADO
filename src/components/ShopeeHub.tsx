@@ -39,6 +39,7 @@ import type { ShopeeProduct } from "../services/shopeeService";
 interface ShopeeHubProps {
   onShowToast: (msg: string) => void;
   userStoreSlug?: string;
+  userShopeeId?: string | null;
   onViralize?: (product: any, videoType?: 'tiktok' | 'autoral', customImages?: string[], customScript?: any) => void;
   onSaveHistory?: (product: any, platform: string) => void;
 }

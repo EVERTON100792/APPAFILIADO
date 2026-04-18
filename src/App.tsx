@@ -3115,17 +3115,8 @@ const App: React.FC = () => {
 
 
       <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-950 contain-layout">
-        <AnimatePresence mode="popLayout">
-          {step === "bio" && (
-            <motion.div
-              key="bio"
-              variants={stepVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={stepTransition}
-              className="step-wrapper-standard overflow-y-auto p-4 md:p-8"
-            >
+        {step === "bio" && (
+            <div className="step-wrapper-standard overflow-y-auto p-4 md:p-8">
               <BioManager
                 user={user}
                 initialStoreSlug={storeSlug}
@@ -3133,18 +3124,10 @@ const App: React.FC = () => {
                 onStoreConfigured={handleStoreConfigured}
                 onProceed={() => setStep("agents_scouting")}
               />
-            </motion.div>
+            </div>
           )}
           {step === "home" && (
-            <motion.div
-              key="home"
-              variants={stepVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={stepTransition}
-              className="step-wrapper-standard"
-            >
+            <div className="step-wrapper-standard">
               <div className="home-layout-perfect">
                 {/* Top Section: The Premium Shield Identity */}
                 <div className="relative group mx-auto mt-2 sm:mt-4">
@@ -3236,7 +3219,7 @@ const App: React.FC = () => {
                   </p>
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
 
@@ -4865,18 +4848,11 @@ const App: React.FC = () => {
           )}
 
           {step === "shopee" && (
-            <motion.div
-              key="shopee"
-              variants={stepVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={stepTransition}
-              className="step-wrapper-standard"
-            >
+            <div className="step-wrapper-standard">
               <ShopeeHub 
                 onShowToast={showToast} 
                 userStoreSlug={storeSlug} 
+                userShopeeId={userShopeeId}
                 onSaveHistory={saveToSupabase}
 onViralize={(p, videoType, customImages, customScript) => {
                   console.log("[ShopeeHub onViralize] produto:", p, "videoType:", videoType);
@@ -4892,11 +4868,10 @@ onViralize={(p, videoType, customImages, customScript) => {
                     showToast("🔍 Buscando vídeo viral...");
                     researchTikTok(prodData, "shopee");
                   }
-                }}
+}}
               />
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
       </main>
 
       {/* Proteção Global de Acesso */}
