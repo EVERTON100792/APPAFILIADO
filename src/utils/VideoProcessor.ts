@@ -245,10 +245,21 @@ export class VideoProcessor {
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
         const targetSampleRate = 44100;
-        // Se for modo Autoral, engrossamos a voz (0.92 = voz mais grossa sem parecer robô)
-        // Isso muda a assinatura digital para não parecer a mesma voz
-        const pitchFactor = options.isAutoral ? 0.92 : 1.0;
-        let mainAudioBuffer = await this.processAudioBuffer(await (await fetch(videoUrl)).arrayBuffer(), targetSampleRate, pitchFactor);
+        // Mobile: mantém áudio original (não processa pitch - muito pesado)
+        // Desktop: aplica pitch se for autoral (0.92 = voz mais grossa)
+        const pitchFactor = (options.isAutoral && !options.mobileTurbo) ? 0.92 : 1.0;
+        
+        // Decodifica áudio uma única vez para todos os casos
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const arrayBuffer = await (await fetch(videoUrl)).arrayBuffer();
+        let mainAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        
+        // Só aplica processamento de pitch no desktop e se for autoral
+        if (options.isAutoral && !options.mobileTurbo) {
+          mainAudioBuffer = await this.processAudioBuffer(arrayBuffer, targetSampleRate, pitchFactor);
+        }
+        
+        await audioCtx.close();
         if (options.musicUrl) {
           const bg = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
           // Mix logic (simplified)
