@@ -9,63 +9,57 @@ export interface ViralScript {
 
 // Hooks universais que funcionam para qualquer produto
 const HOOKS = [
-  "Para tudo! Olha só o que eu achei...",
-  "O negócio mais incrível que você vai ver hoje...",
-  "Você não vai acreditar nisso...",
-  "O segredo que ninguém te conta...",
-  "Testei e olha no que deu...",
-  "Achei e preciso te mostrar!",
-  "Vem ver essa belezinha...",
-  "Olha esse achado insano!",
-  "Esse resolve minha vida toda...",
-  "Gente, olha isso!",
-  "Você precisa ver isso!",
-  "Achei o melhor do mercado!",
-  "Olha o tamanho disso...",
-  "Testado e aprovado!",
-  "Não acredito que era tão bom!",
-  "Preciso te mostrar isso...",
-  "Olha só que lindo!",
-  "Não believes quanto é bom!",
-  "Vem seeing o que chegou!"
+  "POR QUE ninguém está falando sobre isso? 🤫🔥",
+  "PARE de usar isso do jeito errado! ❌⚠️",
+  "O segredo da Shopee que as influenciadoras ESCONDEM... 🤫💎",
+  "Finalmente o achadinho que vai MUDAR sua vida! ✨",
+  "Sua casa nunca mais será a mesma depois desse vídeo... 🏠😱",
+  "Eu não acreditei quando vi o resultado disso! 👀👇",
+  "O melhor investimento que fiz na Shopee esse ano! 💸✅",
+  "ISSO aqui é pura tecnologia e você nem sabia! 🚀⚡",
+  "Alerta de PRODUTO VIRAL! Garanta o seu antes que esgote. 📉",
+  "Duvido você não querer um desses depois de ver isso! 👀",
+  "Isso aqui resolveu um problema que eu nem sabia que tinha! 🧠",
+  "O achado mais útil que você vai ver hoje, prometo! ✅",
+  "Gente, eu tô sem palavras pra esse produtinho... 🙊",
+  "Se você valoriza o seu tempo, você precisa disso aqui! ⏳",
+  "O preço disso é brincadeira perto do que ele faz! 💸"
 ];
 
-// Presentations universais sem referência a tempo/dias
+// Presentations universais
 const PRESENTATIONS = [
-  "Olha como [[NOME]] funciona na prática!",
-  "A qualidade é absurda, olha só...",
-  "Olha só como ficou lindo!",
-  "A qualidade étop, simplesmente incr.",
-  "Olha o acabamento perfeito!",
-  "Isso aqui é muito bem feito.",
-  "Super prático e funciona mt bem!",
-  "A qualidade surpreende siempre!",
-  "É lindo e funciona perfeitamente!",
-  "Recomendo muito esse produto!"
+  "Olha como esse [[NOME]] funciona na prática! 🚀",
+  "A qualidade é simplesmente absurda, olha os detalhes...",
+  "O acabamento é impecável e a entrega foi super rápida! ✨",
+  "Super prático e resolve o problema de um jeito muito fácil.",
+  "É o tipo de item que todo mundo deveria ter em casa. 🏠",
+  "Fiquei surpresa com a durabilidade e o design premium.",
+  "Além de lindo, é extremamente funcional. Nota 10/10!",
+  "Olha só como ele facilita as tarefas mais chatas do dia.",
+  "Eu testei e posso garantir: vale cada centavo! 💰",
+  "O segredo da organização e sofisticação em um só item."
 ];
 
 // Midrolls universais
 const MIDROLLS = [
-  "Detalhes importantes...",
-  "Olha só como é feito...",
-  "E a melhor parte...",
-  "Vem ver de perto como é...",
-  "Olha só que demais!",
-  "Isso é demais!"
+  "Dá uma olhada nos detalhes de perto... 🔍",
+  "A melhor parte é como ele se adapta a qualquer lugar.",
+  "Vem ver o material de alta resistência que eles usam.",
+  "É muita tecnologia envolvida num produtinho só! ⚡",
+  "Olha só como é fácil de usar e de guardar.",
+  "Isso aqui mudou completamente meu jeito de organizar as coisas!"
 ];
 
-// CTAs universais
+// CTAs universais - Foco total em comentários para subir no algoritmo
 const CTAS = [
-  "Corre que está acabando! Link na minha Bio.",
-  "Comenta 'EU QUERO' que te mando o link!",
-  "Quer economizar? Acesse o link agora!",
-  "Aproveita antes que o preço sube!",
-  "Não perca,Link na Bio agora!",
-  "Link na Bio! Corre!",
-  "Clique na Bio agora!",
-  "Corre que é oferta!",
-  "Garantindo no link agora!",
-  "Acesse agora mesmo!"
+  "Comenta 'EU QUERO' para receber o link exclusivo no Direct! 👇",
+  "Link na Bio com 50% de DESCONTO por tempo limitado! 🏃‍♂️💨",
+  "Diga 'EU QUERO' se você também precisa de um desse em casa! ✨",
+  "Vem ver o preço inacreditável no Link na Bio! 💸",
+  "Clique no Link na Bio para garantir o seu com FRETE GRÁTIS! 🚚",
+  "Quer o link? Comenta 'EU QUERO' aqui embaixo agora! 👇",
+  "Corra na Bio! Esse é o achado que você tanto procurava.",
+  "Siga @perfil para mais achadinhos como esse todos os dias! 🛍️"
 ];
 
 const VIBES: ViralScript['vibe'][] = ['Agressivo', 'Curiosidade', 'Solução Direta', 'Desejo'];

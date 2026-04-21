@@ -33,7 +33,8 @@ import {
   Type,
   Clock,
   Mic,
-  Cpu
+  Cpu,
+  Store
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -372,6 +373,9 @@ const App: React.FC = () => {
   const userMetadataRef = useRef<Record<string, any>>({});
   const metadataUpdateInFlightRef = useRef(false);
   const pendingMetadataRef = useRef<Record<string, any> | null>(null);
+  const [shopeeHubProducts, setShopeeHubProducts] = useState<any[]>([]);
+  const [shopeeHubKeyword, setShopeeHubKeyword] = useState("");
+  const [shopeeHubTab, setShopeeHubTab] = useState("all");
   const lastPersistedStepRef = useRef<Step | null>(null);
 
   const updateUserMetadata = async (patch: Record<string, any>, silent = false) => {
@@ -2115,6 +2119,7 @@ const App: React.FC = () => {
         narrationStyle: narrationVoice === 'F' ? 'soft-female' : 'premium-male',
         mobileTurbo: isMobileRuntime,
         storeSlug: storeSlug,
+        isAutoral: true,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
@@ -2554,6 +2559,7 @@ const App: React.FC = () => {
           useNarration: useNarration,
           narrationVoice: narrationVoice,
           script: videoData?.script,
+          isAutoral: videoData?.isAutoral,
           onProgress: (p: number) => setTreatingProgress(Math.floor(p))
         };
 
@@ -4613,6 +4619,73 @@ const App: React.FC = () => {
 
                 <motion.button
                   whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: 1.01 }}
+                  onClick={async () => {
+                    const targetSlug = (user?.user_metadata?.store_slug || storeSlug || localStorage.getItem("bio_store_slug") || new URLSearchParams(window.location.search).get("loja") || "").toLowerCase();
+                    if (!targetSlug) {
+                      showToast("CONFIGURE SUA LOJA PRIMEIRO!");
+                      setStep("bio");
+                      return;
+                    }
+                    let productTitle: string = "";
+                    let productImage: string = "";
+                    let productLink: string = "";
+                    let productPrice: string = "";
+                    
+                    // Primeiro tenta pegar do videoData (imagem/thumbnail do vídeo criado)
+                    if (videoData) {
+                      productTitle = videoData.title || selectedProduct?.item_name || selectedProduct?.title || "";
+                      productImage = videoData.thumbnail || selectedProduct?.image_url || selectedProduct?.image || "";
+                    } else if (selectedProduct) {
+                      productTitle = selectedProduct.item_name || selectedProduct.title || "";
+                      productImage = selectedProduct.image_url || selectedProduct.image || "";
+                    }
+                    
+                    // Tenta pegar link do selectedProduct ou do input
+                    if (selectedProduct) {
+                      productLink = selectedProduct.affiliate_link || selectedProduct.link || selectedProduct.product_link || "";
+                      productPrice = selectedProduct.price?.toString() || "";
+                    }
+
+                    // Se ainda não tem tudo, tenta pegar do input/link manual
+                    if (!productImage && activeItems.length > 0) {
+                      const activeItem = activeItems.find(i => i.id === videoData?.productId || i.id === selectedProduct?.id);
+                      if (activeItem) {
+                        productTitle = productTitle || activeItem.item_name || activeItem.title || "";
+                        productImage = productImage || activeItem.image_url || activeItem.image || "";
+                        productLink = productLink || activeItem.affiliate_link || activeItem.link || activeItem.product_link || "";
+                        productPrice = productPrice || activeItem.price?.toString() || "";
+                      }
+                    }
+                    
+                    if (!productTitle || !productImage) {
+                      showToast("SEM PRODUTO PARA VITRINE!");
+                      return;
+                    }
+                    try {
+                      const { error } = await supabase.from("bio_store").insert({
+                        user_id: targetSlug,
+                        title: productTitle,
+                        image_url: productImage,
+                        affiliate_link: productLink,
+                        price: productPrice
+                      });
+                      if (error) throw error;
+                      showToast("🛍️ PUBLICADO NA VITRINE!");
+                    } catch (err: any) {
+                      showToast("❌ ERRO: " + (err.message || "Tente novamente"));
+                    }
+                  }}
+                  className="w-full py-3 bg-accent/8 border border-accent/16 hover:bg-accent hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"
+                >
+                  <Store size={16} />
+                  <span className="text-[11px] font-black uppercase tracking-[0.2em]">
+                    Publicar na Vitrine
+                  </span>
+                </motion.button>
+
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
                   disabled={isProcessing}
                   className={`w-full h-14 rounded-2xl flex items-center justify-center gap-3 transition-all ${
                     isProcessing
@@ -4854,7 +4927,13 @@ const App: React.FC = () => {
                 userStoreSlug={storeSlug} 
                 userShopeeId={userShopeeId}
                 onSaveHistory={saveToSupabase}
-onViralize={(p, videoType, customImages, customScript) => {
+                shopeeHubProducts={shopeeHubProducts}
+                setShopeeHubProducts={setShopeeHubProducts}
+                shopeeHubKeyword={shopeeHubKeyword}
+                setShopeeHubKeyword={setShopeeHubKeyword}
+                shopeeHubTab={shopeeHubTab}
+                setShopeeHubTab={setShopeeHubTab}
+                onViralize={(p, videoType, customImages, customScript) => {
                   console.log("[ShopeeHub onViralize] produto:", p, "videoType:", videoType);
                   if (videoType === 'autoral') {
                     handleCreateAutoralVideo(p, customImages, customScript);

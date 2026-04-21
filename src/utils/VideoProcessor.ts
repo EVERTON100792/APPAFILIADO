@@ -18,11 +18,12 @@ export interface ProcessingOptions {
   audioMixMode?: 'original' | 'music' | 'mix' | 'mute';
   script?: ViralScript;
   storeSlug?: string;
+  mobileTurbo?: boolean;
   useNarration?: boolean;
   narrationVoice?: 'M' | 'F';
-  narrationStyle?: 'soft-female' | 'premium-male';
-  mobileTurbo?: boolean;
+  narrationStyle?: string;
   onProgress?: (p: number) => void;
+  isAutoral?: boolean;
 }
 
 export class VideoProcessor {
@@ -31,6 +32,7 @@ export class VideoProcessor {
   private auxCanvas: HTMLCanvasElement;
   private auxCtx: CanvasRenderingContext2D;
   private ownedVideo: HTMLVideoElement;
+  private frameCache: Map<string, ImageBitmap[]> = new Map();
   private stream: MediaStream | null = null;
 
   constructor() {
@@ -57,75 +59,74 @@ export class VideoProcessor {
   private getFilterCSS(filter: string): string {
     switch (filter) {
       case 'elite':     return 'contrast(1.35) saturate(1.7) brightness(1.15)';
-      case 'vhs':       return 'contrast(0.9) saturate(0.55) sepia(0.3) brightness(1.1) blur(0.8px)';
+      case 'vhs':       return 'contrast(0.9) saturate(0.55) sepia(0.3) brightness(1.1)'; // Removido blur
       case 'cinematic': return 'contrast(1.3) saturate(1.1) brightness(1.05) hue-rotate(-5deg)';
-      case 'bw':        return 'grayscale(1) contrast(1.5) brightness(1.05)';
+      case 'bw':        // Removido filtros de imagem (contrast/brightness) para evitar travamentos em celulares
+        return 'none';
       case 'bloom':     return 'brightness(1.2) saturate(1.3)';
       case 'glitch':    return 'hue-rotate(90deg) brightness(1.2) contrast(1.25)';
-      case 'ultra8k':   return 'contrast(1.4) saturate(1.8) brightness(1.12) drop-shadow(0 0 12px rgba(6, 182, 212, 0.25))';
+      case 'ultra8k':   return 'contrast(1.4) saturate(1.8) brightness(1.12)'; // Removido drop-shadow
       case 'dramatic':  return 'contrast(1.5) saturate(0.9) brightness(0.9) sepia(0.1)';
       case 'tealAndOrange': return 'contrast(1.2) saturate(1.4) hue-rotate(-10deg) sepia(0.1) brightness(1.1)';
       case 'vintageGold': return 'sepia(0.4) contrast(1.1) brightness(1.1) saturate(1.3)';
-      case 'professional': return 'contrast(1.15) saturate(1.15) brightness(1.08)';  // Visual limpo e profissional
-      case 'tiktok viral': return 'contrast(1.25) saturate(1.35) brightness(1.1) brightness(1.12)';  // Estilo TikTok
+      case 'professional': return 'contrast(1.15) saturate(1.15) brightness(1.08)';
+      case 'tiktok viral': return 'contrast(1.25) saturate(1.35) brightness(1.1) brightness(1.12)';
       default:          return 'contrast(1.08) saturate(1.08)';
     }
   }
 
   private async fetchAsBlob(url: string, type: 'image' | 'video' = 'video'): Promise<string> {
-    const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
+    if (url.startsWith('blob:') || url.startsWith('data:') || url.includes('localhost') || url.startsWith('/')) {
+      return url;
+    }
     
-    // PRIORIDADE 1: Proxy Interno (Evita CORS e 403)
-    const proxies = [
+    const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
+    const proxyGenerators = [
       (u: string) => u.includes(PROXY_BASE) ? u : `${PROXY_BASE}?url=${encodeURIComponent(u)}`,
       (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
       (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     ];
 
-    // Se for imagem da shopee, tenta carregar
-    for (const proxyFn of proxies) {
+    const attempts = proxyGenerators.map(async (proxyFn) => {
+      const targetUrl = proxyFn(url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // Timeout mais agressivo para rapidez
+      
       try {
-        const targetUrl = proxyFn(url);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s para garantir imagens pesadas
-        
-        console.log(`[VideoProcessor] Tentando carregar: ${targetUrl}`);
         const res = await fetch(targetUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
-        
         if (res.ok) {
           const blob = await res.blob();
-          if (blob.size > 100) {
-            console.log(`[VideoProcessor] Sucesso: ${url}`);
-            return URL.createObjectURL(blob);
-          }
+          if (blob.size > 100) return URL.createObjectURL(blob);
         }
+        throw new Error("Proxy failed");
       } catch (e) {
-        console.warn(`[VideoProcessor] Falha no proxy para ${url}`);
+        clearTimeout(timeoutId);
+        throw e;
       }
+    });
+
+    try {
+      // Tentar todos em paralelo e pegar o primeiro que funcionar
+      return await Promise.any(attempts);
+    } catch (e) {
+      console.warn(`[VideoProcessor] Todos os proxies falharam para ${url}, usando original.`);
+      return url;
     }
-    return url;
   }
 
-
-
   private generateSyntheticBeat(sampleRate: number, bpm: number = 128, durationSec: number = 35, genre: string = 'house'): AudioBuffer {
-  // Beat sintetico com variacao por genero (house/phonk/funk/lofi/trap)
     const buf = new AudioBuffer({ numberOfChannels: 2, length: sampleRate * durationSec, sampleRate });
     const L = buf.getChannelData(0);
     const R = buf.getChannelData(1);
-    const spb = (60 / bpm) * sampleRate; // samples per beat
-    const totalBeats = Math.floor(sampleRate * durationSec / spb);
-
-    // Padroes de bateria por genero (16 passos = 1 compasso)
+    const spb = (60 / bpm) * sampleRate;
     const patterns: Record<string, { kick: number[], snare: number[], hihat: number[], bass: number[] }> = {
       'house':  { kick:  [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], bass: [60,0,0,0,0,0,0,65,0,0,0,0,0,0,0,0] },
-      'phonk':  { kick:  [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0], snare: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0], hihat: [1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,1], bass: [55,0,0,55,0,0,69,0,55,0,0,55,0,0,73,0] },
+      'phonk':  { kick:  [1,0,1,1,0,0,1,0,1,0,1,1,0,1,1,0], snare: [0,0,1,0,0,0,1,0,0,0,1,0,0,1,1,0], hihat: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], bass: [36,0,0,36,0,0,38,0,36,0,0,36,0,41,0,0] },
       'funk':   { kick:  [1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0], snare: [0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,1], hihat: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0], bass: [41,0,0,41,0,0,0,0,41,0,0,41,0,48,0,0] },
       'lofi':   { kick:  [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0], snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat: [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0], bass: [48,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0] },
       'trap':   { kick:  [1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0], snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hihat: [0,1,1,0,1,1,0,1,0,1,1,0,1,1,1,1], bass: [36,0,0,0,0,0,0,36,0,0,33,0,0,0,0,0] },
     };
-
     const p = patterns[genre] || patterns['house'];
     const stepsPerBeat = 4;
     const stepLen = Math.floor(spb / stepsPerBeat);
@@ -145,1609 +146,597 @@ export class VideoProcessor {
     for (let step = 0; step < totalSteps; step++) {
       const pat = step % 16;
       const off = step * stepLen;
-
-      // KICK: sine sweep grave
       if (p.kick[pat]) {
         [L, R].forEach(ch => {
           for (let s = 0; s < stepLen && (off + s) < ch.length; s++) {
             const env = Math.exp(-s / (sampleRate * 0.055));
-            const freq = 80 + 150 * Math.exp(-s / (sampleRate * 0.025));
-            ch[off + s] += Math.sin(2 * Math.PI * freq * s / sampleRate) * env * 0.75;
+            const freq = 60 + 150 * Math.exp(-s / (sampleRate * 0.025));
+            ch[off + s] += Math.sin(2 * Math.PI * freq * s / sampleRate) * env * 0.9;
+            // Distorção leve para "pegada" viral
+            if (ch[off+s] > 0.8) ch[off+s] = 0.8;
+            if (ch[off+s] < -0.8) ch[off+s] = -0.8;
           }
         });
       }
-
-      // SNARE: ruido + harmonico
       if (p.snare[pat]) {
-        [L, R].forEach(ch => { addNoise(ch, off, Math.floor(sampleRate * 0.12), 0.55, sampleRate * 0.04); });
-        [L, R].forEach(ch => { addSine(ch, off, 200, Math.floor(sampleRate * 0.1), 0.2, sampleRate * 0.03); });
+        [L, R].forEach(ch => { addNoise(ch, off, Math.floor(sampleRate * 0.12), 0.6, sampleRate * 0.035); });
       }
-
-      // HIHAT: ruido agudo breve
       if (p.hihat[pat]) {
-        const hhDur = genre === 'trap' ? Math.floor(sampleRate * 0.04) : Math.floor(stepLen / 3);
-        [L, R].forEach(ch => { addNoise(ch, off, hhDur, 0.18, sampleRate * 0.008); });
+        [L, R].forEach(ch => { addNoise(ch, off, Math.floor(sampleRate * 0.02), 0.25, sampleRate * 0.005); });
       }
-
-      // BASS: nota sinusoidal grave (nota MIDI ? Hz)
       const bassNote = p.bass[pat];
       if (bassNote > 0) {
-        const bassFreq = 440 * Math.pow(2, (bassNote - 69) / 12);
-        const bassDur = Math.floor(stepLen * 3.5);
-        [L, R].forEach(ch => { addSine(ch, off, bassFreq, bassDur, 0.35, sampleRate * 0.18); });
-        // Harm�nico do baixo (oitava + quinta)
-        [L, R].forEach(ch => { addSine(ch, off, bassFreq * 2, bassDur, 0.08, sampleRate * 0.10); });
+        const bassFreq = 440 * Math.pow(2, (bassNote - 69) / 12) * 0.5; // Sub-bass
+        const bassDur = Math.floor(stepLen * 2);
+        [L, R].forEach(ch => { addSine(ch, off, bassFreq, bassDur, 0.45, sampleRate * 0.15); });
       }
-    }
-
-    // LoFi: adicionar crackle de vinil
-    if (genre === 'lofi') {
-      for (let s = 0; s < L.length; s++) {
-        if (Math.random() < 0.003) { L[s] += (Math.random() - 0.5) * 0.12; R[s] += (Math.random() - 0.5) * 0.12; }
-      }
-    }
-
-    // Normalizar para evitar clipping
-    let mx = 0;
-    for (let i = 0; i < L.length; i++) mx = Math.max(mx, Math.abs(L[i]), Math.abs(R[i]));
-    if (mx > 0.9) {
-      const gain = 0.88 / mx;
-      for (let i = 0; i < L.length; i++) { L[i] *= gain; R[i] *= gain; }
     }
     return buf;
   }
 
-
-  private async fetchNarration(text: string, voice: 'M' | 'F' = 'F'): Promise<AudioBuffer | null> {
-    const PROXY_BASE = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
-    // Velocidade mais baixa = voz mais natural e menos robotica
-    // Feminina mais devagar para soar mais suave e natural
-    const ttsSpeed = voice === 'M' ? '0.85' : '0.82';
-    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=pt-BR&client=tw-ob&ttsspeed=${ttsSpeed}`;
-    const proxyUrl = `${PROXY_BASE}?url=${encodeURIComponent(ttsUrl)}`;
-
-    try {
-      const res = await fetch(proxyUrl);
-      if (!res.ok) return null;
-      const arrayBuffer = await res.arrayBuffer();
-      
-      // Resampa para 44100Hz
-      const buffer = await this.processAudioBuffer(arrayBuffer, 44100);
-      
-      // Processamento AVANÇADO para humanizar a voz
-      const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, buffer.length * 1.4, buffer.sampleRate);
-      const source = offlineCtx.createBufferSource();
-      source.buffer = buffer;
-      
-      // Playback diferente para M e F - Feminina mais aguda e suave
-      source.playbackRate.value = voice === 'M' ? 1.04 : 1.08;
-      
-      // Filtro highpass para remover ruido grave (voz mais limpa)
-      const hpFilter = offlineCtx.createBiquadFilter();
-      hpFilter.type = 'highpass';
-      hpFilter.frequency.value = voice === 'M' ? 100 : 150;
-      hpFilter.Q.value = 0.7;
-      
-      // Filtro de presencia para dar clareza
-      const presence = offlineCtx.createBiquadFilter();
-      presence.type = 'peaking';
-      presence.frequency.value = voice === 'M' ? 2500 : 3200;
-      presence.Q.value = 0.8;
-      presence.gain.value = voice === 'M' ? 2.0 : 2.5;
-      
-      // Filtro air para dar brilho natural
-      const air = offlineCtx.createBiquadFilter();
-      air.type = 'highshelf';
-      air.frequency.value = 5000;
-      air.gain.value = voice === 'M' ? 1.5 : 2.0;
-      
-      // Compressor leve para uniformizar
-      const compressor = offlineCtx.createDynamicsCompressor();
-      compressor.threshold.value = -18;
-      compressor.knee.value = 6;
-      compressor.ratio.value = 2.0;
-      compressor.attack.value = 0.003;
-      compressor.release.value = 0.15;
-      
-      const gain = offlineCtx.createGain();
-      gain.gain.value = 0.75;
-      
-      // Conexao em cadeia: source -> hp -> presence -> air -> comp -> gain -> out
-      source.connect(hpFilter);
-      hpFilter.connect(presence);
-      presence.connect(air);
-      air.connect(compressor);
-      compressor.connect(gain);
-      gain.connect(offlineCtx.destination);
-      source.start();
-      
-      return await offlineCtx.startRendering();
-    } catch (e) {
-      console.error("[Narração] Erro ao buscar voz:", e);
-      return null;
-    }
-  }
-
   private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house'): Promise<AudioBuffer> {
     const SUPABASE_PROXY = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
-    
-    // 1. Detecta URLs locais/blob e busca direto (Ignora Proxy)
     if (url.startsWith('blob:') || url.startsWith('http://localhost') || url.startsWith('/')) {
       try {
         const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
-        return this.processAudioBuffer(arrayBuffer, targetSampleRate);
-      } catch (e) {
-        console.warn("[Audio] Falha ao carregar áudio local direto:", e);
-      }
+        return this.processAudioBuffer(arrayBuffer, targetSampleRate, 1.14); // Pitch viral energético
+      } catch (e) { console.warn("[Audio] Falha ao carregar áudio local direto:", e); }
     }
-
     const proxies = [
       `${SUPABASE_PROXY}?url=${encodeURIComponent(url)}`,
       `https://corsproxy.io/?${encodeURIComponent(url)}`,
       `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     ];
-
     for (const proxyUrl of proxies) {
       try {
-        const response = await fetch(proxyUrl, { cache: 'no-store' });
+        const response = await fetch(proxyUrl);
         if (!response.ok) continue;
         const arrayBuffer = await response.arrayBuffer();
-        return this.processAudioBuffer(arrayBuffer, targetSampleRate);
-      } catch (e) {
-        console.warn(`[Audio] Proxy falhou: ${proxyUrl.substring(0, 50)}`);
-      }
+        return this.processAudioBuffer(arrayBuffer, targetSampleRate, 1.14); // Pitch viral energético
+      } catch (e) {}
     }
-
-    // Fallback Final: Se tudo falhar, gera um beat sintético para não quebrar o vídeo
-    console.warn("[Audio] Todos os proxies falharam. Usando áudio sintético.");
-    return this.generateSyntheticBeat(targetSampleRate, bpm, 35, genre);
+    return this.generateSyntheticBeat(targetSampleRate, bpm, 35, genre || 'phonk');
   }
 
-  private async processAudioBuffer(arrayBuffer: ArrayBuffer, targetSampleRate: number): Promise<AudioBuffer> {
+  private async processAudioBuffer(arrayBuffer: ArrayBuffer, targetSampleRate: number, pitchFactor: number = 1.0): Promise<AudioBuffer> {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     try {
       const originalBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-      if (originalBuffer.sampleRate === targetSampleRate) {
-        return originalBuffer;
-      }
-      const offlineCtx = new OfflineAudioContext(
-        originalBuffer.numberOfChannels,
-        Math.ceil(originalBuffer.duration * targetSampleRate),
-        targetSampleRate
-      );
+      // Se pitchFactor > 1, estamos mudando a identidade da voz (estilo TikTok viral)
+      const durationFactor = 1 / pitchFactor;
+      const newLen = Math.ceil(originalBuffer.duration * targetSampleRate * durationFactor);
+      const offlineCtx = new OfflineAudioContext(originalBuffer.numberOfChannels, newLen, targetSampleRate);
+      
       const src = offlineCtx.createBufferSource();
       src.buffer = originalBuffer;
-      src.connect(offlineCtx.destination);
+      src.playbackRate.value = pitchFactor; // Altera tom e velocidade simultaneamente
+      
+      // Aplicar um leve "Compressor/Limiter" para voz profissional
+      const compressor = offlineCtx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-24, 0);
+      compressor.knee.setValueAtTime(30, 0);
+      compressor.ratio.setValueAtTime(12, 0);
+      compressor.attack.setValueAtTime(0.003, 0);
+      compressor.release.setValueAtTime(0.25, 0);
+      
+      src.connect(compressor);
+      compressor.connect(offlineCtx.destination);
       src.start();
-      const resampled = await offlineCtx.startRendering();
-      return resampled;
-    } finally {
-      await audioCtx.close();
-    }
+      return await offlineCtx.startRendering();
+    } finally { await audioCtx.close(); }
   }
-
 
   public async renderVideo(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        let video: HTMLVideoElement;
-        let blobUrl: string | null = null;
-        let useExisting = false;
-
-        if (options.existingVideoEl && options.existingVideoEl.readyState >= 2) {
-          try {
-            const testC = document.createElement('canvas');
-            testC.width = 1; testC.height = 1;
-            const testCtx = testC.getContext('2d')!;
-            testCtx.drawImage(options.existingVideoEl, 0, 0, 1, 1);
-            testCtx.getImageData(0, 0, 1, 1);
-            useExisting = true;
-          } catch (e) {
-            console.warn("Video UI bloqueado por CORS. Usando fallback via Proxy.");
-            useExisting = false;
-          }
-        }
-
-        let wasMuted = false;
-        let wasVolume = 1;
-
-        if (useExisting && options.existingVideoEl) {
-          video = options.existingVideoEl;
-          video.loop = false;
-          const wasPaused = video.paused;
-          wasMuted = video.muted;
-          wasVolume = video.volume;
-          video.muted = false;
-          video.volume = 1;
-          video.currentTime = options.trimStart || 0;
-          await new Promise<void>(r => { video.onseeked = () => r(); setTimeout(r, 1500); });
-          if (wasPaused) video.pause();
-        } else {
-          video = this.ownedVideo;
-          const sourceUrl = await this.fetchAsBlob(videoUrl, 'video');
-          blobUrl = sourceUrl.startsWith('blob:') ? sourceUrl : null;
-          video.crossOrigin = blobUrl ? '' : 'anonymous';
-          video.src = sourceUrl;
-          const timeout = setTimeout(() => reject(new Error('Timeout')), 25000);
-          await new Promise<void>((res, rej) => {
-            video.onloadedmetadata = () => { clearTimeout(timeout); res(); };
-            video.onerror = () => { clearTimeout(timeout); rej(new Error('CORS')); };
-          });
-          video.currentTime = options.trimStart || 0;
-          await new Promise<void>(r => { video.onseeked = () => r(); });
-        }
-
-        const vW = video.videoWidth;
-        const vH = video.videoHeight;
-        if (!vW || !vH) { reject(new Error('Dimensões inválidas')); return; }
-
-        // MODO ESTABILIDADE MOBILE (Resolução reduzida para evitar crash do navegador)
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isUltra = options.filter === 'ultra8k' && !isMobile;
+        const sourceUrl = await this.fetchAsBlob(videoUrl, 'video');
+        const video = this.ownedVideo;
+        video.crossOrigin = 'anonymous';
+        video.src = sourceUrl;
+        await new Promise<void>((res, rej) => {
+          video.onloadedmetadata = () => res();
+          video.onerror = (e) => rej(e);
+        });
         
-        // Manter 1080p para qualidade TikTok (reduzir custo de processamento de outras formas)
-        const targetH = isUltra ? 1920 : 1080;
-        
-        let scale = targetH / vH;
-        if (scale > 2.0) scale = 2.0; 
-        if (isMobile && scale > 1.0) scale = 1.0; // Impedir upscale em mobile para economizar RAM e CPU
+        const W = 1080; const H = 1920;
+        this.canvas.width = W; this.canvas.height = H;
+        this.auxCanvas.width = W; this.auxCanvas.height = H;
 
-        const W = Math.floor((vW * scale) / 2) * 2;
-        const H = Math.floor((vH * scale) / 2) * 2;
-        
-        this.canvas.width = W;
-        this.canvas.height = H;
-        this.ctx.imageSmoothingEnabled = true;
-        this.ctx.imageSmoothingQuality = 'high';
-        this.auxCanvas.width = W;
-        this.auxCanvas.height = H;
-        this.auxCtx.imageSmoothingEnabled = true;
-        this.auxCtx.imageSmoothingQuality = 'low';
-
-        video.muted = true; // Mute original to avoid conflict
-        video.pause(); // IMPORTANT: Pause UI playback to allow deterministic seeking
-        
-        // 1. Setup determinístico de Áudio (Sync Perfeito)
-        let mainAudioBuffer: AudioBuffer | null = null;
         const targetSampleRate = 44100;
-        
-        if (!options.isMuted) {
-          try {
-            // Pegar o áudio do próprio vídeo original (essencial para vídeos autorais)
-            mainAudioBuffer = await this.loadAndResampleAudio(videoUrl, targetSampleRate);
-            
-            // Se tiver música de fundo, precisamos mixar
-            if (options.musicUrl && (options.audioMixMode === 'mix' || options.audioMixMode === 'music')) {
-              const bgMusicBuffer = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
-              // Lógica de mixagem simples (soma ponderada)
-              const mixed = new AudioBuffer({ 
-                numberOfChannels: 2, 
-                length: Math.max(mainAudioBuffer.length, bgMusicBuffer.length), 
-                sampleRate: targetSampleRate 
-              });
-              
-              const mGain = options.audioMixMode === 'mix' ? 0.4 : 0;
-              const bgGain = options.audioMixMode === 'mix' ? 0.8 : 1.0;
-
-              for (let ch = 0; ch < 2; ch++) {
-                const mCh = mainAudioBuffer.getChannelData(ch % mainAudioBuffer.numberOfChannels);
-                const bgCh = bgMusicBuffer.getChannelData(ch % bgMusicBuffer.numberOfChannels);
-                const outCh = mixed.getChannelData(ch);
-                for (let s = 0; s < mixed.length; s++) {
-                  const mVal = s < mCh.length ? mCh[s] : 0;
-                  const bgVal = bgCh[s % bgCh.length]; // Loop background
-                  outCh[s] = (mVal * mGain) + (bgVal * bgGain);
-                }
-              }
-              mainAudioBuffer = mixed;
+        // Se for modo Autoral, engrossamos a voz (0.92 = voz mais grossa sem parecer robô)
+        // Isso muda a assinatura digital para não parecer a mesma voz
+        const pitchFactor = options.isAutoral ? 0.92 : 1.0;
+        let mainAudioBuffer = await this.processAudioBuffer(await (await fetch(videoUrl)).arrayBuffer(), targetSampleRate, pitchFactor);
+        if (options.musicUrl) {
+          const bg = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
+          // Mix logic (simplified)
+          const mixed = new AudioBuffer({ numberOfChannels: 2, length: Math.max(mainAudioBuffer.length, bg.length), sampleRate: targetSampleRate });
+          for (let ch = 0; ch < 2; ch++) {
+            const m = mainAudioBuffer.getChannelData(ch % mainAudioBuffer.numberOfChannels);
+            const b = bg.getChannelData(ch % bg.numberOfChannels);
+            const out = mixed.getChannelData(ch);
+            for (let s = 0; s < mixed.length; s++) {
+              // Mixagem viral: Voz clara (0.95), Fundo enérgico (0.35)
+              out[s] = (m[s] || 0) * 0.95 + (b[s % b.length] || 0) * 0.35;
             }
-
-            // 1.1 Narração IA (Sobrepõe ou Substitui Voz Original dependendo do Mix)
-            if (options.useNarration && options.script) {
-              console.log("[Audio] Gerando narração IA...");
-              const hookBuf = await this.fetchNarration(options.script.hook, options.narrationVoice);
-              const presBuf = await this.fetchNarration(options.script.presentation, options.narrationVoice);
-              const midrollBuf = await this.fetchNarration(options.script.midroll || options.script.presentation, options.narrationVoice);
-              const ctaBuf = await this.fetchNarration(options.script.cta, options.narrationVoice);
-
-              const totalDur = mainAudioBuffer ? mainAudioBuffer.duration : 15;
-              const narrations = [
-                { buffer: hookBuf, time: 0 },
-                { buffer: presBuf, time: totalDur * 0.18 },
-                { buffer: midrollBuf, time: totalDur * 0.55 },
-                { buffer: ctaBuf, time: totalDur * 0.72 }
-              ];
-
-              const finalWithNarration = new AudioBuffer({
-                numberOfChannels: 2,
-                length: Math.max(mainAudioBuffer?.length || 0, targetSampleRate * totalDur),
-                sampleRate: targetSampleRate
-              });
-
-              // Neutralização Total: Silencia áudio original se houver narração para evitar confusão
-              const originalGain = (options.useNarration) ? 0.0 : (options.audioMixMode === 'original' || options.audioMixMode === 'mix' ? 0.4 : 0.05);
-
-              for (let ch = 0; ch < 2; ch++) {
-                const outCh = finalWithNarration.getChannelData(ch);
-                if (mainAudioBuffer) {
-                  const mCh = mainAudioBuffer.getChannelData(ch % mainAudioBuffer.numberOfChannels);
-                  for (let s = 0; s < Math.min(outCh.length, mCh.length); s++) {
-                    outCh[s] = mCh[s] * originalGain;
-                  }
-                }
-
-                // Mixa narrações nos tempos corretos
-                for (const narr of narrations) {
-                  if (narr.buffer) {
-                    const nCh = narr.buffer.getChannelData(ch % narr.buffer.numberOfChannels);
-                    const startS = Math.floor(narr.time * targetSampleRate);
-                    for (let s = 0; s < nCh.length && (startS + s) < outCh.length; s++) {
-                      outCh[startS + s] += nCh[s] * 1.5; // Narração ganha destaque
-                    }
-                  }
-                }
-              }
-              mainAudioBuffer = finalWithNarration;
-            }
-          } catch (audioErr) {
-            console.warn("Falha ao preparar buffer de áudio deterministicamente.");
           }
+          mainAudioBuffer = mixed;
         }
 
-        this.stream = this.canvas.captureStream(24); 
-        let audioTrackToEncode: MediaStreamTrack | null = null;
-
-        const muxer = new Muxer({
-          target: new ArrayBufferTarget(),
-          video: { codec: 'avc', width: W, height: H },
-          audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 },
+        const muxer = new Muxer({ 
+          target: new ArrayBufferTarget(), 
+          video: { codec: 'avc', width: W, height: H }, 
+          audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 }, 
           fastStart: 'in-memory',
-          firstTimestampBehavior: 'offset'
+          firstTimestampBehavior: 'offset' 
         });
+        const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
+        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 6_000_000 }); // Aumentado para 6Mbps para fluidez
+        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
+        audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
-        const videoEncoder = new VideoEncoder({
-          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-          error: () => console.error("Erro no video encoder")
-        });
-
-        const isMobileBitrate = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const targetBitrate = isUltra ? 12_000_000 : (isMobileBitrate ? 2_000_000 : 7_000_000);
-
-        videoEncoder.configure({
-          codec: isMobileBitrate ? 'avc1.42e01f' : 'avc1.4d0033', // Baseline para mobile (estabilidade), High para desktop
-          width: W,
-          height: H,
-          bitrate: targetBitrate,
-          avc: { format: 'avc' }
-        });
-
-        // Áudio Encoder Setup (AAC)
-        const audioEncoder = new AudioEncoder({
-          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-          error: (e) => console.error("Erro no audio encoder", e)
-        });
-
-        audioEncoder.configure({
-          codec: 'mp4a.40.2', 
-          numberOfChannels: 2,
-          sampleRate: 44100,
-          bitrate: 128_000
-        });
-
-        const filterCSS = this.getFilterCSS(options.filter || 'none');
-        const transition = options.transition || 'none';
-        const transitionTs = options.transitionTimestamps || [];
-
-        // LOOP DETERMINÍSTICO (Estabilidade Android)
-        // Em vez de requestAnimationFrame, processamos frame por frame manual
         const fps = 30;
-        const frameInterval = 1 / fps;
-        let currentTime = video.currentTime;
-        const startTime = video.currentTime;
-        const duration = (options.trimEnd || video.duration) - startTime;
-        const totalFramesToRender = Math.floor(duration * fps);
+        const totalFrames = Math.floor(video.duration * fps);
+        const filterCSS = this.getFilterCSS(options.filter);
 
-        const renderLoop = async () => {
-          for (let i = 0; i <= totalFramesToRender; i++) {
-            if (videoEncoder.state !== 'configured') break;
+        const framesToCache = Math.min(totalFrames, 300); // Cachear até 10 seg de vídeo base
+        const cachedFrames = this.frameCache.get(videoUrl) || [];
+        const useCache = cachedFrames.length > 0;
 
-            currentTime = startTime + (i * frameInterval);
-            
-            // Força o vídeo para o tempo exato e espera o processamento
-            video.currentTime = currentTime;
-            await new Promise<void>(res => {
-              let resolved = false;
-              const onSeeked = () => {
-                if (resolved) return;
-                resolved = true;
-                video.removeEventListener('seeked', onSeeked);
-                res();
-              };
-              video.addEventListener('seeked', onSeeked);
-              // Fallback para não travar infinitamente (aumentado para mobile lento)
-              setTimeout(() => {
-                if (!resolved) {
-                  resolved = true;
-                  video.removeEventListener('seeked', onSeeked);
-                  res();
-                }
-              }, isMobile ? 1500 : 600); 
-            });
-
-            this.auxCtx.clearRect(0, 0, W, H);
+        for (let i = 0; i < totalFrames; i++) {
+          const currentTime = i / fps;
+          
+          if (useCache) {
+            const frameIdx = i % cachedFrames.length;
+            this.auxCtx.drawImage(cachedFrames[frameIdx], 0, 0, W, H);
+          } else {
+            const targetTime = currentTime % video.duration;
+            // Só fazer o seek se a diferença for relevante (> 30ms)
+            if (Math.abs(video.currentTime - targetTime) > 0.03) {
+              video.currentTime = targetTime;
+              await new Promise<void>(res => {
+                let done = false;
+                const cleanup = () => { done = true; video.onseeked = null; };
+                video.onseeked = () => { if(!done){ cleanup(); res(); } };
+                setTimeout(() => { if(!done){ cleanup(); res(); } }, isMobile ? 120 : 40);
+              });
+            }
             this.auxCtx.drawImage(video, 0, 0, W, H);
-            this.ctx.clearRect(0, 0, W, H);
             
-            // --- LIMPEZA AUTORAL +EFEITO PROFISSIONAL ---
-            this.ctx.save();
-            
-            // Aplicar filtro profesional
-            this.ctx.filter = filterCSS;
-            
-            //微小なパン movimiento natural (simula câmera humana)
-            const microPan = Math.sin(currentTime * 0.3) * 2;
-            const microMove = Math.cos(currentTime * 0.2) * 1;
-            
-            this.ctx.translate(microPan, microMove);
-            this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
-            this.ctx.restore();
-            
-            // Reset explícito
-            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-            // 2. Solid Mask (Remove legendas originais do rodapé - área crítica)
-            this.ctx.fillStyle = '#000000';
-            this.ctx.fillRect(0, H * 0.82, W, H * 0.18);
-            // ------------------------------------------------------
-
-            this.ctx.filter = 'none';
-
-            // 4. Aplica transições ANTES das legendas para evitar que o texto gire/suma
-            const isTransition = transitionTs.some(t => currentTime >= t && currentTime < t + 1.2);
-            if (isTransition) this.applyTransitionEffect(transition, currentTime, transitionTs, W, H);
-
-            // 5. Desenha legendas no topo de tudo (sempre fixas e corretas)
-            if (options.script) {
-              this.drawSpintaxOverlay(options.script, currentTime - startTime, W, H, options.storeSlug, duration);
-            }
-
-            const timestamp = (currentTime - startTime) * 1_000_000;
-            const frame = new VideoFrame(this.canvas, { timestamp });
-            
-            try {
-              videoEncoder.encode(frame, { keyFrame: i % 45 === 0 });
-              
-              // 2. Encode Audio Chunk (Sync Determinístico)
-              if (mainAudioBuffer && audioEncoder.state === 'configured') {
-                const samplesPerFrame = targetSampleRate / fps;
-                const startSample = Math.floor(i * samplesPerFrame);
-                const numSamples = Math.floor(samplesPerFrame);
-                
-                if (startSample < mainAudioBuffer.length) {
-                  const audioData = new Float32Array(numSamples * 2);
-                  for (let channel = 0; channel < 2; channel++) {
-                    const chData = mainAudioBuffer.getChannelData(channel % mainAudioBuffer.numberOfChannels);
-                    for (let s = 0; s < numSamples; s++) {
-                      const sampleIdx = startSample + s;
-                      audioData[s * 2 + channel] = sampleIdx < chData.length ? chData[sampleIdx] : 0;
-                    }
-                  }
-
-                  const aData = new AudioData({
-                    format: 'f32-planar',
-                    sampleRate: targetSampleRate,
-                    numberOfFrames: numSamples,
-                    numberOfChannels: 2,
-                    timestamp: timestamp, 
-                    data: audioData
-                  });
-
-                  audioEncoder.encode(aData);
-                  aData.close();
-                }
-              }
-            } catch (e) {
-              console.error("Erro ao codificar frame:", e);
-            } finally {
-              frame.close();
-            }
-
-            // Reporta progresso real para a UI
-            options.onProgress?.((i / totalFramesToRender) * 100);
-
-            // Reporta algum progresso com Yield agressivo (essencial para mobile não travar o Main Thread)
-            const yieldRate = isMobile ? 4 : 20; 
-            if (i % yieldRate === 0) {
-              await new Promise(r => setTimeout(r, isMobile ? 5 : 0));
-              if (videoEncoder.encodeQueueSize > (isMobile ? 2 : 8)) {
-                await new Promise(r => setTimeout(r, isMobile ? 250 : 100));
+            // Alimentar cache se possível
+            if (i < framesToCache) {
+              try {
+                // Usar auxCanvas em vez de video diretamente (mais estável)
+                const bmp = await createImageBitmap(this.auxCanvas);
+                cachedFrames.push(bmp);
+                if (i === framesToCache - 1) this.frameCache.set(videoUrl, cachedFrames);
+              } catch (e) {
+                console.warn("[VideoProcessor] Falha ao criar bitmap do frame:", e);
               }
             }
           }
 
-          this.finishEncoding(videoEncoder, audioEncoder, muxer, options, wasMuted, wasVolume, blobUrl, resolve, reject);
-        };
+          this.ctx.save();
+          if (options.isAutoral) {
+            // ESPELHAMENTO: Inverte horizontalmente
+            this.ctx.translate(W, 0);
+            this.ctx.scale(-1, 1);
+            // SAFE-ZOOM: 1.05x (5% de zoom) para mudar a assinatura sem perder qualidade
+            this.ctx.translate(W/2, H/2);
+            this.ctx.scale(1.05, 1.05);
+            this.ctx.translate(-W/2, -H/2);
+          }
+          
+          this.ctx.filter = filterCSS;
+          this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
+          
+          // Transições de Início, Meio e Fim
+          const progress = i / totalFrames;
+          if (progress < 0.05) this.applyCapCutTransition('zoomBlur', 1 - (progress/0.05), W, H);
+          else if (progress > 0.47 && progress < 0.53) this.applyCapCutTransition('flash', 1 - Math.abs(0.5 - progress)/0.03, W, H);
+          else if (progress > 0.95) this.applyCapCutTransition('zoomBlur', (progress - 0.95)/0.05, W, H);
 
-        await renderLoop().catch(reject);
-      } catch (err) {
-        if (options.existingVideoEl) options.existingVideoEl.loop = true;
-        reject(err);
-      }
+          this.ctx.restore();
+
+          if (options.isAutoral) {
+            // CARD DE PRODUTO: Cobre 25% da base para esconder legendas originais de forma profissional
+            const cardH = H * 0.25;
+            const gradient = this.ctx.createLinearGradient(0, H - cardH, 0, H);
+            gradient.addColorStop(0, 'rgba(0,0,0,0)');
+            gradient.addColorStop(0.3, 'rgba(0,0,0,0.85)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+            
+            this.ctx.fillStyle = gradient;
+            this.ctx.fillRect(0, H - cardH, W, cardH);
+            
+            // Borda decorativa superior do card
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            this.ctx.fillRect(W * 0.1, H - cardH + 10, W * 0.8, 2);
+          } else {
+            // Overlay solid mask simples para modo normal
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, H * 0.82, W, H * 0.18);
+          }
+
+          if (options.transition !== 'none' && options.transitionTimestamps) {
+            this.applyTransitionEffect(options.transition, currentTime, options.transitionTimestamps, W, H);
+          }
+
+          if (options.script) {
+            this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, video.duration);
+          }
+
+          const timestamp = currentTime * 1_000_000;
+          const vFrame = new VideoFrame(this.canvas, { timestamp });
+          videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
+          vFrame.close();
+
+          if (mainAudioBuffer) {
+            const start = Math.floor(i * (targetSampleRate / fps));
+            const len = Math.floor(targetSampleRate / fps);
+            const aData = new Float32Array(len * 2);
+            for (let ch = 0; ch < 2; ch++) {
+              const src = mainAudioBuffer.getChannelData(ch);
+              for (let s = 0; s < len; s++) aData[ch * len + s] = src[start + s] || 0;
+            }
+            const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
+            audioEncoder.encode(audioData);
+            audioData.close();
+          }
+          options.onProgress?.((i / totalFrames) * 100);
+        }
+
+        await videoEncoder.flush();
+        await audioEncoder.flush();
+        muxer.finalize();
+        resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
+      } catch (err) { reject(err); }
     });
   }
 
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const W = 1080;
-        const H = 1920; 
-        this.canvas.width = W;
-        this.canvas.height = H;
-        
-        const targetDuration = 38; 
-        const fps = isMobile ? 24 : 30;
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const W = 1080; const H = 1920;
+        this.canvas.width = W; this.canvas.height = H;
+
+        const targetDuration = 35;
+        const fps = 30;
         const totalFrames = targetDuration * fps;
-        const slideChangeInterval = 3;
+        const slideDuration = 3.5;
+        const filterCSS = this.getFilterCSS(options.filter);
 
-        // 1. Preload images with proxy support
-        const images = await Promise.all(imageUrls.map(async url => {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          return new Promise<HTMLImageElement>(async (res) => {
-            try {
-              const blobUrl = await this.fetchAsBlob(url, 'image');
-              img.src = blobUrl;
-              img.onload = () => res(img);
-              img.onerror = () => { img.src = url; img.onload = () => res(img); img.onerror = () => res(img); };
-            } catch (e) { res(img); }
-          });
-        }));
-
-        const cleanImages = images.filter(img => img.width > 10);
-        if (cleanImages.length === 0) throw new Error("Nenhuma imagem válida carregada");
-
-        // Se tiver apenas 1 imagem, criar variações para ter mais diversidade
-        let finalImages = cleanImages;
-        if (cleanImages.length < 3) {
-          // Duplicar a imagem 4x para ter mais tempo de vídeo com transições
-          finalImages = [...cleanImages, ...cleanImages, ...cleanImages, ...cleanImages];
-        }
-
-        // 2. Setup Muxer & Encoders
-        const muxer = new Muxer({
-          target: new ArrayBufferTarget(),
-          video: { codec: 'avc', width: W, height: H },
-          audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 },
-          fastStart: 'in-memory'
-        });
-
-        const videoEncoder = new VideoEncoder({
-          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-          error: e => console.error("VideoEncoder error", e)
-        });
-        const videoBitrate = isMobile ? 2_800_000 : 6_000_000;
-        videoEncoder.configure({
-          codec: 'avc1.4d0033', width: W, height: H, bitrate: videoBitrate, avc: { format: 'avc' }
-        });
-
-        const audioEncoder = new AudioEncoder({
-          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-          error: e => console.error("AudioEncoder error", e)
-        });
-        audioEncoder.configure({
-          codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000
-        });
-
-        // 3. Setup Audio Buffer (Sincronização Perfeita de Música + Narração)
-        let pianoAudioBuffer: AudioBuffer | null = null;
-        if (options.musicUrl) {
+        const imgs = await Promise.all(imageUrls.map(async url => {
           try {
-            pianoAudioBuffer = await this.loadAndResampleAudio(options.musicUrl, 44100, (options as any).musicBpm || 128, (options as any).musicGenre || 'house');
+            const blobUrl = await this.fetchAsBlob(url, 'image');
+            const img = new Image();
+            img.src = blobUrl;
+            await img.decode();
+            
+            // Criar bitmap usando canvas para máxima compatibilidade
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tCtx = tempCanvas.getContext('2d')!;
+            tCtx.drawImage(img, 0, 0);
+            return await createImageBitmap(tempCanvas);
           } catch (e) {
-            console.warn("Falha ao carregar música, seguindo sem som");
+            console.error("[VideoProcessor] Erro ao carregar imagem para slideshow:", url, e);
+            // Fallback: carregar um placeholder ou ignorar
+            return null;
           }
-        }
+        })).then(results => results.filter((img): img is ImageBitmap => img !== null));
 
-        // 3.1 Narração IA para Slideshow
-        let finalAudioBuffer = pianoAudioBuffer;
-        if (options.useNarration && options.script) {
-          console.log("[Slideshow] Gerando narração IA...");
-          const hookBuf = await this.fetchNarration(options.script.hook, options.narrationVoice);
-          const presBuf = await this.fetchNarration(options.script.presentation, options.narrationVoice);
-          const midrollBuf = await this.fetchNarration(options.script.midroll || options.script.presentation, options.narrationVoice);
-          const ctaBuf = await this.fetchNarration(options.script.cta, options.narrationVoice);
+        const muxer = new Muxer({ 
+          target: new ArrayBufferTarget(), 
+          video: { codec: 'avc', width: W, height: H }, 
+          audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 }, 
+          fastStart: 'in-memory',
+          firstTimestampBehavior: 'offset' 
+        });
+        const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
+        // Usar Baseline profile (42E01E) e bitrate menor para máxima compatibilidade e leveza
+        videoEncoder.configure({ codec: 'avc1.42E01E', width: W, height: H, bitrate: 2_500_000 });
+        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
+        audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
-          const totalDur = targetDuration;
-          const narrations = [
-            { buffer: hookBuf, time: 0 },
-            { buffer: presBuf, time: totalDur * 0.18 },
-            { buffer: midrollBuf, time: totalDur * 0.55 },
-            { buffer: ctaBuf, time: totalDur * 0.72 }
-          ];
+        // Sorteio de transições dinâmicas para o vídeo
+        const transitionTypes = ['zoomIn', 'slideL', 'slideR', 'flash', 'glitchLite'];
+        const startT = transitionTypes[Math.floor(Math.random() * transitionTypes.length)];
+        const midT = transitionTypes[Math.floor(Math.random() * transitionTypes.length)];
+        const endT = transitionTypes[Math.floor(Math.random() * transitionTypes.length)];
 
-          const mixed = new AudioBuffer({
-            numberOfChannels: 2,
-            length: Math.max(pianoAudioBuffer?.length || 0, 44100 * totalDur),
-            sampleRate: 44100
-          });
+        const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre);
 
-          // Mixagem: Música fica mais baixa quando há narração
-          const musicGain = 0.35; 
-          for (let ch = 0; ch < 2; ch++) {
-            const outCh = mixed.getChannelData(ch);
-            if (pianoAudioBuffer) {
-              const bgCh = pianoAudioBuffer.getChannelData(ch % pianoAudioBuffer.numberOfChannels);
-              for (let s = 0; s < mixed.length; s++) {
-                outCh[s] = bgCh[s % bgCh.length] * musicGain;
-              }
-            }
-
-            for (const narr of narrations) {
-              if (narr.buffer) {
-                const nCh = narr.buffer.getChannelData(ch % narr.buffer.numberOfChannels);
-                const startOff = Math.floor(narr.time * 44100);
-                for (let s = 0; s < nCh.length; s++) {
-                  if (startOff + s < outCh.length) {
-                    outCh[startOff + s] += nCh[s];
-                  }
-                }
-              }
-            }
-          }
-          finalAudioBuffer = mixed;
-        }
-
-        const filterCSS = this.getFilterCSS(options.filter || 'elite');
-        const CAPCUT_TRANSITIONS = [
-          'zoomPunch', 'whipLeft', 'whipRight', 'whipDown', 'zoomBlur', 'glassSplit', 'colorBurn',
-          'lightLeak', 'beatFlash', 'slideUp', 'slideDown', 'zoomOut', 'spin', 'fade',
-          'doorH', 'doorV', 'pixelate', 'expoFlash', 'glitchPass'
-        ]; // Removidos: 'shake', 'glitch' (tremulações)
-        const shuffledTransitions = [...CAPCUT_TRANSITIONS].sort(() => Math.random() - 0.5);
-        const getSlideTransition = (slideNum: number) => shuffledTransitions[slideNum % shuffledTransitions.length];
-
-        // Dire��es Ken Burns �nicas por slide (aleat�rias)
-        const kbDirections = [
-          { panX: 0, panY: -1 }, { panX: 0, panY: 1 },
-          { panX: -1, panY: 0 }, { panX: 1, panY: 0 },
-          { panX: -0.5, panY: -0.5 }, { panX: 0.5, panY: 0.5 }
-        ].sort(() => Math.random() - 0.5);
-
-        // Sequencia unica de transicoes por slide (embaralhada por video - nunca repete igual)
-
-        // 4. Render Loop (Sync Video + Audio)
         for (let i = 0; i < totalFrames; i++) {
           const currentTime = i / fps;
-          const slideIdx = Math.floor(currentTime / slideChangeInterval) % finalImages.length;
-          const img = finalImages[slideIdx];
-          const progress = (currentTime % slideChangeInterval) / slideChangeInterval;
-          const isCTA = currentTime > (targetDuration - 3.5);
-          
-          this.ctx.clearRect(0, 0, W, H);
-          this.ctx.fillStyle = "#020617";
+          const slideIdx = Math.floor(currentTime / slideDuration) % imgs.length;
+          const img = imgs[slideIdx];
+          const progress = (currentTime % slideDuration) / slideDuration;
+          const isCTA = currentTime > (targetDuration - 5);
+
+          this.ctx.fillStyle = '#010409';
           this.ctx.fillRect(0, 0, W, H);
 
-          if (!isCTA) {
-            // High-End Ken Burns
-            const baseScale = Math.max(W / img.width, H / img.height);
-            const zoomIn = Math.floor(currentTime / slideChangeInterval) % 2 === 0;
-            const scale = zoomIn ? baseScale * (1 + progress * 0.1) : baseScale * (1.1 - progress * 0.1);
-            const scrollY = (H - img.height * scale) / 2;
-            const scrollX = (W - img.width * scale) / 2;
-
-            this.ctx.save();
-            this.ctx.filter = filterCSS;
-            this.ctx.drawImage(img, scrollX, scrollY, img.width * scale, img.height * scale);
-            this.ctx.restore();
-          }
-
-          // CapCut Pro Transitions - Aplicadas à imagem ANTES do Overlay de texto
-          const slideNum = Math.floor(currentTime / slideChangeInterval);
-          const tType = getSlideTransition(slideNum);
-          const tZone = 0.35; 
-
-          if (progress < tZone && slideNum > 0 && !isCTA) {
-            const tp = progress / tZone; 
-            this.applyCapCutTransition(tType, tp, W, H);
-          }
-
-          // Mid-slide: pulse sutil no beat (PUMP EFFECT)
-          const musicBpm = (options as any).musicBpm || 128;
-          const beatInterval = 60 / musicBpm;
+          const beatInterval = 60 / (options.musicBpm || 128);
           const beatPhase = (currentTime % beatInterval) / beatInterval;
-          if (beatPhase < 0.08 && !isCTA) {
-            const beatPulse = 1 + (1 - beatPhase / 0.08) * 0.025;
-            this.ctx.save();
-            const centerX = W / 2;
-            const centerY = H / 2;
-            this.ctx.translate(centerX, centerY);
+          let beatPulse = 1;
+          if (beatPhase < 0.1 && !isCTA) beatPulse = 1 + (1 - beatPhase / 0.1) * 0.03;
+
+          this.ctx.save();
+          if (beatPulse > 1) {
+            this.ctx.translate(W/2, H/2);
             this.ctx.scale(beatPulse, beatPulse);
-            this.ctx.translate(-centerX, -centerY);
-            this.ctx.restore();
+            this.ctx.translate(-W/2, -H/2);
           }
 
-          // OVERLAYS (Desenhados por último para garantir fixação e orientação correta)
-          if (!isCTA) {
-            this.drawCallToAction(currentTime, W, H, progress);
-            this.drawProductInfo(`${productName}\n${price}`, W, H, currentTime);
-          } else {
-            this.ctx.save();
-            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-            this.ctx.fillStyle = "#10b981";
-            this.ctx.font = "bold 90px Inter, sans-serif";
-            this.ctx.textAlign = "center";
-            this.ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
-            this.ctx.shadowBlur = 30;
-            this.ctx.fillText("PEÇA O LINK!", W / 2, H / 2 - 40);
-            this.ctx.font = "50px Inter";
-            this.ctx.fillStyle = "white";
-            this.ctx.fillText("OU LINK NA BIO", W / 2, H / 2 + 60);
-            this.ctx.restore();
+          const baseScale = Math.max(W / img.width, H / img.height);
+          const kbScale = 1 + progress * 0.1;
+          const scrollX = (W - img.width * baseScale * kbScale) / 2;
+          const scrollY = (H - img.height * baseScale * kbScale) / 2;
+
+          this.ctx.filter = filterCSS;
+          
+          // Transição suave entre slides (fixa para coerência)
+          const tp = progress / 0.15; // Transição mais rápida (15% do slide)
+          if (tp < 1.0 && slideIdx > 0) {
+            this.applyCapCutTransition('fade', 1 - tp, W, H);
           }
 
-          this.drawGrowthHacks(currentTime, W, H);
+          // Transições Dinâmicas de Início, Meio e Fim
+          const totalProgress = i / totalFrames;
+          
+          // Início (entrada suave)
+          if (totalProgress < 0.08) {
+            this.applyCapCutTransition(startT, 1 - (totalProgress/0.08), W, H);
+          } 
+          // Meio (impacto visual)
+          else if (totalProgress > 0.46 && totalProgress < 0.54) {
+            const mp = 1 - Math.abs(0.5 - totalProgress)/0.04;
+            this.applyCapCutTransition(midT, mp, W, H);
+          }
+          // Fim (saída para CTA)
+          else if (totalProgress > 0.92) {
+            this.applyCapCutTransition(endT, (totalProgress - 0.92)/0.08, W, H);
+          }
 
-          // Encode Video Frame
-          const vFrame = new VideoFrame(this.canvas, { timestamp: currentTime * 1_000_000 });
-          videoEncoder.encode(vFrame, { keyFrame: i % 30 === 0 });
+          this.ctx.drawImage(img, scrollX, scrollY, img.width * baseScale * kbScale, img.height * baseScale * kbScale);
+          this.ctx.restore();
+
+          this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+          if (options.script) {
+            this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, targetDuration);
+          }
+
+          const timestamp = currentTime * 1_000_000;
+          const vFrame = new VideoFrame(this.canvas, { timestamp });
+          videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
           vFrame.close();
-          
-          // Reporta progresso real para a UI
-          options.onProgress?.((i / totalFrames) * 100);
-          
-          // Yield to UI sometimes for feedback
-          const yieldRateSlideshow = isMobile ? 10 : 45;
-          if (i % yieldRateSlideshow === 0) {
-            await new Promise(r => setTimeout(r, 0));
-            if (videoEncoder.encodeQueueSize > (isMobile ? 2 : 6)) {
-              await new Promise(r => setTimeout(r, isMobile ? 120 : 80));
+
+          // CONTROLE DE FLUXO: Evita que a memória RAM estoure se o encoder for mais lento que o loop
+          if (videoEncoder.encodeQueueSize > 5) {
+            await new Promise(r => setTimeout(r, 20)); // Pausa para o processador respirar
+            if (videoEncoder.encodeQueueSize > 15) {
+              await new Promise(r => setTimeout(r, 100)); // Pausa maior se a fila estiver crítica
             }
           }
-        }
 
-        // 5. Encode Audio (Separado do loop de vídeo para maior estabilidade)
-        if (finalAudioBuffer) {
-            const totalSamples = finalAudioBuffer.length;
-            const samplesPerChunk = Math.floor(44100 / 10); // 100ms chunks
-            const totalChunks = Math.ceil(totalSamples / samplesPerChunk);
 
-            for (let c = 0; c < totalChunks; c++) {
-                const start = c * samplesPerChunk;
-                const end = Math.min(start + samplesPerChunk, totalSamples);
-                const frameCount = end - start;
-                
-                const audioData = new Float32Array(frameCount * 2);
-                for (let ch = 0; ch < 2; ch++) {
-                    const chData = finalAudioBuffer.getChannelData(ch);
-                    for (let s = 0; s < frameCount; s++) {
-                        audioData[s * 2 + ch] = chData[start + s];
-                    }
-                }
-
-                audioEncoder.encode(new AudioData({
-                    format: 'f32-planar', // Use planar for AAC usually
-                    sampleRate: 44100,
-                    numberOfFrames: frameCount,
-                    numberOfChannels: 2,
-                    timestamp: (start / 44100) * 1_000_000,
-                    data: audioData
-                }));
+          if (audioBuffer) {
+            const start = Math.floor(i * (44100 / fps));
+            const len = Math.floor(44100 / fps);
+            const aData = new Float32Array(len * 2);
+            for (let ch = 0; ch < 2; ch++) {
+              const src = audioBuffer.getChannelData(ch);
+              for (let s = 0; s < len; s++) aData[ch * len + s] = src[(start + s) % src.length] || 0;
             }
+            const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
+            audioEncoder.encode(audioData);
+            audioData.close();
+          }
+          options.onProgress?.((i / totalFrames) * 100);
         }
 
-        // Flush encoders with state check
-        if (videoEncoder.state === 'configured') await videoEncoder.flush();
-        if (audioEncoder.state === 'configured') await audioEncoder.flush();
-        
+        await videoEncoder.flush();
+        await audioEncoder.flush();
         muxer.finalize();
-        const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
-        resolve(blob);
-      } catch (err) {
-        console.error("Slideshow error:", err);
-        reject(err);
-      }
+        resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
+      } catch (err) { reject(err); }
     });
-  }
-
-  private applyCapCutTransition(type: string, progress: number, W: number, H: number) {
-    const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; 
-    const ep = ease(progress); 
-
-    this.ctx.save();
-    switch (type) {
-      case 'zoomPunch': {
-        const scale = 1 + (1 - ep) * 0.4;
-        this.ctx.transform(scale, 0, 0, scale, W * (1 - scale) / 2, H * (1 - scale) / 2);
-        this.ctx.globalAlpha = ep;
-        break;
-      }
-      case 'zoomOut': {
-        const scale = 0.6 + ep * 0.4;
-        this.ctx.transform(scale, 0, 0, scale, W * (1 - scale) / 2, H * (1 - scale) / 2);
-        this.ctx.globalAlpha = ep;
-        break;
-      }
-      case 'whipLeft': {
-        const offsetX = W * (1 - ep) * -1;
-        this.ctx.translate(offsetX, 0);
-        const blur = (1 - ep);
-        this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
-        this.ctx.fillRect(-W, 0, W * 2, H);
-        break;
-      }
-      case 'whipRight': {
-        const offsetX = W * (1 - ep);
-        this.ctx.translate(offsetX, 0);
-        const blur = (1 - ep);
-        this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
-        this.ctx.fillRect(-W, 0, W * 2, H);
-        break;
-      }
-      case 'whipDown': {
-        const offsetY = H * (1 - ep);
-        this.ctx.translate(0, offsetY);
-        const blur = (1 - ep);
-        this.ctx.fillStyle = `rgba(0,0,0,${blur * 0.7})`;
-        this.ctx.fillRect(0, -H, W, H * 2);
-        break;
-      }
-      case 'slideUp': {
-        const offsetY = H * (1 - ep) * -1;
-        this.ctx.translate(0, offsetY);
-        this.ctx.globalAlpha = Math.min(1, ep * 1.5);
-        break;
-      }
-      case 'slideDown': {
-        const offsetY = H * (1 - ep);
-        this.ctx.translate(0, offsetY);
-        this.ctx.globalAlpha = Math.min(1, ep * 1.5);
-        break;
-      }
-      case 'lightLeak': {
-        this.ctx.globalAlpha = ep;
-        const leakIntensity = (1 - ep) * 0.8;
-        const grad = this.ctx.createRadialGradient(W * 0.2, H * 0.15, 0, W * 0.2, H * 0.15, W * 0.8);
-        grad.addColorStop(0, `rgba(255,220,100,${leakIntensity})`);
-        grad.addColorStop(0.5, `rgba(255,160,80,${leakIntensity * 0.3})`);
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        this.ctx.fillStyle = grad;
-        this.ctx.fillRect(0, 0, W, H);
-        break;
-      }
-      case 'beatFlash': {
-        const flashEnv = Math.exp(-progress * 6);
-        this.ctx.globalAlpha = ep;
-        if (flashEnv > 0.01) {
-          this.ctx.fillStyle = `rgba(255,255,255,${flashEnv * 0.9})`;
-          this.ctx.fillRect(0, 0, W, H);
-        }
-        const s = 1 + flashEnv * 0.1;
-        this.ctx.transform(s, 0, 0, s, W * (1 - s) / 2, H * (1 - s) / 2);
-        break;
-      }
-      case 'glitch': {
-        this.ctx.globalAlpha = ep;
-        const slices = 6;
-        const sliceH = H / slices;
-        for (let s = 0; s < slices; s++) {
-          const shift = (Math.random() - 0.5) * W * 0.08 * (1 - progress);
-          const srcY = s * sliceH;
-          try {
-            const imgData = this.ctx.getImageData(0, srcY, W, sliceH);
-            this.ctx.putImageData(imgData, shift, srcY);
-            this.ctx.fillStyle = `rgba(255,0,128,${(1 - progress) * 0.08})`;
-            this.ctx.fillRect(shift + 4, srcY, W, sliceH);
-          } catch(e) {}
-        }
-        break;
-      }
-      case 'zoomBlur': {
-        const scale = 1 + (1 - ep) * 0.6;
-        this.ctx.translate(W / 2, H / 2);
-        this.ctx.scale(scale, scale);
-        this.ctx.translate(-W / 2, -H / 2);
-        this.ctx.filter = `blur(${Math.floor((1 - ep) * 15)}px)`;
-        this.ctx.globalAlpha = ep;
-        break;
-      }
-      case 'glassSplit': {
-        this.ctx.globalAlpha = ep;
-        const offset = (1 - ep) * 40;
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.rect(0, 0, W / 2, H);
-        this.ctx.clip();
-        this.ctx.translate(-offset, 0);
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.restore();
-        
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.rect(W / 2, 0, W / 2, H);
-        this.ctx.clip();
-        this.ctx.translate(offset, 0);
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.restore();
-        break;
-      }
-      case 'colorBurn': {
-        this.ctx.globalAlpha = ep;
-        if (progress < 0.3) {
-          this.ctx.fillStyle = '#ff3e00';
-          this.ctx.globalCompositeOperation = 'color-burn';
-          this.ctx.fillRect(0, 0, W, H);
-          this.ctx.globalCompositeOperation = 'source-over';
-        }
-        break;
-      }
-      case 'shake': {
-        // Removido do pool de transições para evitar tremulação
-        this.ctx.globalAlpha = ep;
-        break;
-      }
-      case 'spin': {
-        const angle = (1 - ep) * Math.PI * 0.08;
-        this.ctx.translate(W / 2, H / 2);
-        this.ctx.rotate(angle);
-        this.ctx.translate(-W / 2, -H / 2);
-        this.ctx.globalAlpha = ep;
-        break;
-      }
-      case 'doorH': {
-        const offset = (1 - ep) * W * 0.6;
-        this.ctx.globalAlpha = ep;
-        // Left part
-        this.ctx.save();
-        this.ctx.beginPath(); this.ctx.rect(0, 0, W/2, H); this.ctx.clip();
-        this.ctx.translate(-offset, 0);
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.restore();
-        // Right part
-        this.ctx.save();
-        this.ctx.beginPath(); this.ctx.rect(W/2, 0, W/2, H); this.ctx.clip();
-        this.ctx.translate(offset, 0);
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.restore();
-        break;
-      }
-      case 'doorV': {
-        const offset = (1 - ep) * H * 0.6;
-        this.ctx.globalAlpha = ep;
-        // Top part
-        this.ctx.save();
-        this.ctx.beginPath(); this.ctx.rect(0, 0, W, H/2); this.ctx.clip();
-        this.ctx.translate(0, -offset);
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.restore();
-        // Bottom part
-        this.ctx.save();
-        this.ctx.beginPath(); this.ctx.rect(0, H/2, W, H/2); this.ctx.clip();
-        this.ctx.translate(0, offset);
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.restore();
-        break;
-      }
-      case 'expoFlash': {
-        this.ctx.globalAlpha = ep;
-        const flashIntensity = (1 - ep) * 0.9;
-        this.ctx.fillStyle = `rgba(255,255,255,${flashIntensity})`;
-        this.ctx.fillRect(0, 0, W, H);
-        this.ctx.globalCompositeOperation = 'screen';
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.globalCompositeOperation = 'source-over';
-        break;
-      }
-      case 'pixelate': {
-        const size = Math.floor((1 - ep) * 40) + 1;
-        this.ctx.imageSmoothingEnabled = false;
-        this.ctx.drawImage(this.canvas, 0, 0, W/size, H/size, 0, 0, W, H);
-        this.ctx.imageSmoothingEnabled = true;
-        this.ctx.globalAlpha = ep;
-        break;
-      }
-      case 'glitchPass': {
-        this.ctx.globalAlpha = ep;
-        const shiftX = (Math.random() - 0.5) * 60 * (1 - ep);
-        this.ctx.drawImage(this.canvas, shiftX, 0);
-        if (Math.random() > 0.8) {
-          this.ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
-          this.ctx.fillRect(0, Math.random() * H, W, 25);
-        }
-        break;
-      }
-      case 'fade':
-      default: {
-        this.ctx.globalAlpha = ep;
-        break;
-      }
-    }
-    this.ctx.restore();
-  }
-
-  private applyTransitionEffect(type: string, ct: number, timestamps: number[], W: number, H: number) {
-    const ts = timestamps.find(t => ct >= t && ct < t + 1.5) || 0;
-    const progress = (ct - ts) / 1.5;
-    const sin = Math.sin(progress * Math.PI);
-
-    switch (type) {
-      case 'zoom': {
-        const scale = 1 + sin * 0.25;
-        const ox = W * (1 - scale) / 2;
-        const oy = H * (1 - scale) / 2;
-        this.ctx.save();
-        this.ctx.drawImage(this.canvas, 0, 0, W, H, ox, oy, W * scale, H * scale);
-        this.ctx.restore();
-        break;
-      }
-      case 'flash':
-        this.ctx.fillStyle = `rgba(255,255,255,${sin * 0.7})`;
-        this.ctx.fillRect(0, 0, W, H);
-        break;
-      case 'beat':
-        this.ctx.fillStyle = `rgba(6,182,212,${Math.max(0, Math.sin(progress * Math.PI * 3) * 0.35)})`;
-        this.ctx.fillRect(0, 0, W, H);
-        break;
-      case 'fire':
-        this.ctx.fillStyle = `rgba(255,${Math.floor(100 + Math.sin(ct * 15) * 50)},0,${sin * 0.45})`;
-        this.ctx.fillRect(0, 0, W, H);
-        break;
-      case 'glitch': {
-        const glitchStep = Math.floor(ct * 6);
-        if (glitchStep % 3 === 0) {
-          const sliceH = 40 + (Math.sin(ct * 10) * 20);
-          const sy = (Math.cos(ct * 5) * 0.5 + 0.5) * (H - sliceH);
-          const dx = Math.sin(ct * 40) * 30;
-          this.ctx.drawImage(this.canvas, 0, sy, W, sliceH, dx, sy, W, sliceH);
-          this.ctx.globalCompositeOperation = 'screen';
-          this.ctx.globalAlpha = 0.2;
-          this.ctx.fillStyle = `rgba(2,132,199,0.3)`;
-          this.ctx.fillRect(dx + 4, sy, 60, sliceH);
-          this.ctx.globalCompositeOperation = 'source-over';
-          this.ctx.globalAlpha = 1;
-        }
-        break;
-      }
-      case 'shake': {
-        // Removido tremulação agressiva. Mantido apenas um leve drift cinematográfico.
-        const sx = Math.sin(ct * 2) * 4 * sin;
-        const sy2 = Math.cos(ct * 1.5) * 4 * sin;
-        this.ctx.save();
-        this.ctx.translate(sx, sy2);
-        this.ctx.drawImage(this.canvas, -sx, -sy2, W, H);
-        this.ctx.restore();
-        break;
-      }
-      case 'blur': {
-        this.ctx.save();
-        this.ctx.globalCompositeOperation = 'screen';
-        this.ctx.filter = `blur(${Math.floor(sin * 20)}px) brightness(1.6)`;
-        this.ctx.globalAlpha = 0.25;
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.filter = 'none';
-        this.ctx.globalAlpha = 1;
-        this.ctx.globalCompositeOperation = 'source-over';
-        this.ctx.restore();
-        break;
-      }
-      case 'slide': {
-        const offset = Math.floor(sin * W * 0.15);
-        this.ctx.save();
-        this.ctx.drawImage(this.canvas, offset, 0, W, H);
-        this.ctx.restore();
-        break;
-      }
-      case 'rotate': {
-        const scaleX = Math.cos(progress * Math.PI * 2); 
-        const scaleY = 1 + Math.sin(progress * Math.PI) * 0.15; 
-        this.ctx.save();
-        this.ctx.translate(W / 2, H / 2);
-        this.ctx.scale(scaleX * scaleY, scaleY);
-        this.ctx.drawImage(this.canvas, -W / 2, -H / 2, W, H);
-        this.ctx.restore();
-        break;
-      }
-      // Distorted effects removed per user request for premium aesthetic
-
-      case 'light_leak': {
-        const gradient = this.ctx.createRadialGradient(W * 0.8, H * 0.2, 0, W * 0.7, H * 0.3, W * 0.6);
-        gradient.addColorStop(0, `rgba(255, 165, 0, ${sin * 0.6})`);
-        gradient.addColorStop(0.5, `rgba(255, 69, 0, ${sin * 0.3})`);
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        this.ctx.save();
-        this.ctx.globalCompositeOperation = 'screen';
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(0, 0, W, H);
-        this.ctx.restore();
-        break;
-      }
-      case 'glass_shine': {
-        const xOffset = progress * W * 2 - W;
-        const gradient = this.ctx.createLinearGradient(xOffset, 0, xOffset + W * 0.4, H);
-        gradient.addColorStop(0, 'rgba(255,255,255,0)');
-        gradient.addColorStop(0.5, `rgba(255,255,255,${sin * 0.5})`);
-        gradient.addColorStop(1, 'rgba(255,255,255,0)');
-        this.ctx.save();
-        this.ctx.globalCompositeOperation = 'overlay';
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(0, 0, W, H);
-        this.ctx.restore();
-        break;
-      }
-      case 'whip_push': {
-        const tx = -progress * W;
-        this.ctx.save();
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        // OTIMIZAÇÃO: Remover Blur no Mobile para evitar crash e lag extremo
-        if (!isMobile) {
-          this.ctx.filter = `blur(${Math.min(20, progress * 40)}px)`;
-        }
-        this.ctx.translate(tx, 0);
-        this.ctx.drawImage(this.canvas, 0, 0);
-        this.ctx.restore();
-        break;
-      }
-      case 'mirror_flip': {
-        const scaleX = Math.cos(progress * Math.PI);
-        this.ctx.save();
-        this.ctx.translate(W / 2, 0);
-        this.ctx.scale(scaleX, 1);
-        this.ctx.drawImage(this.canvas, -W / 2, 0);
-        this.ctx.restore();
-        break;
-      }
-      case 'pan_cinematic': {
-        // Fix: Substituído movimento "ondulado" de seno por um pan suave e linear
-        const panX = (progress - 0.5) * W * 0.08;
-        this.ctx.save();
-        this.ctx.translate(panX, 0);
-        this.ctx.scale(1.15, 1.15);
-        this.ctx.drawImage(this.canvas, -W * 0.075, -H * 0.075);
-        this.ctx.restore();
-        break;
-      }
-    }
-  }
-
-  private drawCallToAction(time: number, W: number, H: number, progress: number) {
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // Mensagens curtas de chamada para comprar
-    const ctaMessages = [
-      "🔥 COMPRE AGORA!",
-      "⚡ OFERTA RELÂMPAGO!",
-      "🛒 NÃO PERCA ESSA!",
-      "✨ ACHADINHO VIP!",
-      "😱 PREÇO SURREAL!",
-      "😍 EU PRECISO DISSO!",
-      "🎁 PRESENTE IDEAL!",
-      "💎 QUALIDADE PREMIUM!",
-      "💸 MENOR PREÇO!",
-      "🚀 ENVIO IMEDIATO!",
-      "🏆 CAMPEÃO DE VENDAS!",
-      "🌟 NOTA MÁXIMA!",
-      "📦 FRETE GRÁTIS HOJE!",
-      "🔥 ÚLTIMAS UNIDADES!",
-      "⚠️ ESTOQUE LIMITADO!",
-      "💥 DESCONTO EXCLUSIVO!",
-      "🌈 VÁRIAS CORES!",
-      "🛠️ SUPER RESISTENTE!",
-      "🏡 PARA SUA CASA!",
-      "🧸 SEUS FILHOS VÃO AMAR!",
-      "🍳 FACILITE SUA VIDA!",
-      "📱 TECNOLOGIA PURA!",
-      "👟 ESTILO E CONFORTO!",
-      "💄 BELEZA E CHARME!",
-      "🧘 BEM-ESTAR TOTAL!",
-      "🐶 PARA SEU PET!",
-      "🚲 VIDA SAUDÁVEL!",
-      "🎉 APROVEITE AGORA!",
-      "🎯 ACHADO PERFEITO!",
-      "🔥 O MAIS DESEJADO!",
-    ];
-
-    // Mostrar apenas nos primeiros 6 segundos
-    if (time > 6) return;
-
-    // Selecionar mensagem baseada no tempo
-    const msgIndex = Math.floor(time / 2.5) % ctaMessages.length;
-    const message = ctaMessages[msgIndex];
-
-    // Animação de opacidade - aparece e some
-    const phaseDuration = 2.5;
-    const localProgress = (time % phaseDuration) / phaseDuration;
-    
-    let opacity = 1;
-    if (localProgress < 0.15) {
-      opacity = localProgress / 0.15;
-    } else if (localProgress > 0.7) {
-      opacity = (1 - localProgress) / 0.3;
-    }
-
-    const fontSize = Math.floor(W * 0.04);
-    
-    this.ctx.save();
-    this.ctx.globalAlpha = opacity;
-    this.ctx.textAlign = 'center';
-    
-    // Fundo compacto na parte superior
-    this.ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    this.ctx.fillRect(W * 0.2, H * 0.08, W * 0.6, H * 0.07);
-    
-    // Texto branco com shadow
-    this.ctx.font = `900 ${fontSize + 1}px Inter, Arial, sans-serif`;
-    this.ctx.fillStyle = '#000000';
-    this.ctx.fillText(message, W / 2 + 1, H * 0.135 + 1);
-    this.ctx.font = `900 ${fontSize}px Inter, Arial, sans-serif`;
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillText(message, W / 2, H * 0.135);
-
-    this.ctx.globalAlpha = 1;
-    this.ctx.restore();
-  }
-
-  private drawProductInfo(text: string, W: number, H: number, time: number) {
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // Aparece a partir de 10 segundos para dar tempo de ver as imagens
-    if (time < 10) return;
-
-    const lines = text.split('\n');
-    const productName = lines[0] || "";
-    const price = lines[1] || "";
-
-    // Fontes proporcionais - adapts to resolution
-    const titleSize = Math.floor(W * 0.035);
-    this.ctx.font = `900 ${titleSize}px Inter, Arial, sans-serif`;
-    const titleLines = this.wrapText(productName, titleSize, W * 0.85);
-    const priceSize = Math.floor(W * 0.055);
-    
-    // Animação de entrada suave
-    const fadeProgress = Math.min((time - 10) / 1.5, 1);
-    const opacity = fadeProgress;
-
-    const startY = H * 0.68;
-    
-    this.ctx.save();
-    this.ctx.globalAlpha = opacity;
-
-    // Fundo escuro semi-transparente na parte inferior
-    this.ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    this.ctx.fillRect(0, startY - 20, W, H * 0.32);
-
-    // Título do produto - centralizado com shadow
-    this.ctx.textAlign = 'center';
-    const titleY = startY;
-    
-    titleLines.forEach((line, idx) => {
-      const lineY = titleY + (idx * titleSize * 1.2);
-      const upperLine = line.toUpperCase();
-      
-      // Text shadow
-      this.ctx.font = `900 ${titleSize + 2}px Inter, Arial, sans-serif`;
-      this.ctx.fillStyle = '#000000';
-      this.ctx.fillText(upperLine, W / 2 + 2, lineY + 2);
-      
-      this.ctx.font = `900 ${titleSize}px Inter, Arial, sans-serif`;
-      this.ctx.fillStyle = '#ffffff';
-      this.ctx.fillText(upperLine, W / 2, lineY);
-    });
-    
-    // Preço em badge verde
-    const priceY = startY + titleLines.length * titleSize * 1.2 + 25;
-    
-    this.ctx.fillStyle = '#10b981';
-    this.ctx.beginPath();
-    this.ctx.roundRect(W * 0.28, priceY - priceSize/2, W * 0.44, priceSize + 16, 10);
-    this.ctx.fill();
-    
-    this.ctx.font = `900 ${priceSize}px Inter, Arial, sans-serif`;
-    this.ctx.fillStyle = '#000000';
-    this.ctx.fillText(price, W / 2, priceY + priceSize * 0.35);
-
-    // CTA
-    const ctaY = priceY + priceSize + 22;
-    this.ctx.font = `bold ${Math.floor(W * 0.022)}px Inter, Arial, sans-serif`;
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillText('🔗 LINK NA BIO', W / 2, ctaY);
-
-    // Hashtags
-    const hashY = ctaY + 18;
-    this.ctx.font = `${Math.floor(W * 0.016)}px Inter, Arial, sans-serif`;
-    this.ctx.fillStyle = '#22d3ee';
-    this.ctx.fillText('#viral #shopee #achadinhos', W / 2, hashY);
-
-    this.ctx.restore();
-  }
-
-  private drawGrowthHacks(time: number, W: number, H: number) {
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // 1. Selo de Frete Grátis (Efeito Emergência)
-    if (time > 1 && time < 8) {
-      const sealSize = Math.floor(W * 0.18);
-      const pulse = 1 + Math.sin(time * 10) * 0.05;
-      
-      this.ctx.save();
-      this.ctx.translate(W * 0.82, H * 0.12);
-      this.ctx.scale(pulse, pulse);
-      this.ctx.rotate(Math.PI / 12);
-      
-      // Círculo
-      this.ctx.fillStyle = '#ff4d4f';
-      this.ctx.beginPath();
-      this.ctx.arc(0, 0, sealSize/2, 0, Math.PI * 2);
-      this.ctx.fill();
-      
-      // Texto
-      this.ctx.fillStyle = 'white';
-      this.ctx.textAlign = 'center';
-      this.ctx.font = `bold ${Math.floor(sealSize * 0.22)}px Inter`;
-      this.ctx.fillText("FRETE", 0, -5);
-      this.ctx.fillText("GRÁTIS", 0, 15);
-      
-      this.ctx.restore();
-    }
-
-    // 2. Balão de Prova Social (Pergunta do Cliente)
-    if (time > 12 && time < 17) {
-      const progress = (time - 12) / 5;
-      const opacity = progress < 0.1 ? progress / 0.1 : (progress > 0.8 ? (1 - progress) / 0.2 : 1);
-      
-      this.ctx.save();
-      this.ctx.globalAlpha = opacity;
-      
-      const bW = W * 0.7;
-      const bH = H * 0.08;
-      const bX = (W - bW) / 2;
-      const bY = H * 0.25;
-      
-      // Fundo Balão
-      this.ctx.fillStyle = 'white';
-      this.ctx.beginPath();
-      this.ctx.roundRect(bX, bY, bW, bH, 20);
-      this.ctx.fill();
-      
-      // Triângulo do balão
-      this.ctx.beginPath();
-      this.ctx.moveTo(bX + 40, bY + bH);
-      this.ctx.lineTo(bX + 60, bY + bH + 20);
-      this.ctx.lineTo(bX + 80, bY + bH);
-      this.ctx.fill();
-      
-      // Avatar Fake
-      this.ctx.fillStyle = '#f0f0f0';
-      this.ctx.beginPath();
-      this.ctx.arc(bX + 40, bY + bH/2, 20, 0, Math.PI * 2);
-      this.ctx.fill();
-      
-      // Texto da Pergunta
-      this.ctx.fillStyle = '#333';
-      this.ctx.textAlign = 'left';
-      this.ctx.font = `500 ${Math.floor(W * 0.03)}px Inter`;
-      this.ctx.fillText("Ainda tem estoque? Chega rápido?", bX + 75, bY + bH/2 + 8);
-      
-      this.ctx.restore();
-    }
-
-    // 3. Selo de Cupom (Efeito Glow)
-    if (time > 20 && time < 26) {
-      this.ctx.save();
-      const cW = W * 0.6;
-      const cH = H * 0.06;
-      const cX = (W - cW) / 2;
-      const cY = H * 0.15;
-      
-      this.ctx.shadowColor = '#fbbf24';
-      this.ctx.shadowBlur = 15;
-      this.ctx.fillStyle = '#fbbf24';
-      this.ctx.beginPath();
-      this.ctx.roundRect(cX, cY, cW, cH, 12);
-      this.ctx.fill();
-      
-      this.ctx.fillStyle = 'black';
-      this.ctx.textAlign = 'center';
-      this.ctx.font = `black ${Math.floor(W * 0.035)}px Inter`;
-      this.ctx.fillText("🎟️ USE SEU CUPOM AQUÍ!", W / 2, cY + cH/2 + 10);
-      this.ctx.restore();
-    }
-  }
-
-  private wrapText(text: string, fontSize: number, maxWidth: number): string[] {
-    const words = text.split(' ');
-    const lines: string[] = [''];
-    let cur = 0;
-    
-    words.forEach(word => {
-      const test = lines[cur] + (lines[cur] ? ' ' : '') + word;
-      if (this.ctx.measureText(test).width > maxWidth && lines[cur]) { 
-        cur++; 
-        lines[cur] = word; 
-      }
-      else lines[cur] = test;
-    });
-    
-    return lines;
-  }
-
-  private async finishEncoding(
-    videoEncoder: VideoEncoder, 
-    audioEncoder: AudioEncoder, 
-    muxer: Muxer<ArrayBufferTarget>,
-    options: ProcessingOptions,
-    wasMuted: boolean,
-    wasVolume: number,
-    blobUrl: string | null,
-    resolve: (blob: Blob) => void,
-    reject: (err: any) => void
-  ) {
-    if (videoEncoder.state === 'closed') return;
-    
-    try {
-      await videoEncoder.flush();
-      if (audioEncoder.state === 'configured') await audioEncoder.flush();
-      muxer.finalize();
-
-      const { buffer } = muxer.target;
-      const blob = new Blob([buffer], { type: 'video/mp4' });
-
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-
-      if (options.existingVideoEl) {
-        options.existingVideoEl.muted = wasMuted;
-        options.existingVideoEl.volume = wasVolume;
-        options.existingVideoEl.loop = true;
-        options.existingVideoEl.play().catch(() => {});
-      }
-
-      // IMPORTANTE: Liberar memória para evitar que o Chrome feche no celular
-      videoEncoder.close();
-      if (audioEncoder.state !== 'closed') audioEncoder.close();
-
-      resolve(blob);
-    } catch (err) {
-      console.error("Erro ao finalizar muxer");
-      // Garantir cleanup em caso de erro
-      try { 
-        videoEncoder.close(); 
-        if (audioEncoder.state !== 'closed') audioEncoder.close(); 
-      } catch {}
-      reject(err);
-    }
   }
 
   private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string, totalDuration: number = 15) {
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     let text = "";
-    let type: 'hook' | 'presentation' | 'midroll' | 'cta' = 'hook';
+    let typeIndex = 0;
+    const splitPoints = [0, totalDuration * 0.20, totalDuration * 0.55, totalDuration * 0.80];
     
-    // 4 blocos: hook -> presentation -> midroll -> CTA
-    const hookEnd = totalDuration * 0.18;
-    const presEnd = totalDuration * 0.55;
-    const midrollEnd = totalDuration * 0.72;
-    const ctaEnd = totalDuration * 0.98;
-
-    if (time < hookEnd) {
-      text = script.hook || "";
-      type = 'hook';
-    } else if (time < presEnd) {
-      text = script.presentation || "";
-      type = 'presentation';
-    } else if (time < midrollEnd) {
-      text = script.midroll || script.presentation || "";
-      type = 'midroll';
-    } else if (time < ctaEnd) {
-      text = script.cta || "";
-      type = 'cta';
-    } else {
-      return;
-    }
+    if (time < splitPoints[1]) { text = script.hook; typeIndex = 0; }
+    else if (time < splitPoints[2]) { text = script.presentation; typeIndex = 1; }
+    else if (time < splitPoints[3]) { text = script.midroll || script.presentation; typeIndex = 2; }
+    else { text = script.cta; typeIndex = 3; }
 
     if (!text) return;
-    
-    const margin = W * 0.04;
-    const fontSize = Math.floor(W * 0.055);
-    const bigFontSize = Math.floor(W * 0.075);
-    this.ctx.font = `900 ${fontSize}px Inter, Arial, sans-serif`;
-    
-    const lines = this.wrapText(text, fontSize, W - (margin * 2) - 60);
-    const boxPadding = Math.floor(W * 0.025);
-    const lineHeight = fontSize * 1.3;
-    const boxHeight = (lines.length * lineHeight) + (boxPadding * 2) + 50;
-    const boxWidth = W * 0.88;
-    
-    const x = (W - boxWidth) / 2;
-    const baseY = H * 0.10;
-    const pulse = Math.sin(time * 4) * 0.04 + 1;
-    const y = baseY;
 
-    const glowColor = type === 'hook' ? '#FF3131' : type === 'presentation' ? '#00BFFF' : type === 'midroll' ? '#FFD700' : '#00FF7F';
-    
+    // Calcular animação de "Pop"
+    const elapsed = time - splitPoints[typeIndex];
+    let popScale = 1.0;
+    if (elapsed < 0.4) {
+      popScale = 0.9 + Math.sin(Math.min(elapsed / 0.4, 1) * Math.PI) * 0.15;
+    }
+
     this.ctx.save();
-    this.ctx.shadowColor = glowColor;
-    this.ctx.shadowBlur = 30 * pulse;
     
-    // Gradient background with transparency
-    const gradient = this.ctx.createLinearGradient(x, y, x + boxWidth, y + boxHeight);
-    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.88)');
-    gradient.addColorStop(0.5, 'rgba(20, 20, 20, 0.92)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.88)');
+    // Fonte mais equilibrada para não tapar o produto
+    const fontSize = typeIndex === 0 ? W * 0.075 : W * 0.065;
+    this.ctx.font = `900 ${fontSize}px "Outfit", "Inter", sans-serif`;
     
-    this.ctx.fillStyle = gradient;
+    // Wrap text
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = words[0];
+    for (let i = 1; i < words.length; i++) {
+        const width = this.ctx.measureText(currentLine + " " + words[i]).width;
+        if (width < W * 0.8) {
+            currentLine += " " + words[i];
+        } else {
+            lines.push(currentLine);
+            currentLine = words[i];
+        }
+    }
+    lines.push(currentLine);
+
+    const lineHeight = fontSize * 1.2;
+    const padding = W * 0.05;
+    const rectH = lines.length * lineHeight + padding * 2;
+    const rectW = W * 0.85;
+    const rectX = (W - rectW) / 2;
+    const rectY = H * 0.72; // POSICIONADO NO RODAPÉ (AJUSTADO PARA ~72-78% DA TELA)
+
+    // Aplicar Transformação de Pop
+    this.ctx.translate(W/2, rectY + rectH/2);
+    this.ctx.scale(popScale, popScale);
+    this.ctx.translate(-W/2, -(rectY + rectH/2));
+
+    // Desenhar fundo estilizado (Vibe Glassmorphism / Viral)
+    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    this.ctx.shadowBlur = 20;
+    
+    // Gradiente sutil no fundo
+    const grad = this.ctx.createLinearGradient(rectX, rectY, rectX, rectY + rectH);
+    if (typeIndex === 3) {
+      grad.addColorStop(0, '#DC2626');
+      grad.addColorStop(1, '#991B1B');
+    } else {
+      grad.addColorStop(0, 'rgba(0, 0, 0, 0.88)');
+      grad.addColorStop(1, 'rgba(15, 23, 42, 0.95)');
+    }
+    this.ctx.fillStyle = grad;
+    
     this.ctx.beginPath();
-    const radius = 16;
-    this.ctx.roundRect(x, y, boxWidth, boxHeight, radius);
+    if (typeof (this.ctx as any).roundRect === 'function') {
+      (this.ctx as any).roundRect(rectX, rectY, rectW, rectH, 18);
+    } else {
+      this.ctx.rect(rectX, rectY, rectW, rectH);
+    }
     this.ctx.fill();
     
-    // Border with glow
-    this.ctx.strokeStyle = glowColor;
-    this.ctx.lineWidth = 2;
-    this.ctx.globalAlpha = 0.5 + (pulse - 1) * 15;
-    this.ctx.stroke();
-    this.ctx.globalAlpha = 1;
-    
-    // Decorative line at top
-    this.ctx.strokeStyle = glowColor;
+    // Borda brilhante
+    this.ctx.strokeStyle = typeIndex === 3 ? 'rgba(255, 255, 255, 0.4)' : 'rgba(34, 197, 94, 0.3)';
     this.ctx.lineWidth = 3;
-    this.ctx.beginPath();
-    this.ctx.moveTo(x + 15, y + 3);
-    this.ctx.lineTo(x + boxWidth - 15, y + 3);
     this.ctx.stroke();
-    
-    this.ctx.restore();
 
-    // Icon based on type
-    this.ctx.save();
-    const iconText = type === 'hook' ? '🔥' : type === 'presentation' ? '⚡' : '🛒';
-    this.ctx.font = `900 ${bigFontSize}px Arial`;
+    this.ctx.shadowBlur = 0;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(iconText, W/2, y + boxPadding + bigFontSize/2);
-    this.ctx.restore();
 
-    // Text with enhanced styling
-    this.ctx.save();
-    this.ctx.textAlign = "center";
-    this.ctx.textBaseline = "middle";
-    
-    lines.forEach((line, i) => {
-      const ty = y + boxPadding + 40 + (i + 0.5) * lineHeight;
+    const powerWords = ['OFERTA', 'GRÁTIS', 'AGORA', 'PROMOÇÃO', 'IMPERDÍVEL', 'CHOQUE', 'OLHA', 'VEJA', 'VOCÊ', 'SHOPEE', 'ACHADINHO', 'LINK'];
+
+    lines.forEach((line, idx) => {
+      const lineY = rectY + padding + (idx + 0.5) * lineHeight;
+      const xCenter = W / 2;
       
-      // Text shadow/depth
-      this.ctx.shadowColor = "rgba(0,0,0,0.9)";
-      this.ctx.shadowBlur = 12;
-      this.ctx.shadowOffsetX = 0;
-      this.ctx.shadowOffsetY = 3;
+      // Calcular largura total da linha para alinhamento manual
+      const lineText = line.toUpperCase();
+      const totalLineWidth = this.ctx.measureText(lineText).width;
+      let currentX = xCenter - (totalLineWidth / 2);
       
-      // Main text
-      this.ctx.font = `900 ${fontSize}px Inter, Arial, sans-serif`;
-      this.ctx.fillStyle = '#fff';
+      const lineWords = line.split(' ');
       
-      // Stroke outline
-      this.ctx.strokeStyle = "rgba(0,0,0,0.95)";
-      this.ctx.lineWidth = 5;
-      this.ctx.lineJoin = "round";
-      this.ctx.strokeText(line.toUpperCase(), W/2, ty);
-      
-      this.ctx.fillText(line.toUpperCase(), W/2, ty);
+      this.ctx.textAlign = 'left';
+      this.ctx.lineJoin = 'round';
+      this.ctx.lineWidth = 8;
+      this.ctx.strokeStyle = '#000000';
+
+      lineWords.forEach(word => {
+        const wordText = word.toUpperCase();
+        const cleanWord = wordText.replace(/[.,!]/g, '');
+        const isPower = powerWords.includes(cleanWord);
+        
+        // Desenhar STROKE (Contorno) da palavra individualmente para alinhar com o preenchimento
+        this.ctx.strokeText(wordText, currentX, lineY);
+
+        if (isPower) {
+          this.ctx.save();
+          this.ctx.shadowColor = '#FFD700';
+          this.ctx.shadowBlur = 10;
+          this.ctx.fillStyle = '#FFD700';
+          this.ctx.fillText(wordText, currentX, lineY);
+          this.ctx.restore();
+        } else {
+          this.ctx.fillStyle = '#FFFFFF';
+          this.ctx.fillText(wordText, currentX, lineY);
+        }
+        currentX += this.ctx.measureText(wordText + " ").width;
+      });
     });
-    this.ctx.restore();
 
-    // Show "Siga @username" at the end of CTA (after 10 seconds)
-    if (type === 'cta' && time > 10 && storeSlug) {
-      const followText = `Siga @${storeSlug.replace('@', '')} para mais!`;
-      const followFontSize = Math.floor(W * 0.035);
-      const followY = y + boxHeight + followFontSize + 20;
-      
-      this.ctx.save();
-      this.ctx.font = `900 ${followFontSize}px Inter, Arial, sans-serif`;
+    if (typeIndex === 3 && storeSlug) {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0); 
+      this.ctx.font = `italic 800 ${Math.floor(W * 0.045)}px "Inter"`;
+      this.ctx.fillStyle = '#FFD700';
       this.ctx.textAlign = 'center';
-      this.ctx.fillStyle = '#fff';
-      this.ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      this.ctx.shadowBlur = 8;
-      this.ctx.fillText(followText, W/2, followY);
-      this.ctx.restore();
+      // Posicionar handle logo abaixo do box central
+      this.ctx.fillText(`@${storeSlug.replace('@', '')}`, W/2, rectY + rectH + 60);
+    }
+
+    this.ctx.restore();
+  }
+
+  private applyTransitionEffect(transition: string, time: number, timestamps: number[], W: number, H: number) {
+    if (!timestamps) return;
+    const t = timestamps.find(ts => Math.abs(time - ts) < 0.25);
+    if (!t) return;
+    const p = 1 - Math.abs(time - t) / 0.25;
+    this.applyCapCutTransition(transition, p, W, H);
+  }
+
+  private easeInOutCubic(x: number): number {
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  }
+
+  private applyCapCutTransition(type: string, p: number, W: number, H: number) {
+    if (p <= 0) return;
+    
+    // Aplicar suavização (easing) para evitar travadas visuais
+    const smoothP = this.easeInOutCubic(p);
+    
+    // NOTA: Removido Save/Restore interno para que os efeitos de transform/alpha 
+    // se apliquem à imagem que será desenhada logo após a chamada desta função.
+    
+    switch (type) {
+      case 'zoomIn':
+        this.ctx.translate(W/2, H/2);
+        this.ctx.scale(1 + smoothP * 0.15, 1 + smoothP * 0.15);
+        this.ctx.translate(-W/2, -H/2);
+        this.ctx.globalAlpha = 1 - (smoothP * 0.3); // Leve fade acompanhando o zoom
+        break;
+      case 'slideL':
+        this.ctx.translate(-smoothP * 100, 0);
+        break;
+      case 'slideR':
+        this.ctx.translate(smoothP * 100, 0);
+        break;
+      case 'flash':
+        // Flash usando apenas opacidade (muito mais leve que brightness filter)
+        this.ctx.globalAlpha = 1 - (smoothP * 0.4); 
+        this.ctx.fillStyle = `white`;
+        this.ctx.globalAlpha = smoothP * 0.5;
+        this.ctx.fillRect(0, 0, W, H);
+        break;
+      case 'glitchLite':
+        // Glitch usando apenas transformações de posição (sem filtros de cor)
+        this.ctx.translate((Math.random()-0.5)*25*smoothP, (Math.random()-0.5)*25*smoothP);
+        break;
+      case 'fade':
+        this.ctx.globalAlpha = 1 - smoothP;
+        break;
+      default:
+        this.ctx.globalAlpha = 1 - smoothP;
+        break;
     }
   }
 }
-
-
-

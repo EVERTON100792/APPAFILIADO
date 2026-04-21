@@ -42,6 +42,13 @@ interface ShopeeHubProps {
   userShopeeId?: string | null;
   onViralize?: (product: any, videoType?: 'tiktok' | 'autoral', customImages?: string[], customScript?: any) => void;
   onSaveHistory?: (product: any, platform: string) => void;
+  // Lifted state
+  shopeeHubProducts: ShopeeProduct[];
+  setShopeeHubProducts: (products: ShopeeProduct[]) => void;
+  shopeeHubKeyword: string;
+  setShopeeHubKeyword: (keyword: string) => void;
+  shopeeHubTab: string;
+  setShopeeHubTab: (tab: TabType) => void;
 }
 
 const FALLBACK_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' rx='24' fill='%23070b16'/%3E%3Crect x='16' y='16' width='128' height='128' rx='22' fill='%2311172a' stroke='%2322c55e' stroke-opacity='.22'/%3E%3Cpath d='M54 102h52' stroke='%2322c55e' stroke-width='8' stroke-linecap='round'/%3E%3Cpath d='M80 52c-11 0-20 9-20 20v9h40v-9c0-11-9-20-20-20Z' fill='none' stroke='%23e5e7eb' stroke-width='8' stroke-linejoin='round'/%3E%3Ccircle cx='80' cy='81' r='6' fill='%2322c55e'/%3E%3C/svg%3E";
@@ -139,16 +146,26 @@ const SwipeableImageCard: React.FC<{ product: ShopeeProduct }> = ({ product }) =
   );
 };
 
-export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug: propStoreSlug, onViralize, onSaveHistory }) => {
-  const [keyword, setKeyword] = useState("");
-  const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [products, setProducts] = useState<ShopeeProduct[]>([]);
+export const ShopeeHub: React.FC<ShopeeHubProps> = ({ 
+  onShowToast, 
+  userStoreSlug: propStoreSlug, 
+  onViralize, 
+  onSaveHistory,
+  shopeeHubProducts: products,
+  setShopeeHubProducts: setProducts,
+  shopeeHubKeyword: keyword,
+  setShopeeHubKeyword: setKeyword,
+  shopeeHubTab: activeTab,
+  setShopeeHubTab: setActiveTab
+}) => {
   const [isSearching, setIsSearching] = useState(false);
   const [userShopeeId, setUserShopeeId] = useState<string | null>(null);
   const [userStoreSlug, setUserStoreSlug] = useState<string>(propStoreSlug || "meu-link");
   const [showSettings, setShowSettings] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isMiniScanning, setIsMiniScanning] = useState(false);
+  const [activeNicheId, setActiveNicheId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(12);
   
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [pickerImages, setPickerImages] = useState<string[]>([]);
@@ -165,18 +182,24 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
   const niches = [
-    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensilio cozinha" },
-    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem" },
-    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "eletronico fone" },
-    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoração casa" },
-    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador" },
-    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "limpeza pratico" },
-    { id: "setup",     name: "Setup",        icon: "🖥️", keyword: "setup gamer" },
-    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "gato cachorro" },
-    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo infantil" },
-    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achadinhos shopee" },
-    { id: "moda",      name: "Moda",         icon: "👗", keyword: "moda feminina" },
-    { id: "fitness",   name: "Fitness",      icon: "💪", keyword: "treino casa" },
+    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensílios cozinha decoração criativa" },
+    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem skincare viral" },
+    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "gadgets úteis tecnologia" },
+    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoração casa utilidades enxoval" },
+    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador casa praticidade" },
+    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "limpeza inteligente casa" },
+    { id: "setup",     name: "Setup",        icon: "🖥️", keyword: "setup gamer acessórios" },
+    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "acessórios pet gato cachorro" },
+    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo infantil criativo" },
+    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achadinhos shopee viral" },
+    { id: "moda",      name: "Moda",         icon: "👗", keyword: "moda feminina tendecia" },
+    { id: "fitness",   name: "Fitness",      icon: "💪", keyword: "treino casa saudável" },
+  ];
+
+  const BLACKLIST_WORDS = [
+    "gerador", "diesel", "motor", "industrial", "caminhão", "retroescavadeira", 
+    "pneu", "peças", "carro", "moto", "serviço", "aluguel", "maquinário", 
+    "rolamento", "engrenagem", "trator", "reboque", "frete", "consultoria"
   ];
 
   useEffect(() => {
@@ -204,9 +227,12 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     }
   }, [activeTab, isLoadingProfile]);
 
-  const LIGHTNING_KEYWORDS = ["promoção relâmpago", "oferta especial shopee", "queima estoque", "liquidação shopee"];
-  const OFF50_KEYWORDS = ["desconto shopee", "liquidação total shopee", "mega desconto", "super promoção shopee"];
-  const TOP_KEYWORDS = ["mais vendidos shopee", "top achadinhos shopee", "produto viral shopee", "shopee best seller"];
+  const LIGHTNING_KEYWORDS = ["oferta relâmpago", "promoção relâmpago shopee", "queima estoque hoje", "liquidação relâmpago"];
+  const OFF50_KEYWORDS = ["cupom shopee 50%", "desconto 70% shopee", "promoção metades preço", "super oferta shopee"];
+  const TOP_KEYWORDS = [
+    "mais vendidos shopee 2024", "top achadinhos viral", "shopee best seller brasil", 
+    "produtos tendência tiktok", "utilidades domésticas viral", "gadgets inteligentes shopee"
+  ];
 
   const calcDiscount = (p: { price: number; original_price: number; discount: number }): number => {
     if (p.discount > 0 && p.discount <= 99) return p.discount;
@@ -230,8 +256,16 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
 
   const handleSearch = async (overrideKeyword?: string, forceRefresh = false) => {
     setIsSearching(true);
-    if (forceRefresh) setProducts([]);
-    if (activeTab === "elite" && forceRefresh) { setIsSearching(false); return; }
+    if (forceRefresh) {
+      setProducts([]);
+      setVisibleCount(12);
+    }
+    
+    // Auto-trigger Radar Elite se a aba for Elite e estiver vazia
+    if (activeTab === "elite" && forceRefresh) { 
+      runGlobalSpy();
+      return; 
+    }
     if (forceRefresh) {
       setIsMiniScanning(true);
       await new Promise(r => setTimeout(r, 600));
@@ -241,7 +275,15 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
     try {
       let finalProducts: any[] = [];
       if (activeTab === "all") {
-        const searchKw = overrideKeyword !== undefined ? (overrideKeyword || "achadinhos shopee") : (keyword || "achadinhos shopee");
+        let searchKw = overrideKeyword !== undefined ? (overrideKeyword || "achadinhos shopee") : (keyword || "achadinhos shopee");
+        
+        // Se temos um nicho ativo e estamos dando refresh global (overrideKeyword undefined)
+        // usamos a keyword do nicho para manter o contexto correto
+        if (overrideKeyword === undefined && activeNicheId) {
+          const currentNiche = niches.find(n => n.id === activeNicheId);
+          if (currentNiche) searchKw = currentNiche.keyword;
+        }
+
         const [p1, p2, p3] = await Promise.all([
           ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 1 }, userShopeeId || undefined).catch(() => []),
           ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 2 }, userShopeeId || undefined).catch(() => []),
@@ -249,7 +291,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         ]);
         finalProducts = deduplicate([...p1, ...p2, ...p3]);
         if (overrideKeyword !== undefined) {
-          finalProducts = finalProducts.filter(p => p.price >= 5 && p.price <= 160).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
+          finalProducts = finalProducts.filter(p => p.price >= 5 && p.price <= 1000).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
         } else {
           finalProducts = finalProducts.sort(() => Math.random() - 0.5);
         }
@@ -270,8 +312,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         else if (gAny.length >= 4) finalProducts = gAny;
         else finalProducts = withCalcDisc.sort((a, b) => b._disc - a._disc);
       } else if (activeTab === "top_day" || activeTab === "top_week") {
-        finalProducts = await parallelSearch(TOP_KEYWORDS, 3, 2);
+        // Rotacionar keywords para sempre trazer algo novo
+        const shuffledKeywords = [...TOP_KEYWORDS].sort(() => Math.random() - 0.5).slice(0, 3);
+        finalProducts = await parallelSearch(shuffledKeywords, 3, 2);
         finalProducts = finalProducts.sort((a, b) => (b.sales || 0) - (a.sales || 0));
+        if (forceRefresh) finalProducts = finalProducts.sort(() => Math.random() - 0.5);
       }
 
       if (finalProducts.length === 0) {
@@ -280,8 +325,15 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         if (fallback.length === 0) {
             fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 0, page_number: 1 }, userShopeeId || undefined);
         }
-        finalProducts = deduplicate(fallback).filter(p => p.price <= 280).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
+        finalProducts = deduplicate(fallback).filter(p => p.price <= 800).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
       }
+
+      // Filtro de Blacklist Universal
+      finalProducts = finalProducts.filter(p => {
+        const lowerName = p.item_name.toLowerCase();
+        return !BLACKLIST_WORDS.some(bad => lowerName.includes(bad));
+      });
+
       setProducts(finalProducts);
     } catch (err) {
       onShowToast("⚠️ Erro na conexão Shopee");
@@ -353,7 +405,9 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
         const searchResults = await ShopeeService.searchProducts({ keyword: niche.keyword, sort_by: 3 }, userShopeeId || undefined);
         const elite = searchResults.filter(p => {
           const rate = parseFloat(p.commission_rate?.toString() || "0");
-          return rate >= 10;
+          const lowerName = p.item_name.toLowerCase();
+          const isBlacklisted = BLACKLIST_WORDS.some(bad => lowerName.includes(bad));
+          return rate >= 10 && !isBlacklisted;
         });
         allEliteProds.push(...elite);
         setProducts(deduplicate(allEliteProds).slice(0, 50));
@@ -447,7 +501,10 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
             type="text"
             placeholder="O que quer vender hoje?..."
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={(e) => {
+              setKeyword(e.target.value);
+              setActiveNicheId(null);
+            }}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             className="w-full h-14 bg-slate-950/80 border border-white/10 rounded-2xl pl-12 pr-14 text-white font-bold outline-none"
           />
@@ -478,7 +535,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
             return (
               <button
                 key={n.id}
-                onClick={() => { setKeyword(n.name); handleSearch(n.keyword, true); }}
+                onClick={() => { 
+                  setKeyword(n.name); 
+                  setActiveNicheId(n.id);
+                  handleSearch(n.keyword, true); 
+                }}
                 className={`flex flex-col items-center justify-center gap-1.5 min-w-[72px] shrink-0 snap-start active:scale-95 transition-all outline-none relative group`}
               >
                 <div className={`w-[60px] h-[60px] rounded-[1.25rem] flex items-center justify-center text-2xl transition-all shadow-xl ${isSelected ? 'bg-emerald-500/20 border-2 border-emerald-500 shadow-emerald-500/20 scale-105' : 'bg-slate-900 border border-white/5 shadow-black/40 group-hover:bg-slate-800'}`}>
@@ -500,7 +561,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
       )}
 
       <div className="grid grid-cols-2 gap-3.5">
-        {products.filter(p => p.item_name && p.item_name.length > 3).slice(0, 12).map((product) => (
+        {products.filter(p => p.item_name && p.item_name.length > 3).slice(0, visibleCount).map((product) => (
           <div key={product.item_id} className="tech-card p-2 flex flex-col gap-3 group border-white/5 bg-slate-900/20">
             <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" className="block relative group/img">
               <SwipeableImageCard product={product} />
@@ -529,6 +590,18 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
           </div>
         ))}
       </div>
+
+      {visibleCount < products.length && (
+        <div className="flex justify-center mt-4">
+          <button 
+            onClick={() => setVisibleCount(prev => prev + 12)}
+            className="w-full h-14 bg-slate-900 border border-white/5 rounded-2xl flex items-center justify-center gap-3 text-white font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-black/40"
+          >
+            <RefreshCw size={16} className="text-emerald-500" />
+            Ver Mais Achadinhos
+          </button>
+        </div>
+      )}
 
       <MatrixScanner />
 
@@ -627,7 +700,12 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({ onShowToast, userStoreSlug
                     <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Escolha a Vibe do Vídeo</p>
                   </div>
                 </div>
-                <button onClick={() => setShowScriptSelector(false)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white transition"><X size={24} /></button>
+                <div className="flex items-center gap-2 text-white/40">
+                  <button onClick={() => { setShowScriptSelector(false); setShowImagePicker(true); }} className="w-8 h-8 flex items-center justify-center hover:text-white transition-colors">
+                    <RotateCcw size={18} />
+                  </button>
+                  <button onClick={() => setShowScriptSelector(false)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white transition"><X size={24} /></button>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
                 <p className="text-xs text-white/50 text-center uppercase tracking-widest font-bold mb-2">GERADOS PARA O PRODUTO</p>
