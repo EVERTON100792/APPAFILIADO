@@ -293,17 +293,29 @@ export class VideoProcessor {
             this.auxCtx.drawImage(cachedFrames[frameIdx], 0, 0, W, H);
           } else {
             const targetTime = currentTime % video.duration;
-            // Só fazer o seek se a diferença for relevante (> 30ms)
-            if (Math.abs(video.currentTime - targetTime) > 0.03) {
+            if (Math.abs(video.currentTime - targetTime) > 0.01) {
               video.currentTime = targetTime;
               await new Promise<void>(res => {
-                let done = false;
-                const cleanup = () => { done = true; video.onseeked = null; };
-                video.onseeked = () => { if(!done){ cleanup(); res(); } };
-                setTimeout(() => { if(!done){ cleanup(); res(); } }, isMobile ? 120 : 40);
+                let resolved = false;
+                const onSeeked = () => {
+                  if (resolved) return;
+                  resolved = true;
+                  video.removeEventListener('seeked', onSeeked);
+                  res();
+                };
+                video.addEventListener('seeked', onSeeked);
+                setTimeout(onSeeked, isMobile ? 400 : 150); // Timeout robusto para evitar lags
               });
             }
-            this.auxCtx.drawImage(video, 0, 0, W, H);
+            
+            // Garantir que temos dados suficientes para desenhar o frame sem flicker
+            if (video.readyState >= 2) {
+              this.auxCtx.drawImage(video, 0, 0, W, H);
+            } else {
+              // Se falhar o seek, espera um pouco mais no próximo ciclo ou pula (melhor pular do que lagar)
+              await new Promise(r => setTimeout(r, 10));
+              this.auxCtx.drawImage(video, 0, 0, W, H);
+            }
             
             // Alimentar cache se possível
             if (i < framesToCache) {

@@ -35,7 +35,8 @@ import {
   Clock,
   Mic,
   Cpu,
-  MessageCircle
+  MessageCircle,
+  Music2
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -3116,9 +3117,6 @@ const App: React.FC = () => {
       addLog("PROTOCOLO DE POSTAGEM FINALIZADO.", "success");
       setAutomationFinished(true);
       showToast("CONCLUÍDO! VERIFIQUE A ABA ABERTA 🚀");
-
-      // Forçar atualização do inventário para remover o item postado e trazer um novo
-      refillProductList(activeNiche);
     }, 2500);
   };
 
@@ -4932,29 +4930,58 @@ const App: React.FC = () => {
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <motion.button
-                          whileTap={{ scale: 0.95 }}
-                          className="h-16 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 border-2 border-white/20"
-                          onClick={() => {
-                            setStep("ready");
-                            setAutomationFinished(false);
-                          }}
-                        >
-                          <Zap size={16} fill="currentColor" />
-                          CONTINUAR POSTANDO
-                        </motion.button>
-                        <motion.button
-                          whileTap={{ scale: 0.95 }}
-                          className="h-16 bg-gradient-to-r from-accent to-emerald-400 text-slate-950 rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 border-2 border-white/20"
-                          onClick={() => {
-                            setStep("list");
-                            setAutomationFinished(false);
-                          }}
-                        >
-                          <CheckCircle2 size={18} />
-                          CONCLUÍDO
-                        </motion.button>
+                      <div className="grid grid-cols-1 gap-3">
+                        {activePlatform === "tiktok" ? (
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            className="h-16 bg-gradient-to-r from-orange-400 to-amber-500 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/20"
+                            onClick={() => {
+                              setAutomationFinished(false);
+                              runAutomation("shopee");
+                            }}
+                          >
+                            <ShoppingBag size={20} />
+                            Postar na Shopee Agora
+                          </motion.button>
+                        ) : (
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            className="h-16 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/20"
+                            onClick={() => {
+                              setAutomationFinished(false);
+                              runAutomation("tiktok");
+                            }}
+                          >
+                            <Music2 size={20} />
+                            Postar no TikTok Agora
+                          </motion.button>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            className="h-14 bg-slate-800 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-2 border border-white/10"
+                            onClick={() => {
+                              setStep("ready");
+                              setAutomationFinished(false);
+                            }}
+                          >
+                            <Zap size={14} fill="currentColor" />
+                            Editor
+                          </motion.button>
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            className="h-14 bg-emerald-500 text-slate-950 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                            onClick={() => {
+                              refillProductList(activeNiche);
+                              setStep("list");
+                              setAutomationFinished(false);
+                            }}
+                          >
+                            <CheckCircle2 size={16} />
+                            Concluído
+                          </motion.button>
+                        </div>
                       </div>
                     </motion.div>
                   )}
