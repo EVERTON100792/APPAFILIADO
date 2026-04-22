@@ -2236,12 +2236,29 @@ const App: React.FC = () => {
         id: `autoral-${Date.now()}`,
         url: newUrl,
         isAutoral: true,
-        script: script
+        script: script,
+        autoralBlob: blob // Armazena o blob para evitar re-processamento na publicação
       });
 
       setTreatingProgress(100);
       setTreatingStatus("Vídeo autoral pronto!");
       showToast("✨ VÍDEO TRANSFORMADO EM AUTORAL!");
+
+      // AUTO-DOWNLOAD: Inicia o download imediatamente para o usuário
+      try {
+        const a = document.createElement("a");
+        const fileName = `viral_squad_autoral_${Date.now()}.mp4`;
+        const downloadUrl = URL.createObjectURL(blob);
+        a.href = downloadUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
+        showToast("📥 DOWNLOAD INICIADO!");
+      } catch (err) {
+        console.error("Erro no auto-download:", err);
+      }
       
     } catch (err: any) {
       console.error("Erro ao transformar:", err);
@@ -2914,7 +2931,15 @@ const App: React.FC = () => {
   };
 
   const runAutomation = async (selectedPlatform: "tiktok" | "shopee") => {
-    setStep("automation");
+    const hasCache = videoData?.isAutoral && videoData.autoralBlob;
+    
+    // Se já tem o vídeo em cache, não precisa abrir a tela de animação (console)
+    if (!hasCache) {
+      setStep("automation");
+    } else {
+      showToast("🚀 INICIANDO PUBLICAÇÃO RÁPIDA...");
+    }
+
     setActivePlatform(selectedPlatform);
     setConsoleLogs([]);
     setAutomationFinished(false);
