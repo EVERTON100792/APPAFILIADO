@@ -4,6 +4,7 @@ import {
   Globe,
   Music,
   ShoppingBag,
+  ShoppingCart,
   Search,
   Video,
   CheckCircle2,
@@ -33,7 +34,8 @@ import {
   Type,
   Clock,
   Mic,
-  Cpu
+  Cpu,
+  MessageCircle
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -58,6 +60,7 @@ import {
   getSmartSearchName,
 } from "./utils/viralNaming";
 import { Copywriter } from "./utils/Copywriter";
+import { sanitizeShopeeLink } from "./utils/shopeeLinkUtils";
 import { VIRAL_MUSIC, TRANSITIONS, FILTERS } from "./utils/MusicLibrary";
 
 const STRIPE_PRICE_ID = "price_1TIZKzKYzfLaHvnki5ZXmNG9";
@@ -366,6 +369,9 @@ const App: React.FC = () => {
   const [useNarration, setUseNarration] = useState(true);
   const [narrationVoice, setNarrationVoice] = useState<'M' | 'F'>('F');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [shopeeHubProducts, setShopeeHubProducts] = useState<any[]>([]);
+  const [shopeeHubKeyword, setShopeeHubKeyword] = useState("");
+  const [shopeeHubTab, setShopeeHubTab] = useState<any>("all");
   const [activePlatform, setActivePlatform] = useState<"tiktok" | "shopee">(
     "tiktok",
   );
@@ -562,15 +568,72 @@ const App: React.FC = () => {
 
   const getPlatformUrl = (type: "shopee" | "tiktok") => {
     if (type === "shopee") {
+      // No mobile, abrir o app do Shopee diretamente
+      if (isMobile) {
+        return "shopee://";
+      }
       return "https://affiliate.shopee.com.br/offer/product_offer";
     } else {
-      // No mobile, abrimos o app do TikTok diretamente para evitar o TikTok Studio web.
+      // No mobile, abrimos o app do TikTok diretamente
       if (isMobile) {
-        // snssdk1233 é o protocolo global do TikTok. 1128 era o Douyin (China).
         return "snssdk1233://";
       }
-      return "https://www.tiktok.com/tiktokstudio/upload?from=creator_center";
+      // Desktop: ir direto para página de upload
+      return "https://www.tiktok.com/upload";
     }
+  };
+
+  // Publicar na Vitrine
+  const publishToVitrine = async () => {
+    if (!selectedProduct) {
+      showToast("SELECIONE UM PRODUTO PRIMEIRO!");
+      return;
+    }
+    showToast("PUBLICANDO NA VITRINE...");
+    await addToBio(selectedProduct, {} as any);
+  };
+
+  // Publicar no WhatsApp
+  const publishToWhatsApp = async () => {
+    if (!selectedProduct) {
+      showToast("SELECIONE UM PRODUTO PRIMEIRO!");
+      return;
+    }
+
+    const productName = selectedProduct.title || selectedProduct.query || "Produto";
+    const productPrice = selectedProduct.price || "R$ 0,00";
+    const affiliateLink = selectedProduct.affiliate_link || selectedProduct.url || "";
+
+    const message = `🔥 *${productName.toUpperCase()}* 🔥
+
+💰 *PREÇO:* ${productPrice}
+
+✨ *DON'T MISS OUT!* Este produto está bombando! 
+
+🛒 *COMPRE AGORA:* ${affiliateLink}
+
+👉 *LINK DIRETO:* ${affiliateLink}
+
+⚡ *OFERTA LIMITADA!* Corra antes que esgotar!`;
+
+    try {
+      await navigator.clipboard.writeText(message);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = message;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+
+    showToast("MENSAGEM COPIADA! Abra o WhatsApp.");
+
+    const waUrl = isMobile 
+      ? `whatsapp://send?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+    
+    window.open(waUrl, "_blank");
   };
 
   const [publicationHistory, setPublicationHistory] = useState<any[]>([]);
@@ -1565,7 +1628,10 @@ const App: React.FC = () => {
   };
 
   const addToBio = async (p: any, e: React.MouseEvent) => {
-    e.stopPropagation();
+    // Aceitar tanto evento quanto objeto vazio
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     setIsSavingToBio(true);
     try {
       const metadataSlug = user?.user_metadata?.store_slug || "";
@@ -1598,13 +1664,51 @@ const App: React.FC = () => {
         return;
       }
 
+      // Buscar imagem de várias fontes possíveis (inclui item_image do Shopee)
+      const productImage = p.image || p.cover || p.thumbnail || p.img_url || p.images?.[0] || p.item_image || "";
+      
+      // Usar nome original do produto (inclui item_name do Shopee)
+      const productTitle = p.title || p.item_name || p.name || p.query || "Produto";
+      
+      // Buscar preço de várias fontes
+      const productPrice = p.price || p.item_price || "";
+      
+      // Criar link de afiliado
+      let rawLink = p.affiliate_link || p.url || p.link || "";
+      
+      // Se não tiver link, criar um link direto para o produto
+      if (!rawLink && p.shop_id && p.item_id) {
+        rawLink = `https://shopee.com.br/product/${p.shop_id}/${p.item_id}`;
+      }
+      
+      // Se não tiver shop_id/item_id, mas tiver link direto
+      if (!rawLink && p.url) {
+        rawLink = p.url;
+      }
+      
+      // Se ainda não tiver, tentar extrair do link
+      if (!rawLink && p.item_url) {
+        rawLink = p.item_url;
+      }
+      
+      // Se ainda não tiver, usar o link original do produto
+      if (!rawLink && p.link) {
+        rawLink = p.link;
+      }
+      
+      const affiliateLink = sanitizeShopeeLink(rawLink, userShopeeId || undefined);
+      
+      console.log("[addToBio] Produto:", { title: productTitle, image: productImage, link: affiliateLink, price: p.price });
+      
       const payload = {
         user_id: targetSlug,
-        title: generateViralProductName(p.title || p.query),
-        image_url: p.image || p.cover || "",
-        affiliate_link: p.affiliate_link || p.url || "",
-        price: p.price || "",
+        title: productTitle,
+        image_url: productImage,
+        affiliate_link: affiliateLink,
+        price: productPrice,
       };
+      
+      console.log("[addToBio] Payload:", payload);
 
       console.log("[addToBio] Inserting:", payload);
 
@@ -2888,17 +2992,26 @@ const App: React.FC = () => {
       return new File([blob], fileName, { type: "video/mp4" });
     };
 
-    // 2. Render and Process Video
-    addLog("Renderizando vídeo ultra-HD para postagem...", "info");
-    const finalBlob = await handleDownload(true);
-
-    if (!finalBlob) {
-      addLog("FALHA NA RENDERIZAÇÃO. Retornando ao editor...", "error");
-      setStep("ready");
-      return;
+    // 2. Render and Process Video (ou usar do cache se existir)
+    let finalBlob: Blob | null = null;
+    
+    // Verificar se vídeo autoral já existe em cache
+    if (videoData?.isAutoral && videoData.autoralBlob) {
+      addLog("VÍDEO JÁ ESTÁ PRONTO! Usando cache...", "info");
+      finalBlob = videoData.autoralBlob;
+    } else {
+      addLog("Renderizando vídeo para postagem...", "info");
+      finalBlob = await handleDownload(true);
+      if (!finalBlob) {
+        addLog("FALHA NA RENDERIZAÇÃO. Retornando ao editor...", "error");
+        setStep("ready");
+        return;
+      }
     }
 
-    addLog("VÍDEO RENDERIZADO COM SUCESSO! ✅", "success");
+    addLog("VÍDEO PRONTO! ✅", "success");
+    
+    if (!finalBlob) return;
 
     if (isMobile && navigator.share) {
       addLog("Disparando Menu de Compartilhamento...", "info");
@@ -4522,7 +4635,7 @@ const App: React.FC = () => {
                               Criar agora
                             </p>
                             <span className="block text-sm font-black uppercase tracking-[0.18em] text-slate-950">
-                              TikTok Viral
+                              Publicar no TikTok
                             </span>
                             <span className="block text-[10px] text-slate-600 font-bold uppercase tracking-[0.14em]">
                               Download + script viral
@@ -4570,6 +4683,80 @@ const App: React.FC = () => {
                         <div className="flex flex-col items-end gap-2">
                           <div className="px-2.5 py-1 rounded-full bg-white text-orange-600 text-[7px] font-black uppercase tracking-[0.24em]">
                             {isMobile ? "NATIVO" : "AUTO"}
+                          </div>
+                          <ArrowRight
+                            size={16}
+                            className="text-white/70 group-hover:translate-x-0.5 transition-transform"
+                          />
+                        </div>
+                      </div>
+                    </motion.button>
+
+                    {/* BOTÃO PUBLICAR NA VITRINE */}
+                    <motion.button
+                      whileHover={{ y: -4, scale: 1.01 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => publishToVitrine()}
+                      className="group relative overflow-hidden rounded-[2rem] border border-emerald-400/20 bg-[linear-gradient(135deg,rgba(16,185,129,0.94)_0%,rgba(34,197,94,0.96)_55%,rgba(74,222,128,0.95)_100%)] px-5 py-5 text-left shadow-[0_20px_60px_rgba(34,197,94,0.18)]"
+                    >
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.14),transparent_36%)] opacity-90" />
+                      <div className="relative flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-white text-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-950/20 group-hover:scale-105 transition-transform">
+                            <ShoppingCart size={20} fill="currentColor" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[9px] font-black uppercase tracking-[0.28em] text-emerald-100/70">
+                              Publicar agora
+                            </p>
+                            <span className="block text-sm font-black uppercase tracking-[0.18em] text-white">
+                              Na Vitrine
+                            </span>
+                            <span className="block text-[10px] text-emerald-50/80 font-bold uppercase tracking-[0.14em]">
+                              Adiciona à sua loja
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="px-2.5 py-1 rounded-full bg-white text-emerald-600 text-[7px] font-black uppercase tracking-[0.24em]">
+                            AUTO
+                          </div>
+                          <ArrowRight
+                            size={16}
+                            className="text-white/70 group-hover:translate-x-0.5 transition-transform"
+                          />
+                        </div>
+                      </div>
+                    </motion.button>
+
+                    {/* BOTÃO PUBLICAR NO WHATSAPP */}
+                    <motion.button
+                      whileHover={{ y: -4, scale: 1.01 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => publishToWhatsApp()}
+                      className="group relative overflow-hidden rounded-[2rem] border border-green-500/20 bg-[linear-gradient(135deg,rgba(22,163,74,0.94)_0%,rgba(34,197,94,0.96)_55%,rgba(50,205,110,0.95)_100%)] px-5 py-5 text-left shadow-[0_20px_60px_rgba(34,197,94,0.18)]"
+                    >
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.14),transparent_36%)] opacity-90" />
+                      <div className="relative flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-white text-green-600 flex items-center justify-center shadow-lg shadow-green-950/20 group-hover:scale-105 transition-transform">
+                            <MessageCircle size={20} fill="currentColor" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[9px] font-black uppercase tracking-[0.28em] text-green-100/70">
+                              Compartilhar
+                            </p>
+                            <span className="block text-sm font-black uppercase tracking-[0.18em] text-white">
+                              WhatsApp
+                            </span>
+                            <span className="block text-[10px] text-green-50/80 font-bold uppercase tracking-[0.14em]">
+                              Mensagem formatada
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="px-2.5 py-1 rounded-full bg-white text-green-600 text-[7px] font-black uppercase tracking-[0.24em]">
+                            AUTO
                           </div>
                           <ArrowRight
                             size={16}
@@ -4723,14 +4910,14 @@ const App: React.FC = () => {
                       <div className="grid grid-cols-2 gap-4">
                         <motion.button
                           whileTap={{ scale: 0.95 }}
-                          className="h-16 bg-slate-900 border-2 border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/90 hover:border-white/30 transition-all flex items-center justify-center gap-2"
+                          className="h-16 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-[0_10px_40px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 border-2 border-white/20"
                           onClick={() => {
                             setStep("ready");
                             setAutomationFinished(false);
                           }}
                         >
-                          <RotateCcw size={16} />
-                          RE-POSTAR
+                          <Zap size={16} fill="currentColor" />
+                          CONTINUAR POSTANDO
                         </motion.button>
                         <motion.button
                           whileTap={{ scale: 0.95 }}
@@ -4854,6 +5041,12 @@ const App: React.FC = () => {
                 userStoreSlug={storeSlug} 
                 userShopeeId={userShopeeId}
                 onSaveHistory={saveToSupabase}
+                shopeeHubProducts={shopeeHubProducts}
+                setShopeeHubProducts={setShopeeHubProducts}
+                shopeeHubKeyword={shopeeHubKeyword}
+                setShopeeHubKeyword={setShopeeHubKeyword}
+                shopeeHubTab={shopeeHubTab}
+                setShopeeHubTab={setShopeeHubTab}
 onViralize={(p, videoType, customImages, customScript) => {
                   console.log("[ShopeeHub onViralize] produto:", p, "videoType:", videoType);
                   if (videoType === 'autoral') {

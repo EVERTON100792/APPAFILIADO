@@ -96,8 +96,10 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
         .eq('store_slug', cleanId)
         .maybeSingle();
       
-      const shopeeId = profile?.shopee_id;
-      setOwnerShopeeId(shopeeId);
+      // Buscar shopeeId do perfil do usuário
+      const foundShopeeId = profile?.shopee_id || null;
+      setOwnerShopeeId(foundShopeeId || undefined);
+      console.log('[BioStore] shopeeId:', foundShopeeId);
 
       // 2. Buscar itens da vitrine
       const { data: itemsData, error: itemsError } = await supabase
@@ -121,7 +123,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       console.log('[BioStore] Fetch result:', { 
         items: itemsData?.length || 0, 
         settings: settingsData,
-        shopeeId,
+        shopeeId: foundShopeeId,
         cleanId 
       });
       
@@ -131,7 +133,7 @@ export const BioStore: React.FC<{ userId: string }> = ({ userId }) => {
       if (itemsData) {
         setItems(itemsData.map((item: BioItem) => ({
           ...item,
-          affiliate_link: sanitizeShopeeLink(item.affiliate_link, shopeeId),
+          affiliate_link: sanitizeShopeeLink(item.affiliate_link, ownerShopeeId),
         })));
       }
       
