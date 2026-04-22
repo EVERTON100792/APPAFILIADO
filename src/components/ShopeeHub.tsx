@@ -554,14 +554,14 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
         </div>
       )}
 
-      {activeTab === "elite" && products.length === 0 && (
+      {activeTab === "elite" && (products || []).length === 0 && (
         <div className="flex flex-col gap-4 p-8 text-center">
           <p className="text-[10px] font-bold text-slate-500/60 uppercase tracking-widest">Nenhum produto encontrado</p>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3.5">
-        {products.filter(p => p.item_name && p.item_name.length > 3).slice(0, visibleCount).map((product) => (
+        {(products || []).filter(p => p.item_name && p.item_name.length > 3).slice(0, visibleCount).map((product) => (
           <div key={product.item_id} className="tech-card p-2 flex flex-col gap-3 group border-white/5 bg-slate-900/20">
             <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" className="block relative group/img">
               <SwipeableImageCard product={product} />
@@ -591,7 +591,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
         ))}
       </div>
 
-      {visibleCount < products.length && (
+      {visibleCount < (products || []).length && (
         <div className="flex justify-center mt-4">
           <button 
             onClick={() => setVisibleCount(prev => prev + 12)}

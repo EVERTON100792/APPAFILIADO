@@ -245,21 +245,10 @@ export class VideoProcessor {
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
         const targetSampleRate = 44100;
-        // Mobile: mantém áudio original (não processa pitch - muito pesado)
-        // Desktop: aplica pitch se for autoral (0.92 = voz mais grossa)
+        // Mobile Turbo: mantém áudio original (não processa pitch - muito pesado)
+        // Desktop/Normal: aplica pitch se for autoral (0.92 = voz mais grossa conforme solicitado)
         const pitchFactor = (options.isAutoral && !options.mobileTurbo) ? 0.92 : 1.0;
-        
-        // Decodifica áudio uma única vez para todos os casos
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const arrayBuffer = await (await fetch(videoUrl)).arrayBuffer();
-        let mainAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        
-        // Só aplica processamento de pitch no desktop e se for autoral
-        if (options.isAutoral && !options.mobileTurbo) {
-          mainAudioBuffer = await this.processAudioBuffer(arrayBuffer, targetSampleRate, pitchFactor);
-        }
-        
-        await audioCtx.close();
+        let mainAudioBuffer = await this.processAudioBuffer(await (await fetch(videoUrl)).arrayBuffer(), targetSampleRate, pitchFactor);
         if (options.musicUrl) {
           const bg = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
           // Mix logic (simplified)
@@ -284,7 +273,7 @@ export class VideoProcessor {
           firstTimestampBehavior: 'offset' 
         });
         const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
-        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 6_000_000 }); // Aumentado para 6Mbps para fluidez
+        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 4_000_000 });
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
@@ -343,11 +332,7 @@ export class VideoProcessor {
           this.ctx.filter = filterCSS;
           this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
           
-          // Transições de Início, Meio e Fim
-          const progress = i / totalFrames;
-          if (progress < 0.05) this.applyCapCutTransition('zoomBlur', 1 - (progress/0.05), W, H);
-          else if (progress > 0.47 && progress < 0.53) this.applyCapCutTransition('flash', 1 - Math.abs(0.5 - progress)/0.03, W, H);
-          else if (progress > 0.95) this.applyCapCutTransition('zoomBlur', (progress - 0.95)/0.05, W, H);
+          
 
           this.ctx.restore();
 
@@ -450,15 +435,9 @@ export class VideoProcessor {
         });
         const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
         // Usar Baseline profile (42E01E) e bitrate menor para máxima compatibilidade e leveza
-        videoEncoder.configure({ codec: 'avc1.42E01E', width: W, height: H, bitrate: 2_500_000 });
+        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 3_000_000 });
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
-
-        // Sorteio de transições dinâmicas para o vídeo
-        const transitionTypes = ['zoomIn', 'slideL', 'slideR', 'flash', 'glitchLite'];
-        const startT = transitionTypes[Math.floor(Math.random() * transitionTypes.length)];
-        const midT = transitionTypes[Math.floor(Math.random() * transitionTypes.length)];
-        const endT = transitionTypes[Math.floor(Math.random() * transitionTypes.length)];
 
         const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre);
 
@@ -490,30 +469,6 @@ export class VideoProcessor {
           const scrollY = (H - img.height * baseScale * kbScale) / 2;
 
           this.ctx.filter = filterCSS;
-          
-          // Transição suave entre slides (fixa para coerência)
-          const tp = progress / 0.15; // Transição mais rápida (15% do slide)
-          if (tp < 1.0 && slideIdx > 0) {
-            this.applyCapCutTransition('fade', 1 - tp, W, H);
-          }
-
-          // Transições Dinâmicas de Início, Meio e Fim
-          const totalProgress = i / totalFrames;
-          
-          // Início (entrada suave)
-          if (totalProgress < 0.08) {
-            this.applyCapCutTransition(startT, 1 - (totalProgress/0.08), W, H);
-          } 
-          // Meio (impacto visual)
-          else if (totalProgress > 0.46 && totalProgress < 0.54) {
-            const mp = 1 - Math.abs(0.5 - totalProgress)/0.04;
-            this.applyCapCutTransition(midT, mp, W, H);
-          }
-          // Fim (saída para CTA)
-          else if (totalProgress > 0.92) {
-            this.applyCapCutTransition(endT, (totalProgress - 0.92)/0.08, W, H);
-          }
-
           this.ctx.drawImage(img, scrollX, scrollY, img.width * baseScale * kbScale, img.height * baseScale * kbScale);
           this.ctx.restore();
 
