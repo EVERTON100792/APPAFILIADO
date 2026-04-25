@@ -3067,19 +3067,24 @@ const App: React.FC = () => {
       "info",
     );
 
+    const optimizedCaption = optimizeCaptionForPlatform(customCopy, selectedPlatform);
+
     try {
-      await navigator.clipboard.writeText(customCopy);
-      addLog("Bypass de Clipboard: LEGENDA COPIADA ✅", "success");
+      await navigator.clipboard.writeText(optimizedCaption);
+      addLog(`LEGENDA [${selectedPlatform.toUpperCase()}] COPIADA ✅`, "success");
+      if (selectedPlatform === 'shopee') {
+        addLog(`(Ajustada para 150 caracteres do limite Shopee)`, "info");
+      }
     } catch (e) {
       const textarea = document.createElement("textarea");
-      textarea.value = customCopy;
+      textarea.value = optimizedCaption;
       textarea.style.position = "fixed";
       textarea.style.opacity = "0";
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
-      addLog("LEGENDA COPIADA (fallback) ✅", "success");
+      addLog(`LEGENDA [${selectedPlatform.toUpperCase()}] COPIADA (fallback) ✅`, "success");
     }
 
     if (selectedProduct) {
