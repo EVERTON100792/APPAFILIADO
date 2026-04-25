@@ -1368,6 +1368,43 @@ const App: React.FC = () => {
     return `${parts1[seed % parts1.length]}\n${parts2[seed % parts2.length]}`;
   };
 
+  const optimizeCaptionForPlatform = (caption: string, platform: "tiktok" | "shopee") => {
+    if (!caption) return "";
+    
+    if (platform === "tiktok") {
+      // TikTok: Sem limite rigoroso (atualmente ~4000 caracteres)
+      return caption;
+    }
+    
+    // Shopee: Limite de 150 caracteres para legendas de vídeos
+    if (caption.length <= 150) return caption;
+    
+    const lines = caption.split('\n').filter(l => l.trim() !== "");
+    const hashtags = lines.find(l => l.includes("#")) || "#shopee #achadinhos #viral";
+    const title = lines[0] || "Achadinho Viral!";
+    
+    // Tenta: Título + Hashtags
+    let result = `${title}\n${hashtags}`;
+    
+    if (result.length > 150) {
+      // Se ainda for grande, remove hashtags do final até caber
+      const tagsArray = hashtags.split(' ');
+      let currentTags = [...tagsArray];
+      while (currentTags.length > 2 && (`${title}\n${currentTags.join(' ')}`).length > 150) {
+        currentTags.pop();
+      }
+      result = `${title}\n${currentTags.join(' ')}`;
+    }
+    
+    if (result.length > 150) {
+      // Caso extremo: corta o título
+      const availableSpace = 150 - 25; // deixa espaço para algumas tags
+      result = `${title.substring(0, availableSpace)}...\n#shopee #achados`;
+    }
+    
+    return result.substring(0, 150);
+  };
+
   const resetVideoEditor = () => {
     setActiveFilter("none");
     setActiveTransition("none");
