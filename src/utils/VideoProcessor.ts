@@ -5,8 +5,8 @@ export interface ProcessingOptions {
   filter: string;
   legend: string;
   isMuted: boolean;
-  transition: 'zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'none';
-  transitionList?: ('zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'wave' | 'spiral' | 'pixelate' | 'none')[];
+  transition: 'zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'cinematic' | 'none';
+  transitionList?: ('zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'wave' | 'spiral' | 'pixelate' | 'cinematic' | 'none')[];
   videoId?: string;
   trimStart?: number;
   trimEnd?: number;
@@ -411,7 +411,14 @@ export class VideoProcessor {
             this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, video.duration);
           }
 
-          if (options.storeName) {
+          // Efeitos Cinematográficos para modo Autoral
+          if (options.isAutoral) {
+            this.drawVignette(W, H);
+            this.drawCinematicOverlay(W, H, currentTime);
+          }
+
+          // BRANDING: Apenas se não for autoral (Shopee ban)
+          if (options.storeName && !options.isAutoral) {
             this.drawStoreBranding(W, H, options);
           }
 
@@ -544,7 +551,14 @@ export class VideoProcessor {
             this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, targetDuration);
           }
 
-          if (options.storeName) {
+          // Efeitos Cinematográficos para modo Autoral
+          if (options.isAutoral) {
+            this.drawVignette(W, H);
+            this.drawCinematicOverlay(W, H, currentTime);
+          }
+
+          // BRANDING: Apenas se não for autoral (Shopee ban)
+          if (options.storeName && !options.isAutoral) {
             this.drawStoreBranding(W, H, options);
           }
 
@@ -809,6 +823,39 @@ export class VideoProcessor {
     this.ctx.restore();
   }
 
+  private drawVignette(W: number, H: number) {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    
+    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 1.1);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.15)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    
+    this.ctx.fillStyle = gradient;
+    this.ctx.fillRect(0, 0, W, H);
+    this.ctx.restore();
+  }
+
+  private drawCinematicOverlay(W: number, H: number, time: number) {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.globalCompositeOperation = 'screen';
+    
+    // Light leak simulado com gradiente linear móvel
+    const x = Math.sin(time * 0.5) * W * 0.5 + W * 0.5;
+    const y = Math.cos(time * 0.3) * H * 0.5 + H * 0.5;
+    
+    const gradient = this.ctx.createRadialGradient(x, y, 0, x, y, W * 0.8);
+    gradient.addColorStop(0, 'rgba(255, 120, 0, 0.12)');
+    gradient.addColorStop(0.5, 'rgba(255, 50, 0, 0.05)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    
+    this.ctx.fillStyle = gradient;
+    this.ctx.fillRect(0, 0, W, H);
+    this.ctx.restore();
+  }
+
   private applyTransitionEffect(transition: string, time: number, timestamps: number[], W: number, H: number) {
     if (!timestamps) return;
     const t = timestamps.find(ts => Math.abs(time - ts) < 0.25);
@@ -853,6 +900,17 @@ export class VideoProcessor {
       case 'glitchLite':
         // Glitch usando apenas transformações de posição (sem filtros de cor)
         this.ctx.translate((Math.random()-0.5)*25*smoothP, (Math.random()-0.5)*25*smoothP);
+        break;
+      case 'cinematic':
+        // Transição Cinematic: Zoom + Light Flash + Subtle Rotation
+        this.ctx.translate(W/2, H/2);
+        this.ctx.scale(1 + smoothP * 0.12, 1 + smoothP * 0.12);
+        this.ctx.rotate(smoothP * 0.02);
+        this.ctx.translate(-W/2, -H/2);
+        
+        // Flash alaranjado suave
+        this.ctx.fillStyle = `rgba(255, 160, 50, ${smoothP * 0.35})`;
+        this.ctx.fillRect(0, 0, W, H);
         break;
       case 'fade':
         this.ctx.globalAlpha = 1 - smoothP;
