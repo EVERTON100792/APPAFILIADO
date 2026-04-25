@@ -5,8 +5,8 @@ export interface ProcessingOptions {
   filter: string;
   legend: string;
   isMuted: boolean;
-  transition: 'zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'cinematic' | 'none';
-  transitionList?: ('zoom' | 'flash' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'whipDown' | 'zoomBlur' | 'glassSplit' | 'colorBurn' | 'wave' | 'spiral' | 'pixelate' | 'cinematic' | 'none')[];
+  transition: 'crossFade' | 'whipLeft' | 'whipRight' | 'pushUp' | 'pushDown' | 'zoomBurst' | 'lensBlur' | 'flashWhite' | 'glitchShift' | 'rotateIn' | 'scaleDown' | 'lightLeak' | 'zoomIn' | 'slideL' | 'slideR' | 'flash' | 'glitchLite' | 'cinematic' | 'fade' | 'zoom' | 'slide' | 'beat' | 'blur' | 'shake' | 'rotate' | 'fire' | 'glitch' | 'none';
+  transitionList?: string[];
   videoId?: string;
   trimStart?: number;
   trimEnd?: number;
@@ -530,20 +530,88 @@ export class VideoProcessor {
           let beatPulse = 1;
           if (beatPhase < 0.1 && !isCTA) beatPulse = 1 + (1 - beatPhase / 0.1) * 0.03;
 
+          // --- CROSSFADE PROFISSIONAL ENTRE SLIDES ---
+          const FADE_DURATION = 0.45; // 450ms de crossfade suave
+          const slideProgress = currentTime % slideDuration; // tempo dentro do slide atual
+          const isInTransitionOut = slideProgress > (slideDuration - FADE_DURATION); // saindo
+          const isInTransitionIn  = slideProgress < FADE_DURATION;                   // entrando
+
+          // Calcula qual transição usar para este slide
+          const transitionTypes = options.transitionList && options.transitionList.length > 0
+            ? options.transitionList
+            : ['crossFade', 'whipLeft', 'zoomBurst', 'flashWhite', 'lensBlur'];
+          const transIdx = slideIdx % transitionTypes.length;
+          const currentTransition = transitionTypes[transIdx];
+          const nextTransition = transitionTypes[(transIdx + 1) % transitionTypes.length];
+
           this.ctx.save();
-          if (beatPulse > 1) {
-            this.ctx.translate(W/2, H/2);
-            this.ctx.scale(beatPulse, beatPulse);
-            this.ctx.translate(-W/2, -H/2);
+
+          if (isInTransitionOut) {
+            // Slide saindo: aplica efeito de saída
+            const tOut = (slideProgress - (slideDuration - FADE_DURATION)) / FADE_DURATION; // 0→1
+            const easedOut = this.easeInOutCubic(tOut);
+
+            // Desenhar próximo slide por baixo (blend)
+            const nextSlideIdx = (slideIdx + 1) % imgs.length;
+            const nextImg = imgs[nextSlideIdx];
+            if (nextImg) {
+              const bsNext = Math.max(W / nextImg.width, H / nextImg.height);
+              const kbNext = 1 + (0) * 0.1;
+              const sxNext = (W - nextImg.width * bsNext * kbNext) / 2;
+              const syNext = (H - nextImg.height * bsNext * kbNext) / 2;
+              this.ctx.globalAlpha = easedOut;
+              this.ctx.filter = filterCSS;
+              this.ctx.drawImage(nextImg, sxNext, syNext, nextImg.width * bsNext * kbNext, nextImg.height * bsNext * kbNext);
+              this.ctx.globalAlpha = 1;
+            }
+
+            // Desenhar slide atual por cima com efeito de saída
+            this.applyProfessionalTransitionOut(currentTransition, easedOut, W, H);
+            const baseScale2 = Math.max(W / img.width, H / img.height);
+            const kbScale2 = 1 + progress * 0.08;
+            const sx2 = (W - img.width * baseScale2 * kbScale2) / 2;
+            const sy2 = (H - img.height * baseScale2 * kbScale2) / 2;
+            this.ctx.filter = filterCSS;
+            this.ctx.drawImage(img, sx2, sy2, img.width * baseScale2 * kbScale2, img.height * baseScale2 * kbScale2);
+
+          } else if (isInTransitionIn) {
+            // Slide entrando
+            const tIn = slideProgress / FADE_DURATION; // 0→1
+            const easedIn = this.easeInOutCubic(tIn);
+
+            // Desenhar slide anterior por baixo
+            const prevSlideIdx = (slideIdx - 1 + imgs.length) % imgs.length;
+            const prevImg = imgs[prevSlideIdx];
+            if (prevImg) {
+              const bsPrev = Math.max(W / prevImg.width, H / prevImg.height);
+              const kbPrev = 1 + 0.08;
+              const sxPrev = (W - prevImg.width * bsPrev * kbPrev) / 2;
+              const syPrev = (H - prevImg.height * bsPrev * kbPrev) / 2;
+              this.ctx.globalAlpha = 1;
+              this.ctx.filter = filterCSS;
+              this.ctx.drawImage(prevImg, sxPrev, syPrev, prevImg.width * bsPrev * kbPrev, prevImg.height * bsPrev * kbPrev);
+            }
+
+            // Slide atual entrando com efeito
+            this.applyProfessionalTransitionIn(nextTransition, easedIn, W, H);
+            const baseScale3 = Math.max(W / img.width, H / img.height);
+            const kbScale3 = 1 + progress * 0.08;
+            const sx3 = (W - img.width * baseScale3 * kbScale3) / 2;
+            const sy3 = (H - img.height * baseScale3 * kbScale3) / 2;
+            this.ctx.filter = filterCSS;
+            this.ctx.drawImage(img, sx3, sy3, img.width * baseScale3 * kbScale3, img.height * baseScale3 * kbScale3);
+
+          } else {
+            // Slide estável: Ken Burns suave
+            const baseScale = Math.max(W / img.width, H / img.height);
+            const kbScale = 1 + progress * 0.08;
+            const scrollX = (W - img.width * baseScale * kbScale) / 2;
+            const scrollY = (H - img.height * baseScale * kbScale) / 2;
+            this.ctx.globalAlpha = 1;
+            this.ctx.filter = filterCSS;
+            this.ctx.drawImage(img, scrollX, scrollY, img.width * baseScale * kbScale, img.height * baseScale * kbScale);
           }
 
-          const baseScale = Math.max(W / img.width, H / img.height);
-          const kbScale = 1 + progress * 0.1;
-          const scrollX = (W - img.width * baseScale * kbScale) / 2;
-          const scrollY = (H - img.height * baseScale * kbScale) / 2;
-
-          this.ctx.filter = filterCSS;
-          this.ctx.drawImage(img, scrollX, scrollY, img.width * baseScale * kbScale, img.height * baseScale * kbScale);
           this.ctx.restore();
 
           this.ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -858,66 +926,152 @@ export class VideoProcessor {
 
   private applyTransitionEffect(transition: string, time: number, timestamps: number[], W: number, H: number) {
     if (!timestamps) return;
-    const t = timestamps.find(ts => Math.abs(time - ts) < 0.25);
+    const t = timestamps.find(ts => Math.abs(time - ts) < 0.3);
     if (!t) return;
-    const p = 1 - Math.abs(time - t) / 0.25;
-    this.applyCapCutTransition(transition, p, W, H);
+    const p = 1 - Math.abs(time - t) / 0.3; // 0→1→0
+    const smoothP = this.easeInOutCubic(p);
+    this.applyProfessionalTransitionIn(transition, smoothP, W, H);
   }
 
   private easeInOutCubic(x: number): number {
     return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   }
 
-  private applyCapCutTransition(type: string, p: number, W: number, H: number) {
+  private easeOutQuart(x: number): number {
+    return 1 - Math.pow(1 - x, 4);
+  }
+
+  // Efeito de SAÍDA do slide atual (slide que vai embora)
+  private applyProfessionalTransitionOut(type: string, p: number, W: number, H: number) {
     if (p <= 0) return;
-    
-    // Aplicar suavização (easing) para evitar travadas visuais
-    const smoothP = this.easeInOutCubic(p);
-    
-    // NOTA: Removido Save/Restore interno para que os efeitos de transform/alpha 
-    // se apliquem à imagem que será desenhada logo após a chamada desta função.
-    
+    const s = this.easeInOutCubic(p);
     switch (type) {
-      case 'zoomIn':
-        this.ctx.translate(W/2, H/2);
-        this.ctx.scale(1 + smoothP * 0.15, 1 + smoothP * 0.15);
-        this.ctx.translate(-W/2, -H/2);
-        this.ctx.globalAlpha = 1 - (smoothP * 0.3); // Leve fade acompanhando o zoom
-        break;
-      case 'slideL':
-        this.ctx.translate(-smoothP * 100, 0);
-        break;
-      case 'slideR':
-        this.ctx.translate(smoothP * 100, 0);
-        break;
-      case 'flash':
-        // Flash usando apenas opacidade (muito mais leve que brightness filter)
-        this.ctx.globalAlpha = 1 - (smoothP * 0.4); 
-        this.ctx.fillStyle = `white`;
-        this.ctx.globalAlpha = smoothP * 0.5;
-        this.ctx.fillRect(0, 0, W, H);
-        break;
-      case 'glitchLite':
-        // Glitch usando apenas transformações de posição (sem filtros de cor)
-        this.ctx.translate((Math.random()-0.5)*25*smoothP, (Math.random()-0.5)*25*smoothP);
-        break;
-      case 'cinematic':
-        // Transição Cinematic: Zoom + Light Flash + Subtle Rotation
-        this.ctx.translate(W/2, H/2);
-        this.ctx.scale(1 + smoothP * 0.12, 1 + smoothP * 0.12);
-        this.ctx.rotate(smoothP * 0.02);
-        this.ctx.translate(-W/2, -H/2);
-        
-        // Flash alaranjado suave
-        this.ctx.fillStyle = `rgba(255, 160, 50, ${smoothP * 0.35})`;
-        this.ctx.fillRect(0, 0, W, H);
-        break;
+      case 'crossFade':
       case 'fade':
-        this.ctx.globalAlpha = 1 - smoothP;
+        this.ctx.globalAlpha = 1 - s;
+        break;
+      case 'whipLeft':
+        this.ctx.translate(-s * W * 1.1, 0);
+        this.ctx.globalAlpha = 1 - s * 0.5;
+        break;
+      case 'whipRight':
+        this.ctx.translate(s * W * 1.1, 0);
+        this.ctx.globalAlpha = 1 - s * 0.5;
+        break;
+      case 'pushUp':
+        this.ctx.translate(0, -s * H);
+        break;
+      case 'pushDown':
+        this.ctx.translate(0, s * H);
+        break;
+      case 'zoomBurst':
+        this.ctx.translate(W/2, H/2);
+        this.ctx.scale(1 + s * 0.25, 1 + s * 0.25);
+        this.ctx.translate(-W/2, -H/2);
+        this.ctx.globalAlpha = 1 - s;
+        break;
+      case 'scaleDown':
+        this.ctx.translate(W/2, H/2);
+        this.ctx.scale(1 - s * 0.3, 1 - s * 0.3);
+        this.ctx.translate(-W/2, -H/2);
+        this.ctx.globalAlpha = 1 - s;
+        break;
+      case 'flashWhite':
+        this.ctx.globalAlpha = 1 - s;
+        // Flash no topo
+        this.ctx.fillStyle = `rgba(255,255,255,${s * 0.9})`;
+        this.ctx.fillRect(0, 0, W, H);
+        break;
+      case 'glitchShift':
+        this.ctx.translate((Math.round(Math.random()) * 2 - 1) * s * W * 0.04, 0);
+        this.ctx.globalAlpha = 1 - s * 0.6;
+        break;
+      case 'rotateIn':
+        this.ctx.translate(W/2, H/2);
+        this.ctx.rotate(s * 0.08);
+        this.ctx.translate(-W/2, -H/2);
+        this.ctx.globalAlpha = 1 - s;
+        break;
+      case 'lensBlur':
+        this.ctx.globalAlpha = 1 - s;
+        break;
+      case 'lightLeak':
+        this.ctx.globalAlpha = 1 - s;
+        // Vazamento de luz laranja
+        this.ctx.fillStyle = `rgba(255, 140, 0, ${s * 0.6})`;
+        this.ctx.fillRect(0, 0, W * 0.3, H);
         break;
       default:
-        this.ctx.globalAlpha = 1 - smoothP;
-        break;
+        this.ctx.globalAlpha = 1 - s;
     }
+  }
+
+  // Efeito de ENTRADA do próximo slide
+  private applyProfessionalTransitionIn(type: string, p: number, W: number, H: number) {
+    if (p <= 0) {
+      this.ctx.globalAlpha = 0;
+      return;
+    }
+    const s = this.easeOutQuart(p);
+    switch (type) {
+      case 'crossFade':
+      case 'fade':
+        this.ctx.globalAlpha = s;
+        break;
+      case 'whipLeft':
+        this.ctx.translate(W * (1 - s), 0);
+        this.ctx.globalAlpha = s;
+        break;
+      case 'whipRight':
+        this.ctx.translate(-W * (1 - s), 0);
+        this.ctx.globalAlpha = s;
+        break;
+      case 'pushUp':
+        this.ctx.translate(0, H * (1 - s));
+        break;
+      case 'pushDown':
+        this.ctx.translate(0, -H * (1 - s));
+        break;
+      case 'zoomBurst':
+        this.ctx.translate(W/2, H/2);
+        this.ctx.scale(0.75 + s * 0.25, 0.75 + s * 0.25);
+        this.ctx.translate(-W/2, -H/2);
+        this.ctx.globalAlpha = s;
+        break;
+      case 'scaleDown':
+        this.ctx.translate(W/2, H/2);
+        this.ctx.scale(1.3 - s * 0.3, 1.3 - s * 0.3);
+        this.ctx.translate(-W/2, -H/2);
+        this.ctx.globalAlpha = s;
+        break;
+      case 'flashWhite':
+        this.ctx.globalAlpha = s;
+        break;
+      case 'glitchShift':
+        if (p < 0.5) {
+          this.ctx.translate((Math.round(Math.random()) * 2 - 1) * (1-p) * W * 0.03, 0);
+        }
+        this.ctx.globalAlpha = s;
+        break;
+      case 'rotateIn':
+        this.ctx.translate(W/2, H/2);
+        this.ctx.rotate(-(1-s) * 0.08);
+        this.ctx.translate(-W/2, -H/2);
+        this.ctx.globalAlpha = s;
+        break;
+      case 'lensBlur':
+        this.ctx.globalAlpha = s;
+        break;
+      case 'lightLeak':
+        this.ctx.globalAlpha = s;
+        break;
+      default:
+        this.ctx.globalAlpha = s;
+    }
+  }
+
+  // Mantido para compatibilidade com renderVideo (transições em timestamps)
+  private applyCapCutTransition(type: string, p: number, W: number, H: number) {
+    this.applyProfessionalTransitionIn(type, p, W, H);
   }
 }

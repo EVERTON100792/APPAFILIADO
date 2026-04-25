@@ -577,18 +577,10 @@ const App: React.FC = () => {
 
   const getPlatformUrl = (type: "shopee" | "tiktok") => {
     if (type === "shopee") {
-      if (isMobile) {
-        // Android: Intent URL correto para abrir o app da Shopee no feed de vídeos
-        // 'shopee://' não é registrado como intent válido no Android - usar link universal
-        return "https://shopee.com.br/m/shopee-video";
-      }
-      return "https://affiliate.shopee.com.br/offer/product_offer";
+      // Web fallback - usado se o app não estiver instalado
+      return "https://shopee.com.br/m/shopee-video";
     } else {
-      // No mobile, abrimos o app do TikTok diretamente
-      if (isMobile) {
-        return "snssdk1233://";
-      }
-      // Desktop: ir direto para página de upload
+      if (isMobile) return "snssdk1233://";
       return "https://www.tiktok.com/upload";
     }
   };
@@ -3145,26 +3137,33 @@ const App: React.FC = () => {
     }
 
     const openPublishingDestination = () => {
-      const target = getPlatformUrl(selectedPlatform);
       const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ("ontouchstart" in window);
 
-      if (isMobileDevice && selectedPlatform === "tiktok") {
-        // TikTok: tentar abrir o app via deep link, fallback para web
-        const now = Date.now();
-        addLog("Tentando abrir TikTok...", "info");
-        window.location.href = "snssdk1233://";
-
-        setTimeout(() => {
-          if (document.visibilityState === "visible" && (Date.now() - now) < 2000) {
-            addLog("App TikTok não detectado. Abrindo web...", "warn");
-            window.open("https://www.tiktok.com/upload", "_blank");
-          }
-        }, 1500);
-      } else {
-        // Shopee mobile e Desktop: abrir link diretamente em nova aba
-        // (shopee:// não funciona como intent no Android)
-        addLog(`Abrindo ${selectedPlatform === "shopee" ? "Shopee" : "destino"}...`, "info");
-        window.open(target, "_blank", "noopener,noreferrer");
+      if (selectedPlatform === "tiktok") {
+        if (isMobileDevice) {
+          // TikTok: intent deep link nativo
+          const now = Date.now();
+          addLog("Tentando abrir TikTok...", "info");
+          window.location.href = "snssdk1233://";
+          setTimeout(() => {
+            if (document.visibilityState === "visible" && (Date.now() - now) < 2000) {
+              addLog("TikTok app não detectado. Abrindo web...", "warn");
+              window.open("https://www.tiktok.com/upload", "_blank");
+            }
+          }, 1500);
+        } else {
+          window.open("https://www.tiktok.com/upload", "_blank", "noopener,noreferrer");
+        }
+      } else if (selectedPlatform === "shopee") {
+        // Android Intent URL - abre o app Shopee diretamente pelo package name
+        // Se não estiver instalado, o Android redireciona para a Play Store ou URL de fallback
+        const intentUrl = "intent://shopee.com.br/#Intent;scheme=https;package=com.shopee.br;S.browser_fallback_url=https%3A%2F%2Fshopee.com.br%2Fm%2Fshopee-video;end";
+        addLog("Abrindo Shopee...", "info");
+        if (isMobileDevice) {
+          window.location.href = intentUrl;
+        } else {
+          window.open("https://affiliate.shopee.com.br/offer/product_offer", "_blank", "noopener,noreferrer");
+        }
       }
     };
     /* EX-LOGIC:

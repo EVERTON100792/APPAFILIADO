@@ -64,14 +64,14 @@ export const VIRAL_MUSIC: ViralMusic[] = [
   { id: "t36", name: "Glow Up - Shine 🌟",              url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",  genre: "pop",         bpm: 118, mood: "happy" },
 ];
 
-// ======================================================
-// Transições de Vídeo Premium (Estilo CapCut Pro)
-// ======================================================
+// As 12 transições profissionais do VideoProcessor (com crossfade real entre slides)
 export const TRANSITIONS = [
-  'zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate', 'wave', 'spiral', 'pixelate',
-  'split', 'zoomOut', 'slideUp', 'slideDown', 'fade', 'wipe', 'iris', 'clock', 'checker', 'strips',
-  'sweep', 'band', 'fadeColor', 'radial', 'smooth', 'slideLeft', 'slideRight', 'zoomIn', 'flip',
-  'roll', 'page', 'circle', 'cross', 'diamond', 'heart', 'star', 'fisheye', 'cylinder', 'twist',
+  // Profissionais (crossfade engine)
+  'crossFade', 'whipLeft', 'whipRight', 'pushUp', 'pushDown',
+  'zoomBurst', 'lensBlur', 'flashWhite', 'glitchShift', 'rotateIn',
+  'scaleDown', 'lightLeak',
+  // Legacy (compatibilidade com renderVideo)
+  'zoomIn', 'slideL', 'slideR', 'flash', 'glitchLite', 'cinematic', 'fade',
 ] as const;
 
 export const FILTERS = [
