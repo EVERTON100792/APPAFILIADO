@@ -577,9 +577,10 @@ const App: React.FC = () => {
 
   const getPlatformUrl = (type: "shopee" | "tiktok") => {
     if (type === "shopee") {
-      // No mobile, abrir o app do Shopee diretamente
       if (isMobile) {
-        return "shopee://";
+        // Android: Intent URL correto para abrir o app da Shopee no feed de vídeos
+        // 'shopee://' não é registrado como intent válido no Android - usar link universal
+        return "https://shopee.com.br/m/shopee-video";
       }
       return "https://affiliate.shopee.com.br/offer/product_offer";
     } else {
@@ -3146,21 +3147,23 @@ const App: React.FC = () => {
     const openPublishingDestination = () => {
       const target = getPlatformUrl(selectedPlatform);
       const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ("ontouchstart" in window);
-      
-      if (isMobileDevice) {
-        // Redirecionamento robusto para mobile em App.tsx
+
+      if (isMobileDevice && selectedPlatform === "tiktok") {
+        // TikTok: tentar abrir o app via deep link, fallback para web
         const now = Date.now();
-        const protocol = selectedPlatform === "tiktok" ? "tiktok://" : "shopee://";
-        addLog(`Tentando abrir protocolo ${protocol}...`, "info");
-        window.location.href = protocol;
-        
+        addLog("Tentando abrir TikTok...", "info");
+        window.location.href = "snssdk1233://";
+
         setTimeout(() => {
           if (document.visibilityState === "visible" && (Date.now() - now) < 2000) {
-            addLog("App não detectado. Redirecionando para Web...", "warn");
-            window.location.href = target;
+            addLog("App TikTok não detectado. Abrindo web...", "warn");
+            window.open("https://www.tiktok.com/upload", "_blank");
           }
         }, 1500);
       } else {
+        // Shopee mobile e Desktop: abrir link diretamente em nova aba
+        // (shopee:// não funciona como intent no Android)
+        addLog(`Abrindo ${selectedPlatform === "shopee" ? "Shopee" : "destino"}...`, "info");
         window.open(target, "_blank", "noopener,noreferrer");
       }
     };
