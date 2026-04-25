@@ -40,7 +40,8 @@ import {
   Plus,
   Check,
   Play,
-  Images
+  Images,
+  ExternalLink
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -5109,6 +5110,29 @@ const App: React.FC = () => {
                           Shopee
                         </motion.button>
                       </div>
+
+                      {/* BOTAO VER PRODUTO - Acesso rápido para favoritar */}
+                      {selectedProduct?.product_link && (
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          whileHover={{ scale: 1.01 }}
+                          className="w-full h-14 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border border-yellow-400/30"
+                          style={{
+                            background: "linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fbbf24 100%)",
+                            color: "#1a0a00",
+                            boxShadow: "0 4px 20px rgba(251,146,60,0.35)"
+                          }}
+                          onClick={() => {
+                            const link = selectedProduct.product_link;
+                            if (link) {
+                              window.open(link, "_blank");
+                            }
+                          }}
+                        >
+                          <ExternalLink size={16} strokeWidth={2.5} />
+                          ⭐ Ver Produto na Shopee
+                        </motion.button>
+                      )}
 
                       <div className="grid grid-cols-2 gap-3">
                         <motion.button
