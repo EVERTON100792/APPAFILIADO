@@ -1529,6 +1529,39 @@ const App: React.FC = () => {
       let extractedName = customLink.trim();
       let stringParseSuccess = false;
 
+      // ── OFFER ID DETECTION ────────────────────────────────────────────────────
+      // Detecta padrão de ID de afiliado da Shopee: ex. BBX-GNA-ZFX (3 grupos alfanuméricos separados por -)
+      const offerIdPattern = /^([A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6})$/;
+      const offerIdMatch = extractedName.match(offerIdPattern);
+
+      if (offerIdMatch) {
+        const offerId = offerIdMatch[1].toUpperCase();
+        showToast(`🔍 Buscando produto com ID: ${offerId}`);
+
+        // 1️⃣ Busca instantânea no banco local (mais rápida)
+        const allLocal = [...databaseProducts, ...activeItems];
+        const localMatch = allLocal.find(p =>
+          (p.product_link || "").toUpperCase().includes(offerId) ||
+          (p.affiliate_link || "").toUpperCase().includes(offerId) ||
+          String(p.item_id || "").toUpperCase() === offerId ||
+          String(p.id || "").toUpperCase() === offerId
+        );
+
+        if (localMatch) {
+          setSelectedProduct(localMatch);
+          setStep("list");
+          void researchTikTok(localMatch);
+          setCustomLink("");
+          showToast("✅ Produto encontrado na sua biblioteca!");
+          return;
+        }
+
+        // 2️⃣ Se não achou local, converte para short link e resolve via proxy
+        extractedName = `https://s.shopee.com.br/${offerId}`;
+        showToast("🌐 Buscando na Shopee...");
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       // 1. Tenta tirar o nome da própria string se for um link completo da Shopee
       // (100% à prova de falhas de anti-bot)
       try {
