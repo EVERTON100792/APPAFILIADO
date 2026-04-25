@@ -2230,6 +2230,8 @@ const App: React.FC = () => {
       console.error("Erro ao criar vídeo:", err);
       showToast(err.message || "ERRO AO CRIAR VÍDEO");
       setStep("list");
+    } finally {
+      videoProcessor.dispose();
     }
   }
 
@@ -2336,6 +2338,7 @@ const App: React.FC = () => {
       showToast("ERRO AO TRANSFORMAR: " + (err.message || "Tente novamente"));
     } finally {
       setIsProcessing(false);
+      processor.dispose();
     }
   }
 
@@ -2612,6 +2615,8 @@ const App: React.FC = () => {
       console.error("Erro ao criar vídeo autoral:", err);
       showToast(err.message || "ERRO AO CRIAR VÍDEO AUTORAL");
       setStep("list");
+    } finally {
+      videoProcessor.dispose();
     }
   }
 
@@ -4064,7 +4069,7 @@ const App: React.FC = () => {
               transition={stepTransition}
               className="step-wrapper-standard flex flex-col items-center justify-center p-6"
             >
-              <div className="w-full max-w-md rounded-[2.25rem] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.94)_0%,rgba(2,6,23,0.98)_100%)] p-7 shadow-[0_30px_120px_rgba(2,6,23,0.8)] backdrop-blur-3xl">
+              <div className="w-full max-w-md rounded-[2.25rem] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.94)_0%,rgba(2,6,23,0.98)_100%)] p-7 shadow-[0_30px_120px_rgba(2,6,23,0.8)] backdrop-blur-xl sm:backdrop-blur-3xl">
                 <div className="flex flex-col items-center text-center gap-6">
                   <div className="relative">
                     <div className="absolute -inset-10 rounded-full bg-accent/12 blur-[60px]" />
