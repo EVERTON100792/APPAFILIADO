@@ -1530,15 +1530,16 @@ const App: React.FC = () => {
       let stringParseSuccess = false;
 
       // ── OFFER ID DETECTION ────────────────────────────────────────────────────
-      // Detecta padrão de ID de afiliado da Shopee: ex. BBX-GNA-ZFX (3 grupos alfanuméricos separados por -)
+      // Detecta padrão de ID de afiliado da Shopee: ex. BBX-GNA-ZFX
       const offerIdPattern = /^([A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6})$/;
       const offerIdMatch = extractedName.match(offerIdPattern);
 
       if (offerIdMatch) {
         const offerId = offerIdMatch[1].toUpperCase();
-        showToast(`🔍 Buscando produto com ID: ${offerId}`);
+        const offerIdLower = offerIdMatch[1].toLowerCase();
+        showToast(`🔍 Buscando: ${offerId}`);
 
-        // 1️⃣ Busca instantânea no banco local (mais rápida)
+        // 1️⃣ Busca instantânea no banco local
         const allLocal = [...databaseProducts, ...activeItems];
         const localMatch = allLocal.find(p =>
           (p.product_link || "").toUpperCase().includes(offerId) ||
@@ -1556,11 +1557,36 @@ const App: React.FC = () => {
           return;
         }
 
-        // 2️⃣ Se não achou local, converte para short link e resolve via proxy
-        extractedName = `https://s.shopee.com.br/${offerId}`;
-        showToast("🌐 Buscando na Shopee...");
+        // 2️⃣ Tenta via API da Shopee fazendo busca pelo ID como keyword
+        try {
+          showToast("🌐 Consultando Shopee...");
+          const results = await ShopeeService.searchProducts(
+            { keyword: offerId, sort_by: "sales", page_size: 10 } as any,
+            userShopeeId || undefined
+          );
+          if (results.length > 0) {
+            // Adiciona os resultados e seleciona o primeiro
+            setActiveItems(prev => {
+              const existingIds = new Set(prev.map(p => p.item_id));
+              const newOnes = results.filter(p => !existingIds.has(p.item_id));
+              return [...newOnes, ...prev].slice(0, 30);
+            });
+            setSelectedProduct(results[0]);
+            setStep("list");
+            void researchTikTok(results[0]);
+            setCustomLink("");
+            showToast(`✅ ${results.length} produto(s) encontrado(s)!`);
+            return;
+          }
+        } catch (_) { /* fallback abaixo */ }
+
+        // 3️⃣ Último recurso: converte para short link e tenta resolver via proxy
+        // Tenta com e sem dashes (alguns IDs são diferentes)
+        extractedName = `https://s.shopee.com.br/${offerIdLower}`;
+        showToast("🌐 Tentando via link curto...");
       }
       // ─────────────────────────────────────────────────────────────────────────
+
 
       // 1. Tenta tirar o nome da própria string se for um link completo da Shopee
       // (100% à prova de falhas de anti-bot)

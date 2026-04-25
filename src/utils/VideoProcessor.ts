@@ -614,6 +614,9 @@ export class VideoProcessor {
 
           this.ctx.restore();
 
+          // RESET OBRIGATÓRIO: garante que o alpha/filter do crossfade NÃO vaze para a legenda
+          this.ctx.globalAlpha = 1;
+          this.ctx.filter = 'none';
           this.ctx.setTransform(1, 0, 0, 1, 0, 0);
           if (options.script) {
             this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, targetDuration, options.isAutoral);
@@ -668,6 +671,10 @@ export class VideoProcessor {
   }
 
   private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string, totalDuration: number = 15, isAutoral: boolean = false) {
+    // RESET COMPLETO: a legenda deve aparecer sempre em full opacity,
+    // independente de qualquer efeito de transição de slide ativo
+    this.ctx.globalAlpha = 1;
+    this.ctx.filter = 'none';
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     let text = "";
     let typeIndex = 0;
