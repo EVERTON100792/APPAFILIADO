@@ -2190,6 +2190,7 @@ const App: React.FC = () => {
         musicGenre: music.genre || 'house',
         storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
         storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
+        isAutoral: true,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       } as any;
 
@@ -2284,6 +2285,7 @@ const App: React.FC = () => {
         storeSlug: storeSlug,
         storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
         storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
+        isAutoral: true,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
@@ -2525,6 +2527,7 @@ const App: React.FC = () => {
         storeSlug: storeSlug,
         storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
         storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
+        isAutoral: true,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 

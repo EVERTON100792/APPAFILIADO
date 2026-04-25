@@ -408,7 +408,7 @@ export class VideoProcessor {
           }
 
           if (options.script) {
-            this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, video.duration);
+            this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, video.duration, options.isAutoral);
           }
 
           // Efeitos Cinematográficos para modo Autoral
@@ -548,7 +548,7 @@ export class VideoProcessor {
 
           this.ctx.setTransform(1, 0, 0, 1, 0, 0);
           if (options.script) {
-            this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, targetDuration);
+            this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, targetDuration, options.isAutoral);
           }
 
           // Efeitos Cinematográficos para modo Autoral
@@ -599,7 +599,7 @@ export class VideoProcessor {
     });
   }
 
-  private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string, totalDuration: number = 15) {
+  private drawSpintaxOverlay(script: any, time: number, W: number, H: number, storeSlug?: string, totalDuration: number = 15, isAutoral: boolean = false) {
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     let text = "";
     let typeIndex = 0;
@@ -725,7 +725,7 @@ export class VideoProcessor {
       });
     });
 
-    if (typeIndex === 3 && storeSlug) {
+    if (typeIndex === 3 && storeSlug && !isAutoral) {
       this.ctx.setTransform(1, 0, 0, 1, 0, 0); 
       this.ctx.font = `italic 800 ${Math.floor(W * 0.045)}px "Inter"`;
       this.ctx.fillStyle = '#FFD700';
