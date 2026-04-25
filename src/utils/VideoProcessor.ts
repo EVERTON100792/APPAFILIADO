@@ -316,7 +316,6 @@ export class VideoProcessor {
           }
         }
 
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const framesToCache = isMobile ? 0 : Math.min(totalFrames, 300); // Desativar cache em mobile para economizar RAM
         const cachedFrames = this.frameCache.get(videoUrl) || [];
         const useCache = !isMobile && cachedFrames.length > 0;

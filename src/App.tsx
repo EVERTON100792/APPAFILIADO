@@ -2161,7 +2161,7 @@ const App: React.FC = () => {
     setTreatingProgress(20);
     setTreatingChecklist([`Criando v�deo com ${images.length} imagens...`]);
 
-    try {
+    let videoProcessor: VideoProcessor | null = null;     try {
       // Sortear m�sica
       const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
       const music = VIRAL_MUSIC[musicIndex];
@@ -2178,7 +2178,7 @@ const App: React.FC = () => {
       const newFilter = allFiltersList[Math.floor(Math.random() * allFiltersList.length)];
       setTreatingProgress(80);
 
-      const videoProcessor = new VideoProcessor();
+      videoProcessor = new VideoProcessor();      
       const options: ProcessingOptions = {
         filter: newFilter,
         transition: newTransitions[0] || 'zoom',
@@ -2231,7 +2231,7 @@ const App: React.FC = () => {
       showToast(err.message || "ERRO AO CRIAR VÍDEO");
       setStep("list");
     } finally {
-      videoProcessor.dispose();
+      if (videoProcessor) videoProcessor.dispose();
     }
   }
 
@@ -2257,15 +2257,16 @@ const App: React.FC = () => {
     setTreatingProgress(10);
     
     const isMobileRuntime = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ("ontouchstart" in window);
-
+    let processor: VideoProcessor | null = null;
     try {
+      processor = new VideoProcessor();
       const script = legendMode === 'custom' 
         ? generateViralScripts(targetProduct.item_name || targetProduct.title)[0]
         : undefined;
 
       setTreatingProgress(30);
 
-      const processor = new VideoProcessor();
+      
       
       // Gerar timestamps de transição automaticamente (a cada 3 segundos)
       const autoTransitions: number[] = [3, 6, 9, 12, 15, 18, 21, 24, 27];
@@ -2338,7 +2339,7 @@ const App: React.FC = () => {
       showToast("ERRO AO TRANSFORMAR: " + (err.message || "Tente novamente"));
     } finally {
       setIsProcessing(false);
-      processor.dispose();
+      if (processor) processor.dispose();
     }
   }
 
@@ -2421,7 +2422,7 @@ const App: React.FC = () => {
       "Mixando batida viral",
       "Renderizando criativo único"
     ]);
-
+    setIsProcessing(true); let videoProcessor: VideoProcessor | null = null;
     try {
       const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
       
@@ -2518,7 +2519,7 @@ const App: React.FC = () => {
         ['zoom', 'glitch', 'blur', 'slide', 'shake', 'flash', 'beat', 'fire', 'rotate'];
       const allFilters = ['elite', 'ultra8k', 'cinematic', 'bloom', 'glitch'];
       
-      const videoProcessor = new VideoProcessor();
+      videoProcessor = new VideoProcessor();
       const options: ProcessingOptions = {
         filter: allFilters[Math.floor(Math.random() * allFilters.length)],
         transition: 'zoom',
@@ -2616,7 +2617,7 @@ const App: React.FC = () => {
       showToast(err.message || "ERRO AO CRIAR VÍDEO AUTORAL");
       setStep("list");
     } finally {
-      videoProcessor.dispose();
+      if (videoProcessor) videoProcessor.dispose();
     }
   }
 
@@ -2628,9 +2629,9 @@ const App: React.FC = () => {
     }
 
     showToast("Gerando nova versão... 🎲");
-    setIsProcessing(true);
-
+    setIsProcessing(true); let videoProcessor: VideoProcessor | null = null;
     try {
+      videoProcessor = new VideoProcessor();
       // Garantir que temos muitas "imagens" para o vídeo
       let images = videoData.images;
       
@@ -2661,7 +2662,7 @@ const App: React.FC = () => {
 
       console.log(`[App] Regenerando com: música=${newMusic.name}, transições=${newTransitions.length} tipos, filtro=${newFilter}, imagens=${images.length}`);
 
-      const videoProcessor = new VideoProcessor();
+      
       const options: ProcessingOptions = {
         filter: newFilter,
         transition: newTransitions[0] || 'zoom',
@@ -2677,7 +2678,7 @@ const App: React.FC = () => {
       const price = selectedProduct.price || 0;
       const productName = selectedProduct.item_name || selectedProduct.title || "Produto";
       const videoBlob = await videoProcessor.renderSlideshow(images, options, `R$ ${price.toFixed(2)}`, productName);
-      videoProcessor.dispose();
+      
 
       // Limpar URL anterior
       if (videoData?.url) {
