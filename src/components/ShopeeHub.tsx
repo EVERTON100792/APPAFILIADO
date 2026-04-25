@@ -40,7 +40,7 @@ interface ShopeeHubProps {
   onShowToast: (msg: string) => void;
   userStoreSlug?: string;
   userShopeeId?: string | null;
-  onViralize?: (product: any, videoType?: 'tiktok' | 'autoral', customImages?: string[], customScript?: any) => void;
+  onViralize?: (product: any, videoType?: 'tiktok' | 'autoral' | 'autoral_auto', customImages?: string[], customScript?: any) => void;
   onSaveHistory?: (product: any, platform: string) => void;
   // Lifted state
   shopeeHubProducts: ShopeeProduct[];
@@ -574,14 +574,17 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
                 <span className="text-sm font-black text-white">R$ {product.price.toFixed(2)}</span>
                 <span className="text-[9px] font-black text-emerald-400">R$ {product.commission.toFixed(2)}</span>
               </div>
-              <div className="flex flex-col gap-2 mt-2">
-                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onViralize?.(product, 'tiktok'); }} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-[10px] uppercase shadow-lg shadow-emerald-500/20">
-                  <Rocket size={14} /> VÍDEO VIRAL
+                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onViralize?.(product, 'tiktok'); }} className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-[10px] uppercase shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                  <Rocket size={14} /> VÍDEO VIRAL (IA)
                 </button>
-                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleImageSelection(product); }} className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[10px] uppercase shadow-lg shadow-blue-500/20">
-                  <Video size={14} /> VÍDEO AUTORAL
-                </button>
-              </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onViralize?.(product, 'autoral_auto'); }} className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black text-[9px] uppercase shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+                    <Zap size={14} fill="white" /> AUTORAL (IA)
+                  </button>
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleImageSelection(product); }} className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 text-white/40 font-black text-[9px] uppercase active:scale-95 transition-all">
+                    <Video size={14} /> MANUAL
+                  </button>
+                </div>
               <div className="flex items-center gap-2 mt-2">
                 <button onClick={() => addToVitrine(product)} className="flex-1 h-9 bg-slate-950 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-white/40"><Plus size={14} /> <span className="text-[8px] font-black uppercase">Loja</span></button>
                 <button onClick={() => shareWhatsApp(product)} className="flex-1 h-9 bg-[#25D366]/5 border border-[#25D366]/10 rounded-xl flex items-center justify-center gap-2 text-[#25D366]/60"><MessageCircle size={14} /> <span className="text-[8px] font-black uppercase">Zap</span></button>

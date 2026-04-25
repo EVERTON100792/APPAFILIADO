@@ -36,7 +36,8 @@ import {
   Mic,
   Cpu,
   MessageCircle,
-  Music2
+  Music2,
+  Plus
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -56,12 +57,13 @@ import { productDB } from './data/productDB';
 import { TikTokPublisher } from "./components/TikTokPublisher";
 
 import { generateViralScripts } from "./utils/viralScriptGenerator";
+import { sanitizeShopeeLink } from "./utils/shopeeLinkUtils";
+import { generateWhatsappMessage } from "./utils/shareUtils";
 import {
   generateViralProductName,
   getSmartSearchName,
 } from "./utils/viralNaming";
 import { Copywriter } from "./utils/Copywriter";
-import { sanitizeShopeeLink } from "./utils/shopeeLinkUtils";
 import { VIRAL_MUSIC, TRANSITIONS, FILTERS } from "./utils/MusicLibrary";
 
 const STRIPE_PRICE_ID = "price_1TIZKzKYzfLaHvnki5ZXmNG9";
@@ -209,7 +211,8 @@ type Step =
   | "shopee"
   | "onboarding_start"
   | "onboarding_config"
-  | "onboarding_filtering";
+  | "onboarding_filtering"
+  | "video_selection";
 
 interface CheckoutOverlayProps {
   isCheckoutOpen: boolean;
@@ -659,6 +662,7 @@ const App: React.FC = () => {
   const [databaseProducts, setDatabaseProducts] = useState<any[]>([]);
   const [isFindingNewItems, setIsFindingNewItems] = useState(false);
   const [userShopeeId, setUserShopeeId] = useState<string | null>(null);
+  const [pendingAutomationMode, setPendingAutomationMode] = useState<'original' | 'custom'>('custom');
 
   // ── SISTEMA DE ÁUDIO VIRAL ──
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
@@ -1737,7 +1741,54 @@ const App: React.FC = () => {
     }
   };
 
-  async function researchTikTok(product: any, originStep: Step = "list") {
+  async function selectVideoFromPool(video: any, index: number) {
+    setCurrentVideoIndex(index);
+    setTreatingProgress(10);
+    setStep("treating");
+    setTreatingStatus("Acessando criativo via Proxy...");
+
+    try {
+      const videoUrl = video.originalUrl;
+      const VIDEO_PROXY = "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
+      const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(videoUrl)}`;
+
+      const videoBlob = await fetch(proxiedUrl)
+        .then((r) => r.blob())
+        .catch(() => fetch(videoUrl).then((r) => r.blob()));
+      const videoObjectUrl = URL.createObjectURL(videoBlob);
+
+      const newVideoData = {
+        id: video.id,
+        url: videoObjectUrl,
+        thumbnail: video.cover || "",
+        title: video.title || selectedProduct?.title || "Produto",
+        author: video.author,
+        stats: video.stats,
+        proxiedUrl: proxiedUrl,
+        isAutoral: false,
+      };
+      
+      setVideoData(newVideoData);
+
+      if (selectedProduct) {
+        setCustomCopy(generateCreativeLegend(selectedProduct));
+        setVideoLegend(generateOverlayLegend(selectedProduct));
+      }
+
+      if (pendingAutomationMode === 'custom') {
+        // Modo Autoral: Inicia o Neural Hub de Processamento
+        handleTransformToAutoral(selectedProduct, newVideoData, 'custom');
+      } else {
+        // Modo Viral: Vai para o Editor para revisão e publicação
+        setStep("ready");
+      }
+    } catch (err) {
+      showToast("ERRO DE REDE: Tente outro vídeo.");
+      setStep("video_selection");
+    }
+  }
+
+  async function researchTikTok(product: any, originStep: Step = "list", autoTransform: boolean = false, legendMode: 'original' | 'custom' = 'custom') {
     console.log("[researchTikTok] PRODUCT:", JSON.stringify(product).slice(0, 200));
     
     if (trialExpired && !hasAccessToPlatform) {
@@ -2015,11 +2066,12 @@ const App: React.FC = () => {
             title: v.title,
             duration: v.duration,
             author: v.author?.nickname || "Criador",
+            views: views,
             stats: { likes: diggs, shares: shares, comments: comments },
             _score: score,
           };
         })
-        .filter((v: any) => v !== null && v._score >= 50) // Threshold reduzido para garantir entrega
+        .filter((v: any) => v !== null && v._score >= 50)
         .sort((a: any, b: any) => b._score - a._score);
 
       if (scored.length === 0) {
@@ -2034,57 +2086,18 @@ const App: React.FC = () => {
       setVideoResults(topScored);
       setCurrentVideoIndex(0);
 
-      setTreatingStatus("Processando melhor criativo selecionado...");
-      setTreatingProgress(75);
-      updateTikTokChecklist([
-        "Lendo palavras-chave do produto",
-        "Consultando tendencias TikTok + Shopee",
-        "Preparando filtros de relevancia",
-        `Encontrados ${topScored.length} criativos de alto potencial`,
-      ]);
-
-      const bestVideo = topScored[0];
-      if (!bestVideo)
-        throw new Error("Falha ao carregar o melhor vídeo do pool");
-
-      const videoUrl = bestVideo.originalUrl;
-      const VIDEO_PROXY =
-        "https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=";
-      const proxiedUrl = `${VIDEO_PROXY}${encodeURIComponent(videoUrl)}`;
-
-      const videoBlob = await fetch(proxiedUrl)
-        .then((r) => r.blob())
-        .catch(() => fetch(videoUrl).then((r) => r.blob()));
-      const videoObjectUrl = URL.createObjectURL(videoBlob);
-
-      setVideoData({
-        id: bestVideo.id,
-        url: videoObjectUrl, // Usamos o blob local para performance e estabilidade no editor
-        thumbnail: bestVideo.cover || "",
-        title: bestVideo.title || product.title,
-        author: bestVideo.author,
-        stats: bestVideo.stats,
-        proxiedUrl: proxiedUrl, // Mantemos o proxy se necessário
-        isAutoral: false, // Vídeo viral do TikTok
-      });
-
-      if (product) {
-        setCustomCopy(generateCreativeLegend(product));
-        setVideoLegend(generateOverlayLegend(product));
-      }
-
-      setTreatingStatus("Finalizando pipeline viral...");
+      setTreatingStatus("Ecossistema pronto!");
       setTreatingProgress(100);
       updateTikTokChecklist([
         "Lendo palavras-chave do produto",
         "Consultando tendencias TikTok + Shopee",
         "Preparando filtros de relevancia",
         `Encontrados ${topScored.length} criativos de alto potencial`,
-        "Ecossistema pronto",
+        "Processamento concluído com sucesso",
       ]);
 
-      await new Promise((r) => setTimeout(r, 600));
-      setStep("ready");
+      await new Promise((r) => setTimeout(r, 800));
+      setStep("video_selection");
       showToast(`${topScored.length} VÍDEOS ENCONTRADOS! 🎬`);
     } catch (err: any) {
       console.error("Erro ao buscar TikTok:", err);
@@ -2176,8 +2189,11 @@ const App: React.FC = () => {
     }
   }
 
-  async function handleTransformToAutoral() {
-    if (!videoData?.url || !selectedProduct) {
+  async function handleTransformToAutoral(customProduct?: any, customVideoData?: any, legendMode: 'original' | 'custom' = 'custom') {
+    const targetProduct = customProduct || selectedProduct;
+    const targetVideoData = customVideoData || videoData;
+
+    if (!targetVideoData?.url || !targetProduct) {
       showToast("Nenhum vídeo para transformar");
       return;
     }
@@ -2197,7 +2213,10 @@ const App: React.FC = () => {
     const isMobileRuntime = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ("ontouchstart" in window);
 
     try {
-      const script = generateViralScripts(selectedProduct.item_name || selectedProduct.title)[0];
+      const script = legendMode === 'custom' 
+        ? generateViralScripts(targetProduct.item_name || targetProduct.title)[0]
+        : undefined;
+
       setTreatingProgress(30);
 
       const processor = new VideoProcessor();
@@ -2210,7 +2229,7 @@ const App: React.FC = () => {
         transition: 'zoom',
         transitionList: ['zoom', 'glitch', 'shake', 'blur', 'slide', 'beat', 'flash', 'fire'] as any,
         transitionTimestamps: [4, 8, 12, 16, 20, 24],
-        legend: videoLegend || '',
+        legend: legendMode === 'custom' ? (videoLegend || '') : '',
         isMuted: audioMixOption === 'mute',
         script: script,
         musicUrl: selectedMusic || undefined,
@@ -2226,14 +2245,14 @@ const App: React.FC = () => {
       setTreatingProgress(50);
       showToast("Renderizando com spintax...");
 
-      const blob = await processor.renderVideo(videoData.url, options);
+      const blob = await processor.renderVideo(targetVideoData.url, options);
 
       setTreatingProgress(80);
 
       const newUrl = URL.createObjectURL(blob);
       
       setVideoData({
-        ...videoData,
+        ...targetVideoData,
         id: `autoral-${Date.now()}`,
         url: newUrl,
         isAutoral: true,
@@ -2244,6 +2263,10 @@ const App: React.FC = () => {
       setTreatingProgress(100);
       setTreatingStatus("Vídeo autoral pronto!");
       showToast("✨ VÍDEO TRANSFORMADO EM AUTORAL!");
+
+      // Redireciona para tela de automação se estiver no fluxo automático
+      setAutomationFinished(true);
+      setStep("automation");
 
       // AUTO-DOWNLOAD: Inicia o download imediatamente para o usuário
       try {
@@ -2269,7 +2292,54 @@ const App: React.FC = () => {
     }
   }
 
-  async function handleCreateAutoralVideo(product: any, customImages?: string[], customScript?: any) {
+  // Função para Autoral Automático (IA)
+  async function handleAutoAutoral(product: any) {
+    if (trialExpired && !hasAccessToPlatform) {
+      showToast("SEU TRIAL EXPIROU. FAÇA UPGRADE PARA PRO.");
+      return;
+    }
+    
+    setIsProcessing(true);
+    setStep("treating");
+    setTreatingStatus("Buscando melhor fonte original (Vídeo/Imagens)...");
+    setTreatingProgress(10);
+
+    try {
+      // 1. Busca detalhes profundos do produto na Shopee
+      const detail = await ShopeeService.getItemDetail(product.shop_id, product.item_id);
+      
+      // 2. Tenta encontrar vídeo original do produto
+      // Shopee API retorna informações de vídeo em diferentes campos dependendo da versão
+      const videoList = detail?.item?.video_info_list || detail?.data?.video_info_list || detail?.video_info_list || [];
+      const bestVideo = videoList.sort((a: any, b: any) => (b.duration || 0) - (a.duration || 0))[0];
+      
+      if (bestVideo && bestVideo.url) {
+        showToast("🎥 VÍDEO ORIGINAL ENCONTRADO! TRANSFORMANDO...");
+        const videoDataForAuto = {
+          id: `shopee-${product.item_id}`,
+          url: bestVideo.url,
+          thumbnail: product.item_image,
+          title: product.item_name,
+          author: "Shopee Official",
+          stats: { likes: 0, shares: 0, comments: 0 },
+          isAutoral: false
+        };
+        // Usa a transformação robusta que já temos
+        await handleTransformToAutoral(product, videoDataForAuto);
+      } else {
+        // 3. Fallback para Slideshow Automático se não houver vídeo
+        showToast("📸 VÍDEO NÃO DISPONÍVEL. CRIANDO SLIDESHOW IA...");
+        await handleCreateAutoralVideo(product, undefined, undefined, true);
+      }
+    } catch (err: any) {
+      console.error("Erro no Auto Autoral:", err);
+      // Fallback final para o modo manual se tudo falhar
+      handleCreateAutoralVideo(product, undefined, undefined, true);
+    }
+  }
+
+  async function handleCreateAutoralVideo(product: any, customImages?: string[], customScript?: any, isAuto: boolean = false) {
+    const targetProduct = product;
     if (trialExpired && !hasAccessToPlatform) {
       showToast("SEU TRIAL EXPIROU. FA�A UPGRADE PARA PRO.");
       return;
@@ -2379,12 +2449,7 @@ const App: React.FC = () => {
         `Encontradas ${images.length} imagens`
       ]);
 
-      const copy = Copywriter.generateCopy(
-        product.item_name, 
-        `R$ ${product.price}`, 
-        activeNiche || 'default',
-        storeSlug
-      );
+      const script = customScript || generateViralScripts(targetProduct.item_name || targetProduct.title)[0];
       
       const musicIndex = Math.floor(Math.random() * VIRAL_MUSIC.length);
       const music = VIRAL_MUSIC[musicIndex];
@@ -2408,9 +2473,11 @@ const App: React.FC = () => {
         filter: allFilters[Math.floor(Math.random() * allFilters.length)],
         transition: 'zoom',
         transitionList: allTransitions,
-        legend: "",
+        legend: isAuto ? (script?.hook || "") : "",
+        script: script,
         isMuted: false,
         musicUrl: music.url,
+        storeSlug: storeSlug,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
@@ -2453,15 +2520,44 @@ const App: React.FC = () => {
         images: images,
         musicId: music.id,
         transitions: allTransitions,
-        filter: allFilters[0]
+        filter: allFilters[0],
+        script: script // Importante para as legendas
       });
 
-      setCustomCopy(copy.tiktokCaption + "\n\n" + copy.hashtags.join(" "));
-      setVideoLegend("");
+      const copyToSet = customScript ? "" : Copywriter.generateCopy(
+        product.item_name, 
+        `R$ ${product.price}`, 
+        activeNiche || 'default',
+        storeSlug
+      );
+      
+      if (copyToSet) {
+        setCustomCopy(copyToSet.tiktokCaption + "\n\n" + copyToSet.hashtags.join(" "));
+      }
+      
+      setVideoLegend(script?.hook || "");
 
       await new Promise(r => setTimeout(r, 600));
       setStep("ready");
       showToast(`VÍDEO AUTORAL PRONTO! ${images.length} imagens`);
+
+      // AUTO-DOWNLOAD se for modo IA
+      if (isAuto) {
+        try {
+          const a = document.createElement("a");
+          const fileName = `autoral_ia_${Date.now()}.mp4`;
+          const downloadUrl = URL.createObjectURL(videoBlob);
+          a.href = downloadUrl;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
+          showToast("📥 DOWNLOAD INICIADO!");
+        } catch (err) {
+          console.error("Erro no auto-download autoral:", err);
+        }
+      }
     } catch (err: any) {
       console.error("Erro ao criar vídeo autoral:", err);
       showToast(err.message || "ERRO AO CRIAR VÍDEO AUTORAL");
@@ -4930,32 +5026,70 @@ const App: React.FC = () => {
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3">
-                        {activePlatform === "tiktok" ? (
-                          <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            className="h-16 bg-gradient-to-r from-orange-400 to-amber-500 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/20"
-                            onClick={() => {
-                              setAutomationFinished(false);
-                              runAutomation("shopee");
-                            }}
-                          >
-                            <ShoppingBag size={20} />
-                            Postar na Shopee Agora
-                          </motion.button>
-                        ) : (
-                          <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            className="h-16 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/20"
-                            onClick={() => {
-                              setAutomationFinished(false);
-                              runAutomation("tiktok");
-                            }}
-                          >
-                            <Music2 size={20} />
-                            Postar no TikTok Agora
-                          </motion.button>
-                        )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          className="h-16 bg-[#ff0050] text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/10"
+                          onClick={() => runAutomation("tiktok")}
+                        >
+                          <Music2 size={18} />
+                          TikTok
+                        </motion.button>
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          className="h-16 bg-[#ee4d2d] text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/10"
+                          onClick={() => runAutomation("shopee")}
+                        >
+                          <ShoppingBag size={18} />
+                          Shopee
+                        </motion.button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          className="h-14 bg-[#25D366] text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/10"
+                          onClick={() => {
+                            if (!selectedProduct) return;
+                            const sanitizedLink = sanitizeShopeeLink(selectedProduct.product_link, userShopeeId || undefined);
+                            const message = generateWhatsappMessage({
+                              title: selectedProduct.item_name || selectedProduct.title,
+                              affiliate_link: sanitizedLink,
+                              price: selectedProduct.price?.toString() || "0"
+                            }, storeSlug);
+                            window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
+                          }}
+                        >
+                          <MessageCircle size={18} />
+                          WhatsApp
+                        </motion.button>
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          className="h-14 bg-slate-100 text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 border-2 border-white/10"
+                          onClick={async () => {
+                            if (!selectedProduct) return;
+                            try {
+                              const { data: { user } } = await supabase.auth.getUser();
+                              if (!user) { showToast("🔒 Faça login primeiro!"); return; }
+                              const sanitizedLink = sanitizeShopeeLink(selectedProduct.product_link, userShopeeId || undefined);
+                              const { error } = await supabase.from("bio_store").insert({
+                                user_id: storeSlug, 
+                                title: selectedProduct.item_name || selectedProduct.title,
+                                image_url: selectedProduct.item_image,
+                                affiliate_link: sanitizedLink,
+                                price: selectedProduct.price?.toString() || "0"
+                              });
+                              if (error) throw error;
+                              showToast("🛒 NA VITRINE!");
+                            } catch (err) {
+                              showToast("❌ ERRO AO ADICIONAR");
+                            }
+                          }}
+                        >
+                          <Plus size={18} />
+                          Na Vitrine
+                        </motion.button>
+                      </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <motion.button
@@ -4982,13 +5116,12 @@ const App: React.FC = () => {
                             Concluído
                           </motion.button>
                         </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </motion.div>
-          )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            )}
 
           {step === "history" && (
             <motion.div
@@ -5086,6 +5219,112 @@ const App: React.FC = () => {
             </motion.div>
           )}
 
+          {step === "video_selection" && (
+            <motion.div
+              key="video_selection"
+              variants={stepVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={stepTransition}
+              className="step-wrapper-standard"
+            >
+              {/* Header Fixo */}
+              <div className="p-6 pb-2 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-white/10 flex items-center justify-center">
+                    <Video size={24} className="text-accent" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black italic uppercase leading-none text-white">
+                      POOL DE <span className="text-accent">CRIATIVOS</span>
+                    </h2>
+                    <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">
+                      Encontramos {videoResults.length} vídeos virais
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setStep("shopee")}
+                  className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Grid de Vídeos - Sem scroll interno para evitar conflito com o wrapper */}
+              <div className="grid grid-cols-2 gap-x-5 gap-y-12 px-6 pt-6 pb-96">
+                {videoResults.map((v, i) => (
+                  <motion.div
+                    key={v.id}
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    whileHover={{ scale: 1.02, y: -5 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => selectVideoFromPool(v, i)}
+                    className={`relative w-full h-[320px] rounded-[2.5rem] overflow-hidden border-2 transition-all cursor-pointer shadow-[0_30px_60px_rgba(0,0,0,0.6)] ${i === 0 ? 'border-accent ring-8 ring-accent/10' : 'border-white/10 hover:border-accent/60'}`}
+                  >
+                    <img 
+                      src={v.cover} 
+                      alt={v.title} 
+                      className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" 
+                    />
+                    
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-slate-950" />
+                    
+                    {i === 0 && (
+                      <div className="absolute top-4 left-4 z-10">
+                        <div className="bg-accent text-slate-950 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-2xl shadow-accent/50">
+                          <Zap size={10} fill="currentColor" />
+                          TOP RECOMENDADO
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="absolute top-4 right-4 z-10">
+                      <div className="bg-black/80 backdrop-blur-md text-white font-black text-[9px] px-2.5 py-1.5 rounded-xl border border-white/20">
+                        {v.duration}s
+                      </div>
+                    </div>
+                    
+                    <div className="absolute bottom-0 left-0 right-0 p-5 space-y-3 bg-gradient-to-t from-black via-black/80 to-transparent pt-10">
+                       <div className="flex flex-col">
+                        <p className="text-[11px] font-black text-white uppercase italic truncate drop-shadow-2xl">
+                          @{v.author}
+                        </p>
+                        <p className="text-[8px] text-white/50 font-bold truncate line-clamp-1 opacity-90">
+                          {v.title || "VÍDEO VIRAL"}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-white/15">
+                        <div className="flex items-center gap-1.5">
+                          <Activity size={12} className="text-accent" />
+                          <span className="text-[10px] font-black text-accent drop-shadow-lg">
+                            {Math.floor(v._score || 0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-white/80">
+                           <span className="text-[10px] font-black drop-shadow-lg">
+                            {v.views > 1000000 ? `${(v.views/1000000).toFixed(1)}M` : v.views > 1000 ? `${(v.views/1000).toFixed(1)}K` : v.views} PV
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="absolute inset-0 bg-accent/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-[2px]">
+                      <div className="bg-white text-slate-950 text-[11px] font-black uppercase px-6 py-3 rounded-2xl shadow-2xl scale-90 hover:scale-100 transition-all duration-300">
+                        Selecionar
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+            </motion.div>
+          )}
+
           {step === "shopee" && (
             <div className="step-wrapper-standard">
               <ShopeeHub 
@@ -5099,21 +5338,17 @@ const App: React.FC = () => {
                 setShopeeHubKeyword={setShopeeHubKeyword}
                 shopeeHubTab={shopeeHubTab}
                 setShopeeHubTab={setShopeeHubTab}
-onViralize={(p, videoType, customImages, customScript) => {
+                onViralize={(p, videoType) => {
                   console.log("[ShopeeHub onViralize] produto:", p, "videoType:", videoType);
-                  if (videoType === 'autoral') {
-                    handleCreateAutoralVideo(p, customImages, customScript);
-                  } else {
-                    const prodData = {
-                      ...p,
-                      title: p.item_name || p.title || p.name,
-                      query: p.query || p.item_name || p.title || p.name,
-                    };
-                    console.log("[onViralize] Enviando para researchTikTok:", prodData);
-                    showToast("🔍 Buscando vídeo viral...");
-                    researchTikTok(prodData, "shopee");
-                  }
-}}
+                  const prodData = {
+                    ...p,
+                    title: p.item_name || p.title || p.name,
+                    query: p.query || p.item_name || p.title || p.name,
+                  };
+                  setPendingAutomationMode(videoType === 'autoral_auto' ? 'custom' : 'original');
+                  showToast("🔍 Buscando melhores criativos...");
+                  researchTikTok(prodData, "shopee", true);
+                }}
               />
             </div>
           )}
@@ -5164,7 +5399,29 @@ onViralize={(p, videoType, customImages, customScript) => {
         </div>
       )}
 
-      {/* Alerta de Expiração Próxima (Banner Flutuante Removido para evitar duplicidade) */}
+      {/* Global Workflow HUD - Fixed to Bottom avoid layout shifting */}
+      {step === "video_selection" && (
+        <div className="fixed bottom-[110px] left-6 right-6 z-[2000] pointer-events-none">
+          <div className="bg-slate-950/98 backdrop-blur-3xl border border-accent/40 px-6 py-4 rounded-[2.5rem] shadow-[0_40px_80px_rgba(0,0,0,1)] flex items-center justify-between pointer-events-auto ring-1 ring-white/5">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                <Sparkles size={20} className="text-accent animate-pulse" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-white uppercase italic tracking-tighter leading-none opacity-60">Workflow em Execução</span>
+                <span className="text-[9px] font-black text-accent uppercase tracking-[0.2em] mt-1.5 leading-none">
+                  {pendingAutomationMode === 'custom' ? 'AUTORAL (IA PROFISSIONAL)' : 'VIRAL (ORIGINAL)'}
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="bg-accent/10 text-accent text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest border border-accent/10">
+                Aguardando Seleção
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="bottom-nav">
         {[

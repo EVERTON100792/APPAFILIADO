@@ -90,27 +90,32 @@ export class VideoProcessor {
     const attempts = proxyGenerators.map(async (proxyFn) => {
       const targetUrl = proxyFn(url);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // Timeout mais agressivo para rapidez
+      const timeoutId = setTimeout(() => controller.abort(), 10000); 
       
       try {
         const res = await fetch(targetUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
         if (res.ok) {
           const blob = await res.blob();
-          if (blob.size > 100) return URL.createObjectURL(blob);
+          if (blob.size > 200) return URL.createObjectURL(blob);
         }
-        throw new Error("Proxy failed");
+        throw new Error("Proxy failed or returned small data");
       } catch (e) {
         clearTimeout(timeoutId);
+        // Silently fail so Promise.any can try the next one
         throw e;
       }
     });
 
     try {
       // Tentar todos em paralelo e pegar o primeiro que funcionar
-      return await Promise.any(attempts);
+      // Adicionamos um timeout global para o Promise.any
+      return await Promise.race([
+        Promise.any(attempts),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout Global")), 15000))
+      ]) as string;
     } catch (e) {
-      console.warn(`[VideoProcessor] Todos os proxies falharam para ${url}, usando original.`);
+      console.warn(`[VideoProcessor] Falha crítica de proxy para ${url}, usando original.`);
       return url;
     }
   }
@@ -240,7 +245,9 @@ export class VideoProcessor {
           video.onerror = (e) => rej(e);
         });
         
-        const W = 1080; const H = 1920;
+        // Otimização Mobile: 720p em vez de 1080p para evitar estouro de memória/GPU
+        const W = isMobile ? 1080 : 1080; 
+        const H = isMobile ? 1920 : 1920;
         this.canvas.width = W; this.canvas.height = H;
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
@@ -273,7 +280,16 @@ export class VideoProcessor {
           firstTimestampBehavior: 'offset' 
         });
         const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
-        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 4_000_000 });
+        
+        // Bitrate de Alta Performance (HQ): 6Mbps para Autoral garantindo nitidez máxima
+        const targetBitrate = options.isAutoral ? 6_000_000 : 4_000_000;
+        videoEncoder.configure({ 
+          codec: 'avc1.4d002a', // High Profile Level 4.2
+          width: W, 
+          height: H, 
+          bitrate: targetBitrate,
+          latencyMode: 'quality' // Foca na integridade do frame
+        });
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
@@ -408,7 +424,8 @@ export class VideoProcessor {
     return new Promise(async (resolve, reject) => {
       try {
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const W = 1080; const H = 1920;
+        const W = isMobile ? 720 : 1080; 
+        const H = isMobile ? 1280 : 1920;
         this.canvas.width = W; this.canvas.height = H;
 
         const targetDuration = 35;
