@@ -24,6 +24,8 @@ export interface ProcessingOptions {
   narrationStyle?: string;
   onProgress?: (p: number) => void;
   isAutoral?: boolean;
+  storeLogo?: string;
+  storeName?: string;
 }
 
 export class VideoProcessor {
@@ -34,6 +36,8 @@ export class VideoProcessor {
   private ownedVideo: HTMLVideoElement;
   private frameCache: Map<string, ImageBitmap[]> = new Map();
   private stream: MediaStream | null = null;
+  private logoCache: HTMLImageElement | null = null;
+  private logoUrl: string | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -296,6 +300,21 @@ export class VideoProcessor {
         const fps = 30;
         const totalFrames = Math.floor(video.duration * fps);
         const filterCSS = this.getFilterCSS(options.filter);
+        
+        // Pré-carregar logo se existir para performance (evitar fetch em cada frame)
+        if (options.storeLogo && (!this.logoCache || this.logoUrl !== options.storeLogo)) {
+          try {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            const blobUrl = await this.fetchAsBlob(options.storeLogo, 'image');
+            img.src = blobUrl;
+            await new Promise((res) => { img.onload = res; img.onerror = res; });
+            this.logoCache = img;
+            this.logoUrl = options.storeLogo;
+          } catch (e) {
+            console.warn("[VideoProcessor] Falha no pré-carregamento do logo:", e);
+          }
+        }
 
         const framesToCache = Math.min(totalFrames, 300); // Cachear até 10 seg de vídeo base
         const cachedFrames = this.frameCache.get(videoUrl) || [];
@@ -392,6 +411,10 @@ export class VideoProcessor {
             this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, video.duration);
           }
 
+          if (options.storeName) {
+            this.drawStoreBranding(W, H, options);
+          }
+
           const timestamp = currentTime * 1_000_000;
           const vFrame = new VideoFrame(this.canvas, { timestamp });
           videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
@@ -470,6 +493,21 @@ export class VideoProcessor {
 
         const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre);
 
+        // Pré-carregar logo se existir
+        if (options.storeLogo && (!this.logoCache || this.logoUrl !== options.storeLogo)) {
+          try {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            const blobUrl = await this.fetchAsBlob(options.storeLogo, 'image');
+            img.src = blobUrl;
+            await new Promise((res) => { img.onload = res; img.onerror = res; });
+            this.logoCache = img;
+            this.logoUrl = options.storeLogo;
+          } catch (e) {
+            console.warn("[VideoProcessor] Falha no pré-carregamento do logo:", e);
+          }
+        }
+
         for (let i = 0; i < totalFrames; i++) {
           const currentTime = i / fps;
           const slideIdx = Math.floor(currentTime / slideDuration) % imgs.length;
@@ -504,6 +542,10 @@ export class VideoProcessor {
           this.ctx.setTransform(1, 0, 0, 1, 0, 0);
           if (options.script) {
             this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, targetDuration);
+          }
+
+          if (options.storeName) {
+            this.drawStoreBranding(W, H, options);
           }
 
           const timestamp = currentTime * 1_000_000;
@@ -678,6 +720,92 @@ export class VideoProcessor {
       this.ctx.fillText(`@${storeSlug.replace('@', '')}`, W/2, rectY + rectH + 60);
     }
 
+    this.ctx.restore();
+  }
+
+  private drawStoreBranding(W: number, H: number, options: ProcessingOptions) {
+    if (!options.storeName) return;
+
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    const padding = W * 0.04;
+    const topOffset = H * 0.05; // 5% do topo
+    
+    // 1. Desenhar Fundo (Barra de Branding)
+    const barH = W * 0.11;
+    const barW = W * 0.82;
+    const barX = (W - barW) / 2;
+    const barY = topOffset;
+    
+    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    this.ctx.shadowBlur = 20;
+    
+    // Gradiente escuro para contraste
+    const grad = this.ctx.createLinearGradient(barX, barY, barX, barY + barH);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+    grad.addColorStop(1, 'rgba(15, 23, 42, 0.95)');
+    
+    this.ctx.fillStyle = grad;
+    this.ctx.beginPath();
+    if (typeof (this.ctx as any).roundRect === 'function') {
+      (this.ctx as any).roundRect(barX, barY, barW, barH, 20);
+    } else {
+      this.ctx.rect(barX, barY, barW, barH);
+    }
+    this.ctx.fill();
+    
+    // Borda brilhante sutil
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    this.ctx.lineWidth = 2;
+    this.ctx.stroke();
+
+    // 2. Desenhar Logo
+    let contentStartX = barX + padding;
+    if (this.logoCache && this.logoCache.complete && this.logoCache.naturalWidth > 0) {
+      const logoSize = barH * 0.7;
+      const logoY = barY + (barH - logoSize) / 2;
+      
+      this.ctx.save();
+      // Clip circular para o logo
+      this.ctx.beginPath();
+      this.ctx.arc(contentStartX + logoSize/2, logoY + logoSize/2, logoSize/2, 0, Math.PI * 2);
+      this.ctx.clip();
+      this.ctx.drawImage(this.logoCache, contentStartX, logoY, logoSize, logoSize);
+      this.ctx.restore();
+      
+      contentStartX += logoSize + padding * 0.5;
+    }
+
+    // 3. Desenhar Nome da Loja
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.textAlign = 'left';
+    this.ctx.textBaseline = 'middle';
+    const fontSize = barH * 0.35;
+    this.ctx.font = `900 ${fontSize}px "Outfit", "Inter", sans-serif`;
+    
+    const storeName = options.storeName.toUpperCase();
+    this.ctx.fillText(storeName, contentStartX, barY + barH/2);
+    
+    // Badge de Verificado
+    const nameWidth = this.ctx.measureText(storeName).width;
+    const badgeX = contentStartX + nameWidth + 12;
+    const badgeY = barY + barH/2;
+    
+    this.ctx.fillStyle = '#22C55E';
+    this.ctx.beginPath();
+    this.ctx.arc(badgeX, badgeY, 7, 0, Math.PI * 2);
+    this.ctx.fill();
+    
+    // Checkmark branco minúsculo no badge
+    this.ctx.strokeStyle = '#FFFFFF';
+    this.ctx.lineWidth = 1.5;
+    this.ctx.beginPath();
+    this.ctx.moveTo(badgeX - 3, badgeY);
+    this.ctx.lineTo(badgeX - 1, badgeY + 2);
+    this.ctx.lineTo(badgeX + 3, badgeY - 2);
+    this.ctx.stroke();
+    
     this.ctx.restore();
   }
 

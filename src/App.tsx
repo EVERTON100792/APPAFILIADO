@@ -37,7 +37,10 @@ import {
   Cpu,
   MessageCircle,
   Music2,
-  Plus
+  Plus,
+  Check,
+  Play,
+  Images
 } from "lucide-react";
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
@@ -379,6 +382,7 @@ const App: React.FC = () => {
   const [activePlatform, setActivePlatform] = useState<"tiktok" | "shopee">(
     "tiktok",
   );
+  const [videoToPreview, setVideoToPreview] = useState<any>(null);
   const userMetadataRef = useRef<Record<string, any>>({});
   const metadataUpdateInFlightRef = useRef(false);
   const pendingMetadataRef = useRef<Record<string, any> | null>(null);
@@ -2147,6 +2151,8 @@ const App: React.FC = () => {
         musicUrl: music.url,
         musicBpm: music.bpm || 128,
         musicGenre: music.genre || 'house',
+        storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
+        storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       } as any;
 
@@ -2239,6 +2245,8 @@ const App: React.FC = () => {
         narrationStyle: narrationVoice === 'F' ? 'soft-female' : 'premium-male',
         mobileTurbo: isMobileRuntime,
         storeSlug: storeSlug,
+        storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
+        storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
@@ -2478,6 +2486,8 @@ const App: React.FC = () => {
         isMuted: false,
         musicUrl: music.url,
         storeSlug: storeSlug,
+        storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
+        storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
@@ -2614,6 +2624,8 @@ const App: React.FC = () => {
         legend: "",
         isMuted: false,
         musicUrl: newMusic.url,
+        storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
+        storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 
@@ -2772,6 +2784,8 @@ const App: React.FC = () => {
           useNarration: useNarration,
           narrationVoice: narrationVoice,
           script: videoData?.script,
+          storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
+          storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
           onProgress: (p: number) => setTreatingProgress(Math.floor(p))
         };
 
@@ -5262,19 +5276,34 @@ const App: React.FC = () => {
                     transition={{ delay: i * 0.05 }}
                     whileHover={{ scale: 1.02, y: -5 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => selectVideoFromPool(v, i)}
-                    className={`relative w-full h-[320px] rounded-[2.5rem] overflow-hidden border-2 transition-all cursor-pointer shadow-[0_30px_60px_rgba(0,0,0,0.6)] ${i === 0 ? 'border-accent ring-8 ring-accent/10' : 'border-white/10 hover:border-accent/60'}`}
+                    className={`relative w-full h-[320px] rounded-[2.5rem] overflow-hidden border-2 transition-all cursor-pointer shadow-[0_30px_60px_rgba(0,0,0,0.6)] group ${i === 0 ? 'border-accent ring-8 ring-accent/10' : 'border-white/10 hover:border-accent/60'}`}
                   >
-                    <img 
-                      src={v.cover} 
-                      alt={v.title} 
-                      className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" 
-                    />
-                    
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-slate-950" />
+                    <div 
+                      className="absolute inset-0 z-0 cursor-pointer"
+                      onClick={() => setVideoToPreview(v)}
+                    >
+                      <img 
+                        src={v.cover} 
+                        alt={v.title} 
+                        className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" 
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-slate-950" />
+                      
+                      {/* Ícone de Play central para indicar Preview */}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-16 h-16 rounded-full bg-black/60 backdrop-blur-xl border-2 border-white/30 flex items-center justify-center shadow-2xl transition-transform group-hover:scale-110">
+                            <Play size={28} fill="currentColor" className="text-white ml-1" />
+                          </div>
+                          <span className="bg-black/60 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full border border-white/20 shadow-xl">
+                            Visualizar
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                     
                     {i === 0 && (
-                      <div className="absolute top-4 left-4 z-10">
+                      <div className="absolute top-4 left-4 z-10 pointer-events-none">
                         <div className="bg-accent text-slate-950 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-2xl shadow-accent/50">
                           <Zap size={10} fill="currentColor" />
                           TOP RECOMENDADO
@@ -5288,7 +5317,7 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     
-                    <div className="absolute bottom-0 left-0 right-0 p-5 space-y-3 bg-gradient-to-t from-black via-black/80 to-transparent pt-10">
+                    <div className="absolute bottom-0 left-0 right-0 p-5 space-y-3 bg-gradient-to-t from-black via-black/80 to-transparent pt-10 z-10 pointer-events-none">
                        <div className="flex flex-col">
                         <p className="text-[11px] font-black text-white uppercase italic truncate drop-shadow-2xl">
                           @{v.author}
@@ -5313,10 +5342,21 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="absolute inset-0 bg-accent/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center backdrop-blur-[2px]">
-                      <div className="bg-white text-slate-950 text-[11px] font-black uppercase px-6 py-3 rounded-2xl shadow-2xl scale-90 hover:scale-100 transition-all duration-300">
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-3 backdrop-blur-sm z-20">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); selectVideoFromPool(v, i); }}
+                        className="w-[140px] py-3 bg-accent text-slate-950 text-[10px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Check size={14} />
                         Selecionar
-                      </div>
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setVideoToPreview(v); }}
+                        className="w-[140px] py-3 bg-white/10 border border-white/20 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all backdrop-blur-md flex items-center justify-center gap-2"
+                      >
+                        <Play size={14} fill="currentColor" />
+                        Visualizar
+                      </button>
                     </div>
                   </motion.div>
                 ))}
@@ -5774,6 +5814,72 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       {/* LockScreen unificado é gerenciado próximo à bottom-nav para melhor controle de UX */}
+
+      <AnimatePresence>
+        {videoToPreview && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 md:p-10"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="relative w-full max-w-[400px] h-full max-h-[750px] bg-slate-900 rounded-[3rem] overflow-hidden border border-white/10 shadow-2xl flex flex-col"
+            >
+              <div className="absolute inset-0 flex items-center justify-center z-0">
+                <RefreshCcw size={40} className="text-accent/20 animate-spin" />
+              </div>
+
+              <video 
+                key={videoToPreview.id}
+                src={`https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy?url=${encodeURIComponent(videoToPreview.originalUrl)}`}
+                className="relative w-full h-full object-cover z-10"
+                controls
+                autoPlay
+                loop
+                playsInline
+                onError={(e) => {
+                  const target = e.target as HTMLVideoElement;
+                  if (target.src.includes('video-proxy')) {
+                    console.log('Proxy failed, trying direct link...');
+                    target.src = videoToPreview.originalUrl;
+                  }
+                }}
+              />
+              
+              <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-10">
+                <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
+                  <p className="text-[10px] font-black text-white uppercase italic truncate max-w-[150px]">
+                    @{videoToPreview.author}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setVideoToPreview(null)}
+                  className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white border border-white/10"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="absolute bottom-10 left-6 right-6 z-10">
+                <button 
+                  onClick={() => {
+                    const video = videoToPreview;
+                    setVideoToPreview(null);
+                    selectVideoFromPool(video, 0); 
+                  }}
+                  className="w-full py-5 bg-accent text-slate-950 font-black uppercase tracking-widest text-[12px] rounded-2xl shadow-2xl shadow-accent/40 active:scale-95 transition-all"
+                >
+                  USAR ESTE VÍDEO NO V6
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isCheckoutOpen && (
