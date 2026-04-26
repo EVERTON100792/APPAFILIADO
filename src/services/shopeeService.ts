@@ -194,54 +194,66 @@ export class ShopeeService {
     }
   }
 
-  /**
-   * Resolve um Offer ID (ex: CHW-MAL-YCR) para produto real.
-   * Fluxo: offerId → s.shopee.com.br/offerId → urlGenerate → originLink → shopId + itemId → produto
-   */
   static async resolveShortLinkToProduct(offerId: string, userShopeeId?: string): Promise<ShopeeProduct | null> {
-    const shortLink = `https://s.shopee.com.br/${offerId}`;
-
-    // 1️⃣ Resolve o short link via urlGenerate da API Shopee
+    // 1️⃣ Resolve o offerId usando a API de afiliados via keyword search
     const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
       body: {
-        action: "resolve_short_link",
-        params: { short_link: shortLink },
+        action: "get_offer_by_id",
+        params: { offer_id: offerId },
       },
     });
 
     if (error || !result?.success) {
-      console.warn("[ShopeeService] resolve_short_link falhou:", error || result?.error);
+      console.warn("[ShopeeService] get_offer_by_id falhou:", error || result?.error);
       return null;
     }
 
-    const { shopId, itemId, originLink, shortLink: resolvedShortLink } = result.data || {};
-    console.log(`[ShopeeService] Resolved ${offerId} → shopId=${shopId} itemId=${itemId}`);
+    const nodes = result.data?.nodes || result.data?.productOfferV2?.nodes || [];
+    const item = nodes[0];
 
-    if (!shopId || !itemId) {
-      console.warn("[ShopeeService] Não foi possível extrair shopId/itemId de:", originLink);
+    if (!item) {
+      console.warn("[ShopeeService] Não foi possível encontrar produto com Offer ID:", offerId);
       return null;
     }
 
-    // 2️⃣ Constrói o produto com os dados disponíveis
-    // Gera o link de afiliado com rastreamento
-    let finalLink = resolvedShortLink || shortLink;
+    const shopId = item.shopId || item.shop_id || 0;
+    const itemId = item.itemId || item.item_id || 0;
+    const originalUrl = item.productLink || "";
+
+    // 2️⃣ Constrói o produto com os dados retornados
+    let finalLink = originalUrl;
     try {
-      const converted = await this.convertLinks([originLink || shortLink], userShopeeId);
+      const converted = await this.convertLinks([originalUrl], userShopeeId);
       if (converted[0]) finalLink = converted[0];
-    } catch (_) { /* usa short link como fallback */ }
+    } catch (_) { /* usa original como fallback */ }
+
+    let price = Number(item.price) || 0;
+    let originalPrice = Number(item.originalPrice) || Number(item.price_before_discount) || price;
+
+    if (price >= 10000) {
+      price = price / 100;
+      if (originalPrice >= 10000) originalPrice = originalPrice / 100;
+    }
+
+    let discount = Number(item.discount) || 0;
+    if (discount === 0 && originalPrice > price && originalPrice > 0) {
+      discount = Math.round((1 - price / originalPrice) * 100);
+    }
+
+    const commissionRate = Number(item.commissionRate) || 0;
 
     return {
-      item_id: itemId,
+      item_id: itemId || Math.random(),
       shop_id: shopId,
-      item_name: `Produto Shopee (ID: ${offerId})`, // será atualizado ao buscar detalhe
-      item_image: "",
-      price: 0,
-      original_price: 0,
-      discount: 0,
-      commission_rate: 0,
-      commission: 0,
-      sales: 0,
-      shop_name: "Shopee",
+      item_name: item.productName || item.product_name || item.item_name || `Produto Shopee (${offerId})`,
+      item_image: item.imageUrl || item.image_url || item.item_image || "",
+      price,
+      original_price: originalPrice,
+      discount,
+      commission_rate: Math.round(commissionRate * 100),
+      commission: price * commissionRate || 0,
+      sales: Number(item.sales) || Number(item.sold) || 0,
+      shop_name: item.shop_name || item.shopName || "Shopee",
       product_link: finalLink,
       affiliate_link: finalLink,
     };
