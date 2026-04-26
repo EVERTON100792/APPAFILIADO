@@ -193,7 +193,63 @@ export class ShopeeService {
       return null;
     }
   }
+
+  /**
+   * Busca um produto pelo Offer ID da plataforma de afiliados (ex: BBX-GNA-ZFX).
+   */
+  static async getProductByOfferId(offerId: string, userShopeeId?: string): Promise<ShopeeProduct[]> {
+    const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
+      body: {
+        action: "get_offer_by_id",
+        params: { offer_id: offerId },
+      },
+    });
+
+    if (error || !result?.success) {
+      throw error || new Error(result?.error || "Erro ao buscar por Offer ID");
+    }
+
+    const nodes = result.data?.nodes || result.data?.productOfferV2?.nodes || [];
+    if (nodes.length === 0) return [];
+
+    const productLinks = nodes.map((n: any) => n.productLink).filter(Boolean) as string[];
+    const urlToShortLink = new Map<string, string>();
+
+    if (productLinks.length > 0) {
+      try {
+        const shortLinks = await this.convertLinks(productLinks, userShopeeId);
+        productLinks.forEach((url: string, i: number) => {
+          if (shortLinks[i]) urlToShortLink.set(url, shortLinks[i]);
+        });
+      } catch (_) { /* usa productLink original */ }
+    }
+
+    return nodes.map((item: any) => {
+      let price = Number(item.price) || 0;
+      if (price >= 10000) price = price / 100;
+      const itemId = item.itemId || item.item_id || 0;
+      const shopId = item.shopId || item.shop_id || 0;
+      const originalUrl = item.productLink || "";
+      const finalLink = urlToShortLink.get(originalUrl) || originalUrl;
+
+      return {
+        item_id: itemId,
+        shop_id: shopId,
+        item_name: item.productName || "Produto Shopee",
+        item_image: item.imageUrl || "",
+        price,
+        original_price: price,
+        discount: 0,
+        commission_rate: Math.round((Number(item.commissionRate) || 0) * 100),
+        commission: price * (Number(item.commissionRate) || 0),
+        sales: Number(item.sales) || 0,
+        shop_name: "Shopee",
+        product_link: finalLink,
+      };
+    });
+  }
 }
+
 
 
 
