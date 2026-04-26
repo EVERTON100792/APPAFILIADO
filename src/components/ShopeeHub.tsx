@@ -182,18 +182,18 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
   const niches = [
-    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensílios cozinha decoração criativa" },
-    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem skincare viral" },
-    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "gadgets úteis tecnologia" },
-    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoração casa utilidades enxoval" },
-    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador casa praticidade" },
-    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "limpeza inteligente casa" },
-    { id: "setup",     name: "Setup",        icon: "🖥️", keyword: "setup gamer acessórios" },
-    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "acessórios pet gato cachorro" },
-    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo infantil criativo" },
-    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achadinhos shopee viral" },
-    { id: "moda",      name: "Moda",         icon: "👗", keyword: "moda feminina tendecia" },
-    { id: "fitness",   name: "Fitness",      icon: "💪", keyword: "treino casa saudável" },
+    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achadinhos shopee utilidades virais tiktok" },
+    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensílios cozinha criativos gadgets inteligentes" },
+    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem skincare viral tiktok coreana" },
+    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoração casa inteligente utilidades práticas" },
+    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador casa closet cozinha praticidade" },
+    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "gadgets eletrônicos inteligentes inovadores" },
+    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "limpeza inteligente aspirador robô utilidades" },
+    { id: "carro",     name: "Automotivo",   icon: "🚗", keyword: "acessórios carro inteligentes utilidades" },
+    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo educativo criativo montessori viral" },
+    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "acessórios pet inteligentes gatos cães" },
+    { id: "banheiro",  name: "Banheiro",     icon: "🚿", keyword: "acessórios banheiro inteligentes utilidades" },
+    { id: "ferramentas",name: "Ferramentas", icon: "🛠️", keyword: "ferramentas inteligentes multiuso casa" },
   ];
 
   const BLACKLIST_WORDS = [
@@ -227,11 +227,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
     }
   }, [activeTab, isLoadingProfile]);
 
-  const LIGHTNING_KEYWORDS = ["oferta relâmpago", "promoção relâmpago shopee", "queima estoque hoje", "liquidação relâmpago"];
-  const OFF50_KEYWORDS = ["cupom shopee 50%", "desconto 70% shopee", "promoção metades preço", "super oferta shopee"];
+  const LIGHTNING_KEYWORDS = ["oferta relâmpago viral", "promoção relâmpago achadinhos", "queima estoque hoje tiktok", "liquidação relâmpago utilidades"];
+  const OFF50_KEYWORDS = ["cupom shopee 50% viral", "desconto 70% achadinhos", "promoção metades preço utilidades", "super oferta shopee tiktok"];
   const TOP_KEYWORDS = [
-    "mais vendidos shopee 2024", "top achadinhos viral", "shopee best seller brasil", 
-    "produtos tendência tiktok", "utilidades domésticas viral", "gadgets inteligentes shopee"
+    "mais vendidos shopee tiktok", "top achadinhos viral shopee", "shopee best seller utilidades", 
+    "produtos tendência tiktok brasil", "utilidades domésticas viral tiktok", "gadgets inteligentes viral"
   ];
 
   const calcDiscount = (p: { price: number; original_price: number; discount: number }): number => {
@@ -245,8 +245,8 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
   const parallelSearch = async (keywords: string[], sortBy: number = 3, pagesPerKeyword: number = 2) => {
     const requests: Promise<any[]>[] = [];
     keywords.forEach(kw => {
-      for (let page = 1; page <= pagesPerKeyword; page++) {
-        requests.push(ShopeeService.searchProducts({ keyword: kw.trim(), sort_by: sortBy, page_number: page }, userShopeeId || undefined).catch(() => []));
+      for (let page = 1; page <= 3; page++) {
+        requests.push(ShopeeService.searchProducts({ keyword: kw.trim(), sort_by: 3, page_number: page }, userShopeeId || undefined).catch(() => []));
       }
     });
     const batches = await Promise.all(requests);
@@ -277,6 +277,26 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
       if (activeTab === "all") {
         let searchKw = overrideKeyword !== undefined ? (overrideKeyword || "achadinhos shopee") : (keyword || "achadinhos shopee");
         
+        // NOVO: Detectar ID de Afiliado ou Short Link (ex: CHW-MAL-YCR ou shope.ee/...)
+        const trimmedKw = searchKw.trim();
+        const isAffiliateId = /^[A-Z0-9]{2,}-[A-Z0-9]{2,}-[A-Z0-9]{2,}$/i.test(trimmedKw) || 
+                             /^[A-Z0-9]{8,15}$/i.test(trimmedKw) ||
+                             trimmedKw.includes('shope.ee/');
+                             
+        if (isAffiliateId && !overrideKeyword) {
+          onShowToast("🔍 BUSCA DIRETA POR ID...");
+          try {
+            const resolved = await ShopeeService.resolveShortLinkToProduct(trimmedKw, userShopeeId || undefined);
+            if (resolved) {
+              setProducts([resolved]);
+              setIsSearching(false);
+              return;
+            }
+          } catch (err) {
+            console.error("[ShopeeHub] Erro na busca direta:", err);
+          }
+        }
+
         // Se temos um nicho ativo e estamos dando refresh global (overrideKeyword undefined)
         // usamos a keyword do nicho para manter o contexto correto
         if (overrideKeyword === undefined && activeNicheId) {

@@ -448,9 +448,172 @@ export class VideoProcessor {
         resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
       } catch (err) { reject(err); }
     });
+  }
 
+  private async extractFrames(videoUrl: string, count: number = 10): Promise<ImageBitmap[]> {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.src = videoUrl;
+      video.muted = true;
+      video.playsInline = true;
 
+      video.onloadedmetadata = async () => {
+        try {
+          const frames: ImageBitmap[] = [];
+          const duration = video.duration;
+          // Evitar o exato início e fim para pegar cenas melhores
+          const startOffset = duration * 0.1;
+          const endOffset = duration * 0.9;
+          const usableDuration = endOffset - startOffset;
+          const interval = usableDuration / (count - 1);
 
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = video.videoWidth;
+          tempCanvas.height = video.videoHeight;
+          const tCtx = tempCanvas.getContext('2d', { alpha: false })!;
+
+          for (let i = 0; i < count; i++) {
+            video.currentTime = startOffset + (i * interval);
+            await new Promise(r => {
+              const onSeeked = () => {
+                video.removeEventListener('seeked', onSeeked);
+                r(null);
+              };
+              video.addEventListener('seeked', onSeeked);
+            });
+            
+            tCtx.drawImage(video, 0, 0);
+            frames.push(await createImageBitmap(tempCanvas));
+          }
+          
+          video.src = "";
+          video.load();
+          resolve(frames);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      
+      video.onerror = (e) => reject(new Error("Falha ao carregar vídeo para extração de frames"));
+    });
+  }
+
+  public async renderAutoralSlideshow(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
+    const frames = await this.extractFrames(videoUrl, 10);
+    return this.renderSlideshowFromBitmaps(frames, options);
+  }
+
+  private async renderSlideshowFromBitmaps(imgs: ImageBitmap[], options: ProcessingOptions): Promise<Blob> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const W = isMobile ? 720 : 1080; 
+        const H = isMobile ? 1280 : 1920;
+        this.canvas.width = W; this.canvas.height = H;
+
+        const targetDuration = 25; // Slideshows autorais são mais dinâmicos
+        const fps = 30;
+        const totalFrames = targetDuration * fps;
+        const slideDuration = targetDuration / imgs.length;
+        const filterCSS = this.getFilterCSS(options.filter || 'cinematic');
+
+        const muxer = new Muxer({ 
+          target: new ArrayBufferTarget(), 
+          video: { codec: 'avc', width: W, height: H }, 
+          audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 44100 }, 
+          fastStart: 'in-memory'
+        });
+        
+        const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
+        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 4_000_000 });
+        
+        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
+        audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
+
+        const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre);
+
+        for (let i = 0; i < totalFrames; i++) {
+          const currentTime = i / fps;
+          const slideIdx = Math.min(Math.floor(currentTime / slideDuration), imgs.length - 1);
+          const img = imgs[slideIdx];
+          const progress = (currentTime % slideDuration) / slideDuration;
+
+          this.ctx.fillStyle = '#000';
+          this.ctx.fillRect(0, 0, W, H);
+
+          // Efeito Ken Burns Profissional
+          const baseScale = Math.max(W / img.width, H / img.height);
+          const kbScale = 1 + (progress * 0.12); // Zoom in suave
+          const sw = img.width * baseScale * kbScale;
+          const sh = img.height * baseScale * kbScale;
+          const sx = (W - sw) / 2;
+          const sy = (H - sh) / 2;
+
+          this.ctx.save();
+          
+          // Transição de Crossfade
+          const fadeTime = 0.5;
+          if (currentTime % slideDuration < fadeTime && slideIdx > 0) {
+            const prevImg = imgs[slideIdx - 1];
+            const alpha = (currentTime % slideDuration) / fadeTime;
+            
+            // Desenhar anterior
+            const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * 1.12;
+            this.ctx.globalAlpha = 1 - alpha;
+            this.ctx.drawImage(prevImg, (W - prevImg.width * prevScale)/2, (H - prevImg.height * prevScale)/2, prevImg.width * prevScale, prevImg.height * prevScale);
+            
+            // Desenhar atual
+            this.ctx.globalAlpha = alpha;
+          }
+
+          this.ctx.filter = filterCSS;
+          this.ctx.drawImage(img, sx, sy, sw, sh);
+          this.ctx.restore();
+
+          // Overlays
+          this.ctx.globalAlpha = 1;
+          this.ctx.filter = 'none';
+          
+          if (options.script) {
+            this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, targetDuration, true);
+          }
+          
+          this.drawVignette(W, H);
+          this.drawCinematicOverlay(W, H, currentTime);
+
+          // Frame output
+          const timestamp = currentTime * 1_000_000;
+          const vFrame = new VideoFrame(this.canvas, { timestamp });
+          videoEncoder.encode(vFrame, { keyFrame: i % 30 === 0 });
+          vFrame.close();
+
+          if (audioBuffer) {
+            const start = Math.floor(i * (44100 / fps));
+            const len = Math.floor(44100 / fps);
+            const aData = new Float32Array(len * 2);
+            for (let ch = 0; ch < 2; ch++) {
+              const src = audioBuffer.getChannelData(ch);
+              for (let s = 0; s < len; s++) aData[ch * len + s] = src[(start + s) % src.length] || 0;
+            }
+            const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
+            audioEncoder.encode(audioData);
+            audioData.close();
+          }
+
+          if (i % 30 === 0) options.onProgress?.((i / totalFrames) * 100);
+          
+          if (videoEncoder.encodeQueueSize > 10) {
+            await new Promise(r => setTimeout(r, 10));
+          }
+        }
+
+        await videoEncoder.flush();
+        await audioEncoder.flush();
+        muxer.finalize();
+        resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
+      } catch (err) { reject(err); }
+    });
   }
 
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {

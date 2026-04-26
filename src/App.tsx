@@ -2342,7 +2342,7 @@ const App: React.FC = () => {
       setTreatingProgress(50);
       showToast("Renderizando com spintax...");
 
-      const blob = await processor.renderVideo(targetVideoData.url, options);
+      const blob = await processor.renderAutoralSlideshow(targetVideoData.url, options);
 
       setTreatingProgress(80);
 

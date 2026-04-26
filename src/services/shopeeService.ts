@@ -196,10 +196,15 @@ export class ShopeeService {
 
   static async resolveShortLinkToProduct(offerId: string, userShopeeId?: string): Promise<ShopeeProduct | null> {
     // 1️⃣ Resolve o offerId usando a API de afiliados via keyword search
+    let cleanId = offerId.trim();
+    if (cleanId.includes('shope.ee/')) {
+      cleanId = cleanId.split('shope.ee/')[1].split('?')[0];
+    }
+
     const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {
       body: {
         action: "get_offer_by_id",
-        params: { offer_id: offerId },
+        params: { offer_id: cleanId },
       },
     });
 
