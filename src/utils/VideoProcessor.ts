@@ -240,59 +240,7 @@ export class VideoProcessor {
   // MOTION ANALYSIS: mede diferença de pixel entre frame atual e anterior
   // Usa canvas 32x32 para performance máxima. Retorna 0..1 (0=parado, 1=tudo mudou)
   // ─────────────────────────────────────────────────────────────────────────
-  private motionCanvas = document.createElement('canvas');
-  private prevMotionData: Uint8ClampedArray | null = null;
 
-  private computeFrameDiff(video: HTMLVideoElement): number {
-    const MC = 32; // resolução reduzida para análise de movimento
-    if (this.motionCanvas.width !== MC) {
-      this.motionCanvas.width = MC;
-      this.motionCanvas.height = MC;
-    }
-    const mCtx = this.motionCanvas.getContext('2d', { willReadFrequently: true })!;
-    mCtx.drawImage(video, 0, 0, MC, MC);
-    const curr = mCtx.getImageData(0, 0, MC, MC).data;
-    if (!this.prevMotionData || this.prevMotionData.length !== curr.length) {
-      this.prevMotionData = new Uint8ClampedArray(curr);
-      return 0;
-    }
-    let diff = 0;
-    const total = curr.length / 4;
-    for (let p = 0; p < curr.length; p += 4) {
-      const dr = Math.abs(curr[p]   - this.prevMotionData[p]);
-      const dg = Math.abs(curr[p+1] - this.prevMotionData[p+1]);
-      const db = Math.abs(curr[p+2] - this.prevMotionData[p+2]);
-      if ((dr + dg + db) > 30) diff++; // threshold: pequenas variações de iluminação não contam
-    }
-    this.prevMotionData = new Uint8ClampedArray(curr);
-    return diff / total; // 0..1
-  }
-
-  // Avança o vídeo até encontrar um frame com baixo movimento (≤ maxMotion)
-  // Limita a busca em maxSearchSec para não atrasar demais
-  private async seekToCleanFrame(
-    video: HTMLVideoElement,
-    startTime: number,
-    maxMotion: number = 0.08,
-    maxSearchSec: number = 0.5,
-    isMobile: boolean = false,
-  ): Promise<number> {
-    const step = 1 / 30; // passo de 1 frame (33ms)
-    let t = startTime;
-    const limit = Math.min(startTime + maxSearchSec, video.duration - 0.05);
-    while (t < limit) {
-      video.currentTime = t;
-      await new Promise<void>(res => {
-        const onSeeked = () => { video.removeEventListener('seeked', onSeeked); res(); };
-        video.addEventListener('seeked', onSeeked);
-        setTimeout(onSeeked, isMobile ? 300 : 100);
-      });
-      const motion = this.computeFrameDiff(video);
-      if (motion <= maxMotion) return t; // frame limpo encontrado!
-      t += step;
-    }
-    return startTime; // fallback: usa ponto original
-  }
 
   public async renderVideo(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
@@ -362,55 +310,43 @@ export class VideoProcessor {
           } catch (e) {}
         }
 
-        // ─── MICRO-CROSSFADE BUFFER ─────────────────────────────────────────
-        // Para esconder artefatos residuais nos cortes, mantemos o frame anterior
-        // e fazemos um crossfade de MICRO_FADE_FRAMES entre ele e o novo frame.
-        const MICRO_FADE_FRAMES = options.isAutoral ? 6 : 0; // só no autoral
+        // Inicia a reprodução garantindo que o vídeo esteja pronto
+        video.muted = true;
+        video.currentTime = 0;
+        
         let prevFrameBitmap: ImageBitmap | null = null;
-        let microFadeCounter = 0; // conta frames restantes do micro-fade
-
-        // ─── MOTION-AWARE SEEK ───────────────────────────────────────────────
-        // No modo autoral, antes de cada "corte" (quando o tempo reinicia/loopa),
-        // buscamos o frame mais limpo disponível nos próximos 0.5s.
-        let lastVideoTime = -1;
-        let cleanTimeOverride: number | null = null;
-        this.prevMotionData = null; // reset análise de movimento
-
-        const seekFrame = async (targetTime: number): Promise<void> => {
-          const actual = cleanTimeOverride !== null ? cleanTimeOverride : targetTime;
-          cleanTimeOverride = null;
-
-          if (Math.abs(video.currentTime - actual) > 0.005) {
-            video.currentTime = actual;
-            await new Promise<void>(res => {
-              let done = false;
-              const h = () => { if (done) return; done = true; video.removeEventListener('seeked', h); res(); };
-              video.addEventListener('seeked', h);
-              setTimeout(h, isMobile ? 400 : 150);
-            });
-          }
-        };
+        const FADE_FRAMES = 15; // 0.5s de crossfade
+        let fadeCounter = 0;
+        let lastRawTime = -1;
 
         for (let i = 0; i < totalFrames; i++) {
           const currentTime = i / fps;
-          const rawTargetTime = currentTime % video.duration;
+          const targetTime = currentTime % video.duration;
 
-          // Detecta ponto de corte (loop): quando rawTargetTime < lastVideoTime
-          const isLoopCut = rawTargetTime < lastVideoTime - 0.1;
+          // Detecta se o vídeo fez um loop (voltou para o começo)
+          if (targetTime < lastRawTime) {
+             try { prevFrameBitmap = await createImageBitmap(this.auxCanvas); } catch(e) {}
+             fadeCounter = FADE_FRAMES;
+          }
+          lastRawTime = targetTime;
 
-          if (options.isAutoral && isLoopCut) {
-            // 🎯 SMART CUT: busca o frame com menor movimento nos próximos 500ms
-            const cleanT = await this.seekToCleanFrame(video, 0, 0.10, 0.5, isMobile);
-            cleanTimeOverride = cleanT;
-            // Captura o frame atual antes do corte para fazer micro-crossfade
-            try { prevFrameBitmap = await createImageBitmap(this.auxCanvas); } catch(_) {}
-            microFadeCounter = MICRO_FADE_FRAMES;
-            this.prevMotionData = null; // reset diff após corte
+          // Seek exato para o frame desejado
+          if (Math.abs(video.currentTime - targetTime) > 0.01) {
+            video.currentTime = targetTime;
+            await new Promise<void>(res => {
+              let resolved = false;
+              const onSeeked = () => {
+                if (resolved) return;
+                resolved = true;
+                video.removeEventListener('seeked', onSeeked);
+                res();
+              };
+              video.addEventListener('seeked', onSeeked);
+              setTimeout(onSeeked, 150); // Timeout para evitar deadlocks
+            });
           }
 
-          await seekFrame(rawTargetTime);
-          lastVideoTime = video.currentTime;
-
+          // Desenha no canvas auxiliar
           if (video.readyState >= 2) {
             this.auxCtx.drawImage(video, 0, 0, W, H);
           } else {
@@ -427,24 +363,35 @@ export class VideoProcessor {
             this.ctx.scale(1.05, 1.05);
             this.ctx.translate(-W/2, -H/2);
           }
-          this.ctx.filter = filterCSS;
-          this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
-          this.ctx.restore();
-
-          // ── MICRO-CROSSFADE NO CORTE ──────────────────────────────────────
-          // Mistura o frame anterior sobre o atual com alpha decrescente
-          // para suavizar qualquer movimento brusco residual no ponto de corte
-          if (microFadeCounter > 0 && prevFrameBitmap) {
-            const fadeAlpha = microFadeCounter / MICRO_FADE_FRAMES; // 1→0
-            const eased = fadeAlpha * fadeAlpha; // easeIn para parecer mais natural
-            this.ctx.globalAlpha = eased;
-            this.ctx.drawImage(prevFrameBitmap, 0, 0, W, H);
-            this.ctx.globalAlpha = 1;
-            microFadeCounter--;
-            if (microFadeCounter === 0) prevFrameBitmap = null;
+          
+          // Efeito de transição aplicado ANTES de desenhar o vídeo e DENTRO do save/restore
+          // Isso garante que a transição afete o vídeo, mas NÃO afete a legenda.
+          if (options.transition !== 'none' && options.transitionTimestamps) {
+            this.applyTransitionEffect(options.transition, currentTime, options.transitionTimestamps, W, H);
           }
 
+          this.ctx.filter = filterCSS;
+          this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
+          
+          // Aplica o crossfade do loop para suavizar cortes
+          if (fadeCounter > 0 && prevFrameBitmap) {
+             const alpha = fadeCounter / FADE_FRAMES; // 1 até 0
+             // Reverte a escala para que o prevFrameBitmap se alinhe corretamente
+             this.ctx.globalAlpha = alpha;
+             this.ctx.drawImage(prevFrameBitmap, 0, 0, W, H);
+             this.ctx.globalAlpha = 1;
+             fadeCounter--;
+             if (fadeCounter === 0) { prevFrameBitmap = null; }
+          }
+          
+          this.ctx.restore();
+
           // ── OVERLAYS ─────────────────────────────────────────────────────
+          // Reset de segurança absoluto para que nada herde opacidade ou filtros
+          this.ctx.filter = 'none';
+          this.ctx.globalAlpha = 1;
+          this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+
           if (options.isAutoral) {
             const cardH = H * 0.25;
             const gradient = this.ctx.createLinearGradient(0, H - cardH, 0, H);
@@ -458,10 +405,6 @@ export class VideoProcessor {
           } else {
             this.ctx.fillStyle = '#000';
             this.ctx.fillRect(0, H * 0.82, W, H * 0.18);
-          }
-
-          if (options.transition !== 'none' && options.transitionTimestamps) {
-            this.applyTransitionEffect(options.transition, currentTime, options.transitionTimestamps, W, H);
           }
 
           if (options.script) {
