@@ -310,40 +310,42 @@ export class VideoProcessor {
           } catch (e) {}
         }
 
-        // Inicia a reprodução garantindo que o vídeo esteja pronto
+        // Inicia a reprodução nativa para evitar engasgos (stuttering) de decodificação
         video.muted = true;
         video.currentTime = 0;
+        await video.play();
         
-        let prevFrameBitmap: ImageBitmap | null = null;
-        const FADE_FRAMES = 15; // 0.5s de crossfade
-        let fadeCounter = 0;
         let lastRawTime = -1;
+        let i = 0;
 
-        for (let i = 0; i < totalFrames; i++) {
+        while (i < totalFrames) {
           const currentTime = i / fps;
           const targetTime = currentTime % video.duration;
 
           // Detecta se o vídeo fez um loop (voltou para o começo)
-          if (targetTime < lastRawTime) {
-             try { prevFrameBitmap = await createImageBitmap(this.auxCanvas); } catch(e) {}
-             fadeCounter = FADE_FRAMES;
+          if (targetTime < lastRawTime || video.ended) {
+             video.pause();
+             video.currentTime = targetTime;
+             await new Promise<void>(res => {
+               let resolved = false;
+               const onSeeked = () => {
+                 if (resolved) return;
+                 resolved = true;
+                 video.removeEventListener('seeked', onSeeked);
+                 res();
+               };
+               video.addEventListener('seeked', onSeeked);
+               setTimeout(onSeeked, 300); // Timeout seguro para o loop
+             });
+             await video.play();
           }
           lastRawTime = targetTime;
 
-          // Seek exato para o frame desejado
-          if (Math.abs(video.currentTime - targetTime) > 0.01) {
-            video.currentTime = targetTime;
-            await new Promise<void>(res => {
-              let resolved = false;
-              const onSeeked = () => {
-                if (resolved) return;
-                resolved = true;
-                video.removeEventListener('seeked', onSeeked);
-                res();
-              };
-              video.addEventListener('seeked', onSeeked);
-              setTimeout(onSeeked, 150); // Timeout para evitar deadlocks
-            });
+          // Sincroniza a captura com o tempo real de reprodução do vídeo
+          // Isso elimina o "picotamento" pois deixamos o player nativo decodificar suavemente
+          if (video.currentTime < targetTime && !video.ended) {
+            await new Promise(r => requestAnimationFrame(r));
+            continue; // Tenta novamente no próximo frame de tela
           }
 
           // Desenha no canvas auxiliar
@@ -364,26 +366,12 @@ export class VideoProcessor {
             this.ctx.translate(-W/2, -H/2);
           }
           
-          // Efeito de transição aplicado ANTES de desenhar o vídeo e DENTRO do save/restore
-          // Isso garante que a transição afete o vídeo, mas NÃO afete a legenda.
           if (options.transition !== 'none' && options.transitionTimestamps) {
             this.applyTransitionEffect(options.transition, currentTime, options.transitionTimestamps, W, H);
           }
 
           this.ctx.filter = filterCSS;
           this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
-          
-          // Aplica o crossfade do loop para suavizar cortes
-          if (fadeCounter > 0 && prevFrameBitmap) {
-             const alpha = fadeCounter / FADE_FRAMES; // 1 até 0
-             // Reverte a escala para que o prevFrameBitmap se alinhe corretamente
-             this.ctx.globalAlpha = alpha;
-             this.ctx.drawImage(prevFrameBitmap, 0, 0, W, H);
-             this.ctx.globalAlpha = 1;
-             fadeCounter--;
-             if (fadeCounter === 0) { prevFrameBitmap = null; }
-          }
-          
           this.ctx.restore();
 
           // ── OVERLAYS ─────────────────────────────────────────────────────
@@ -437,7 +425,21 @@ export class VideoProcessor {
             audioEncoder.encode(audioData);
             audioData.close();
           }
+          
           options.onProgress?.((i / totalFrames) * 100);
+          
+          i++; // Avança para o próximo frame
+
+          // CONTROLE DE FLUXO E ESTABILIDADE:
+          // Se o encoder estiver ficando para trás (muitos frames na fila), pausamos o vídeo
+          // Isso evita que o vídeo toque até o fim e a gente perca os frames intermediários.
+          if (videoEncoder.encodeQueueSize > 5) {
+            video.pause();
+            while (videoEncoder.encodeQueueSize > 2) {
+              await new Promise(r => setTimeout(r, 20));
+            }
+            await video.play();
+          }
         }
 
         await videoEncoder.flush();
