@@ -236,6 +236,64 @@ export class VideoProcessor {
     } finally { await audioCtx.close(); }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // MOTION ANALYSIS: mede diferença de pixel entre frame atual e anterior
+  // Usa canvas 32x32 para performance máxima. Retorna 0..1 (0=parado, 1=tudo mudou)
+  // ─────────────────────────────────────────────────────────────────────────
+  private motionCanvas = document.createElement('canvas');
+  private prevMotionData: Uint8ClampedArray | null = null;
+
+  private computeFrameDiff(video: HTMLVideoElement): number {
+    const MC = 32; // resolução reduzida para análise de movimento
+    if (this.motionCanvas.width !== MC) {
+      this.motionCanvas.width = MC;
+      this.motionCanvas.height = MC;
+    }
+    const mCtx = this.motionCanvas.getContext('2d', { willReadFrequently: true })!;
+    mCtx.drawImage(video, 0, 0, MC, MC);
+    const curr = mCtx.getImageData(0, 0, MC, MC).data;
+    if (!this.prevMotionData || this.prevMotionData.length !== curr.length) {
+      this.prevMotionData = new Uint8ClampedArray(curr);
+      return 0;
+    }
+    let diff = 0;
+    const total = curr.length / 4;
+    for (let p = 0; p < curr.length; p += 4) {
+      const dr = Math.abs(curr[p]   - this.prevMotionData[p]);
+      const dg = Math.abs(curr[p+1] - this.prevMotionData[p+1]);
+      const db = Math.abs(curr[p+2] - this.prevMotionData[p+2]);
+      if ((dr + dg + db) > 30) diff++; // threshold: pequenas variações de iluminação não contam
+    }
+    this.prevMotionData = new Uint8ClampedArray(curr);
+    return diff / total; // 0..1
+  }
+
+  // Avança o vídeo até encontrar um frame com baixo movimento (≤ maxMotion)
+  // Limita a busca em maxSearchSec para não atrasar demais
+  private async seekToCleanFrame(
+    video: HTMLVideoElement,
+    startTime: number,
+    maxMotion: number = 0.08,
+    maxSearchSec: number = 0.5,
+    isMobile: boolean = false,
+  ): Promise<number> {
+    const step = 1 / 30; // passo de 1 frame (33ms)
+    let t = startTime;
+    const limit = Math.min(startTime + maxSearchSec, video.duration - 0.05);
+    while (t < limit) {
+      video.currentTime = t;
+      await new Promise<void>(res => {
+        const onSeeked = () => { video.removeEventListener('seeked', onSeeked); res(); };
+        video.addEventListener('seeked', onSeeked);
+        setTimeout(onSeeked, isMobile ? 300 : 100);
+      });
+      const motion = this.computeFrameDiff(video);
+      if (motion <= maxMotion) return t; // frame limpo encontrado!
+      t += step;
+    }
+    return startTime; // fallback: usa ponto original
+  }
+
   public async renderVideo(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -249,27 +307,22 @@ export class VideoProcessor {
           video.onerror = (e) => rej(e);
         });
         
-        // Otimização Mobile: 720p em vez de 1080p para evitar estouro de memória/GPU
-        const W = isMobile ? 1080 : 1080; 
-        const H = isMobile ? 1920 : 1920;
+        const W = 1080;
+        const H = 1920;
         this.canvas.width = W; this.canvas.height = H;
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
         const targetSampleRate = 44100;
-        // Mobile Turbo: mantém áudio original (não processa pitch - muito pesado)
-        // Desktop/Normal: aplica pitch se for autoral (0.92 = voz mais grossa conforme solicitado)
         const pitchFactor = (options.isAutoral && !options.mobileTurbo) ? 0.92 : 1.0;
         let mainAudioBuffer = await this.processAudioBuffer(await (await fetch(videoUrl)).arrayBuffer(), targetSampleRate, pitchFactor);
         if (options.musicUrl) {
           const bg = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
-          // Mix logic (simplified)
           const mixed = new AudioBuffer({ numberOfChannels: 2, length: Math.max(mainAudioBuffer.length, bg.length), sampleRate: targetSampleRate });
           for (let ch = 0; ch < 2; ch++) {
             const m = mainAudioBuffer.getChannelData(ch % mainAudioBuffer.numberOfChannels);
             const b = bg.getChannelData(ch % bg.numberOfChannels);
             const out = mixed.getChannelData(ch);
             for (let s = 0; s < mixed.length; s++) {
-              // Mixagem viral: Voz clara (0.95), Fundo enérgico (0.35)
               out[s] = (m[s] || 0) * 0.95 + (b[s % b.length] || 0) * 0.35;
             }
           }
@@ -284,15 +337,12 @@ export class VideoProcessor {
           firstTimestampBehavior: 'offset' 
         });
         const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
-        
-        // Bitrate de Alta Performance (HQ): 6Mbps para Autoral garantindo nitidez máxima
         const targetBitrate = options.isAutoral ? 6_000_000 : 4_000_000;
         videoEncoder.configure({ 
-          codec: 'avc1.4d002a', // High Profile Level 4.2
-          width: W, 
-          height: H, 
+          codec: 'avc1.4d002a',
+          width: W, height: H, 
           bitrate: targetBitrate,
-          latencyMode: 'quality' // Foca na integridade do frame
+          latencyMode: 'quality'
         });
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
@@ -301,104 +351,111 @@ export class VideoProcessor {
         const totalFrames = Math.floor(video.duration * fps);
         const filterCSS = this.getFilterCSS(options.filter);
         
-        // Pré-carregar logo se existir para performance (evitar fetch em cada frame)
         if (options.storeLogo && (!this.logoCache || this.logoUrl !== options.storeLogo)) {
           try {
             const img = new Image();
             img.crossOrigin = 'anonymous';
-            const blobUrl = await this.fetchAsBlob(options.storeLogo, 'image');
-            img.src = blobUrl;
+            img.src = await this.fetchAsBlob(options.storeLogo, 'image');
             await new Promise((res) => { img.onload = res; img.onerror = res; });
             this.logoCache = img;
             this.logoUrl = options.storeLogo;
-          } catch (e) {
-            console.warn("[VideoProcessor] Falha no pré-carregamento do logo:", e);
-          }
+          } catch (e) {}
         }
 
-        const framesToCache = isMobile ? 0 : Math.min(totalFrames, 300); // Desativar cache em mobile para economizar RAM
-        const cachedFrames = this.frameCache.get(videoUrl) || [];
-        const useCache = !isMobile && cachedFrames.length > 0;
+        // ─── MICRO-CROSSFADE BUFFER ─────────────────────────────────────────
+        // Para esconder artefatos residuais nos cortes, mantemos o frame anterior
+        // e fazemos um crossfade de MICRO_FADE_FRAMES entre ele e o novo frame.
+        const MICRO_FADE_FRAMES = options.isAutoral ? 6 : 0; // só no autoral
+        let prevFrameBitmap: ImageBitmap | null = null;
+        let microFadeCounter = 0; // conta frames restantes do micro-fade
+
+        // ─── MOTION-AWARE SEEK ───────────────────────────────────────────────
+        // No modo autoral, antes de cada "corte" (quando o tempo reinicia/loopa),
+        // buscamos o frame mais limpo disponível nos próximos 0.5s.
+        let lastVideoTime = -1;
+        let cleanTimeOverride: number | null = null;
+        this.prevMotionData = null; // reset análise de movimento
+
+        const seekFrame = async (targetTime: number): Promise<void> => {
+          const actual = cleanTimeOverride !== null ? cleanTimeOverride : targetTime;
+          cleanTimeOverride = null;
+
+          if (Math.abs(video.currentTime - actual) > 0.005) {
+            video.currentTime = actual;
+            await new Promise<void>(res => {
+              let done = false;
+              const h = () => { if (done) return; done = true; video.removeEventListener('seeked', h); res(); };
+              video.addEventListener('seeked', h);
+              setTimeout(h, isMobile ? 400 : 150);
+            });
+          }
+        };
 
         for (let i = 0; i < totalFrames; i++) {
           const currentTime = i / fps;
-          
-          if (useCache) {
-            const frameIdx = i % cachedFrames.length;
-            this.auxCtx.drawImage(cachedFrames[frameIdx], 0, 0, W, H);
-          } else {
-            const targetTime = currentTime % video.duration;
-            if (Math.abs(video.currentTime - targetTime) > 0.01) {
-              video.currentTime = targetTime;
-              await new Promise<void>(res => {
-                let resolved = false;
-                const onSeeked = () => {
-                  if (resolved) return;
-                  resolved = true;
-                  video.removeEventListener('seeked', onSeeked);
-                  res();
-                };
-                video.addEventListener('seeked', onSeeked);
-                setTimeout(onSeeked, isMobile ? 400 : 150); // Timeout robusto para evitar lags
-              });
-            }
-            
-            // Garantir que temos dados suficientes para desenhar o frame sem flicker
-            if (video.readyState >= 2) {
-              this.auxCtx.drawImage(video, 0, 0, W, H);
-            } else {
-              // Se falhar o seek, espera um pouco mais no próximo ciclo ou pula (melhor pular do que lagar)
-              await new Promise(r => setTimeout(r, 10));
-              this.auxCtx.drawImage(video, 0, 0, W, H);
-            }
-            
-            // Alimentar cache se possível
-            if (i < framesToCache) {
-              try {
-                // Usar auxCanvas em vez de video diretamente (mais estável)
-                const bmp = await createImageBitmap(this.auxCanvas);
-                cachedFrames.push(bmp);
-                if (i === framesToCache - 1) this.frameCache.set(videoUrl, cachedFrames);
-              } catch (e) {
-                console.warn("[VideoProcessor] Falha ao criar bitmap do frame:", e);
-              }
-            }
+          const rawTargetTime = currentTime % video.duration;
+
+          // Detecta ponto de corte (loop): quando rawTargetTime < lastVideoTime
+          const isLoopCut = rawTargetTime < lastVideoTime - 0.1;
+
+          if (options.isAutoral && isLoopCut) {
+            // 🎯 SMART CUT: busca o frame com menor movimento nos próximos 500ms
+            const cleanT = await this.seekToCleanFrame(video, 0, 0.10, 0.5, isMobile);
+            cleanTimeOverride = cleanT;
+            // Captura o frame atual antes do corte para fazer micro-crossfade
+            try { prevFrameBitmap = await createImageBitmap(this.auxCanvas); } catch(_) {}
+            microFadeCounter = MICRO_FADE_FRAMES;
+            this.prevMotionData = null; // reset diff após corte
           }
 
+          await seekFrame(rawTargetTime);
+          lastVideoTime = video.currentTime;
+
+          if (video.readyState >= 2) {
+            this.auxCtx.drawImage(video, 0, 0, W, H);
+          } else {
+            await new Promise(r => setTimeout(r, 10));
+            this.auxCtx.drawImage(video, 0, 0, W, H);
+          }
+
+          // ── RENDER FRAME ─────────────────────────────────────────────────
           this.ctx.save();
           if (options.isAutoral) {
-            // ESPELHAMENTO: Inverte horizontalmente
             this.ctx.translate(W, 0);
             this.ctx.scale(-1, 1);
-            // SAFE-ZOOM: 1.05x (5% de zoom) para mudar a assinatura sem perder qualidade
             this.ctx.translate(W/2, H/2);
             this.ctx.scale(1.05, 1.05);
             this.ctx.translate(-W/2, -H/2);
           }
-          
           this.ctx.filter = filterCSS;
           this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
-          
-          
-
           this.ctx.restore();
 
+          // ── MICRO-CROSSFADE NO CORTE ──────────────────────────────────────
+          // Mistura o frame anterior sobre o atual com alpha decrescente
+          // para suavizar qualquer movimento brusco residual no ponto de corte
+          if (microFadeCounter > 0 && prevFrameBitmap) {
+            const fadeAlpha = microFadeCounter / MICRO_FADE_FRAMES; // 1→0
+            const eased = fadeAlpha * fadeAlpha; // easeIn para parecer mais natural
+            this.ctx.globalAlpha = eased;
+            this.ctx.drawImage(prevFrameBitmap, 0, 0, W, H);
+            this.ctx.globalAlpha = 1;
+            microFadeCounter--;
+            if (microFadeCounter === 0) prevFrameBitmap = null;
+          }
+
+          // ── OVERLAYS ─────────────────────────────────────────────────────
           if (options.isAutoral) {
-            // CARD DE PRODUTO: Cobre 25% da base para esconder legendas originais de forma profissional
             const cardH = H * 0.25;
             const gradient = this.ctx.createLinearGradient(0, H - cardH, 0, H);
             gradient.addColorStop(0, 'rgba(0,0,0,0)');
             gradient.addColorStop(0.3, 'rgba(0,0,0,0.85)');
             gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
-            
             this.ctx.fillStyle = gradient;
             this.ctx.fillRect(0, H - cardH, W, cardH);
-            
-            // Borda decorativa superior do card
-            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            this.ctx.fillStyle = 'rgba(255,255,255,0.15)';
             this.ctx.fillRect(W * 0.1, H - cardH + 10, W * 0.8, 2);
           } else {
-            // Overlay solid mask simples para modo normal
             this.ctx.fillStyle = '#000';
             this.ctx.fillRect(0, H * 0.82, W, H * 0.18);
           }
@@ -411,13 +468,11 @@ export class VideoProcessor {
             this.drawSpintaxOverlay(options.script, currentTime, W, H, options.storeSlug, video.duration, options.isAutoral);
           }
 
-          // Efeitos Cinematográficos para modo Autoral
           if (options.isAutoral) {
             this.drawVignette(W, H);
             this.drawCinematicOverlay(W, H, currentTime);
           }
 
-          // BRANDING: Apenas se não for autoral (Shopee ban)
           if (options.storeName && !options.isAutoral) {
             this.drawStoreBranding(W, H, options);
           }
@@ -448,6 +503,9 @@ export class VideoProcessor {
         resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
       } catch (err) { reject(err); }
     });
+
+
+
   }
 
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
