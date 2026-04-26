@@ -227,11 +227,12 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
     }
   }, [activeTab, isLoadingProfile]);
 
-  const LIGHTNING_KEYWORDS = ["oferta relâmpago viral", "promoção relâmpago achadinhos", "queima estoque hoje tiktok", "liquidação relâmpago utilidades"];
-  const OFF50_KEYWORDS = ["cupom shopee 50% viral", "desconto 70% achadinhos", "promoção metades preço utilidades", "super oferta shopee tiktok"];
+  const LIGHTNING_KEYWORDS = ["oferta relâmpago viral", "promoção relâmpago achadinhos", "queima estoque hoje tiktok", "liquidação relâmpago utilidades", "oferta única shopee"];
+  const OFF50_KEYWORDS = ["cupom shopee 50% viral", "desconto 70% achadinhos", "promoção metades preço utilidades", "super oferta shopee tiktok", "preço de custo achadinhos"];
   const TOP_KEYWORDS = [
     "mais vendidos shopee tiktok", "top achadinhos viral shopee", "shopee best seller utilidades", 
-    "produtos tendência tiktok brasil", "utilidades domésticas viral tiktok", "gadgets inteligentes viral"
+    "produtos tendência tiktok brasil", "utilidades domésticas viral tiktok", "gadgets inteligentes viral",
+    "itens que você precisa ter", "achadinhos que resolvem problemas"
   ];
 
   const calcDiscount = (p: { price: number; original_price: number; discount: number }): number => {
@@ -291,6 +292,15 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
               setProducts([resolved]);
               setIsSearching(false);
               return;
+            } else {
+              // Fallback: Se não achou por ID direto, tenta busca normal por keyword
+              onShowToast("⚠️ ID não mapeado. Tentando busca global...");
+              const fallbackResults = await ShopeeService.searchProducts({ keyword: trimmedKw, sort_by: 3, page_number: 1 }, userShopeeId || undefined);
+              if (fallbackResults && fallbackResults.length > 0) {
+                setProducts(fallbackResults);
+                setIsSearching(false);
+                return;
+              }
             }
           } catch (err) {
             console.error("[ShopeeHub] Erro na busca direta:", err);
@@ -502,15 +512,20 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
 
   return (
     <div className="flex flex-col gap-5 p-4 pb-24">
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col">
-          <h2 className="text-3xl font-black italic text-white uppercase leading-none tracking-tighter">
-            SHOPEE <span className="text-emerald-500">HUB</span>
-          </h2>
-          <p className="text-[9px] font-black text-emerald-400/80 tracking-[0.2em] uppercase mt-1">Intelligence Pro Max</p>
+      <div className="flex items-center justify-between bg-slate-900/40 p-4 rounded-3xl border border-white/5 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <ShoppingBag className="text-slate-950" size={24} />
+          </div>
+          <div className="flex flex-col">
+            <h2 className="text-2xl font-black italic text-white uppercase leading-none tracking-tighter">
+              SHOPEE <span className="text-emerald-400">HUB</span>
+            </h2>
+            <p className="text-[8px] font-black text-emerald-400/60 tracking-[0.3em] uppercase mt-1">Intelligence Pro Max</p>
+          </div>
         </div>
-        <button onClick={() => setShowSettings(true)} className="w-10 h-10 bg-slate-900 border border-white/10 rounded-xl flex items-center justify-center text-white/60">
-          <Settings size={20} />
+        <button onClick={() => setShowSettings(true)} className="w-12 h-12 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-white/40 hover:text-white transition-all active:scale-95">
+          <Settings size={22} />
         </button>
       </div>
 
@@ -534,18 +549,43 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
         </button>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`shrink-0 h-10 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-wider transition-all border ${
-              activeTab === tab.id ? "bg-emerald-500 border-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" : "bg-slate-900/50 border-white/5 text-white/40"
-            }`}
-          >
-            <tab.icon size={14} /> {tab.label.split(' ')[0]}
-          </button>
-        ))}
+      <div className="relative flex gap-2 overflow-x-auto no-scrollbar py-2 px-1 bg-slate-950/40 rounded-2xl border border-white/5">
+        <div className="absolute inset-y-2 flex gap-2 no-scrollbar pointer-events-none">
+          {tabs.map((tab) => (
+            <div
+              key={`bg-${tab.id}`}
+              className="shrink-0 h-10 px-4 opacity-0"
+            >
+              <tab.icon size={14} /> {tab.label.split(' ')[0]}
+            </div>
+          ))}
+        </div>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative shrink-0 h-10 px-5 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-wider transition-all duration-300 z-10 ${
+                isActive 
+                  ? "text-slate-950" 
+                  : "text-white/40 hover:text-white/70"
+              }`}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="tab-highlight"
+                  className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-xl shadow-lg shadow-emerald-500/20"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+              <span className="relative z-20 flex items-center gap-2">
+                <tab.icon size={14} className={isActive ? "text-slate-950" : "text-emerald-500/50"} /> 
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {activeTab === "all" && (
@@ -580,10 +620,20 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-2 gap-4">
         {(products || []).filter(p => p.item_name && p.item_name.length > 3).slice(0, visibleCount).map((product) => (
-          <div key={product.item_id} className="tech-card p-2 flex flex-col gap-3 group border-white/5 bg-slate-900/20">
+          <div key={product.item_id} className="tech-card p-2.5 flex flex-col gap-3 group border-white/5 bg-slate-900/40 relative overflow-hidden">
+            {/* Badge de Conversão/Viral */}
+            {(product.sales > 100 || product.commission > 20) && (
+              <div className="absolute top-4 left-4 z-20 pointer-events-none">
+                <div className="bg-orange-500 text-white text-[8px] font-black px-2 py-1 rounded-lg shadow-lg shadow-orange-500/40 flex items-center gap-1 animate-pulse">
+                  <Flame size={10} fill="white" /> VIRAL
+                </div>
+              </div>
+            )}
+            
             <a href={`https://shopee.com.br/product/${product.shop_id}/${product.item_id}`} target="_blank" rel="noopener noreferrer" className="block relative group/img">
+              <div className="absolute -inset-1 bg-gradient-to-tr from-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity blur-sm rounded-[2rem]" />
               <SwipeableImageCard product={product} />
             </a>
             <div className="flex flex-col gap-1.5 px-1">
@@ -598,11 +648,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
                   <Rocket size={14} /> VÍDEO VIRAL (IA)
                 </button>
                 <div className="flex gap-2">
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onViralize?.(product, 'autoral_auto'); }} className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black text-[9px] uppercase shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onViralize?.(product, 'autoral_auto'); }} className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-black text-[9px] uppercase shadow-lg shadow-blue-500/20 active:scale-95 hover:brightness-110 transition-all">
                     <Zap size={14} fill="white" /> AUTORAL (IA)
                   </button>
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleImageSelection(product); }} className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 text-white/40 font-black text-[9px] uppercase active:scale-95 transition-all">
-                    <Video size={14} /> MANUAL
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleImageSelection(product); }} className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/40 font-black active:scale-95 transition-all">
+                    <Video size={16} />
                   </button>
                 </div>
               <div className="flex items-center gap-2 mt-2">
