@@ -1536,16 +1536,14 @@ const App: React.FC = () => {
 
       if (offerIdMatch) {
         const offerId = offerIdMatch[1].toUpperCase();
-        const offerIdLower = offerIdMatch[1].toLowerCase();
-        showToast(`🔍 Buscando: ${offerId}`);
+        showToast(`🔍 Buscando produto: ${offerId}...`);
 
         // 1️⃣ Busca instantânea no banco local
         const allLocal = [...databaseProducts, ...activeItems];
         const localMatch = allLocal.find(p =>
           (p.product_link || "").toUpperCase().includes(offerId) ||
           (p.affiliate_link || "").toUpperCase().includes(offerId) ||
-          String(p.item_id || "").toUpperCase() === offerId ||
-          String(p.id || "").toUpperCase() === offerId
+          String(p.item_id || "").toUpperCase() === offerId
         );
 
         if (localMatch) {
@@ -1557,50 +1555,29 @@ const App: React.FC = () => {
           return;
         }
 
-        // 2️⃣ Busca via método dedicado da API Shopee para Offer IDs
+        // 2️⃣ Resolve o short link via API Shopee (urlGenerate):
+        // CHW-MAL-YCR → s.shopee.com.br/CHW-MAL-YCR → originLink com shopId+itemId real
         try {
-          showToast("🌐 Consultando Shopee com ID...");
-          const results = await ShopeeService.getProductByOfferId(offerId, userShopeeId || undefined);
-          if (results.length > 0) {
+          showToast("🌐 Resolvendo ID via Shopee...");
+          const product = await ShopeeService.resolveShortLinkToProduct(offerId, userShopeeId || undefined);
+          if (product) {
             setActiveItems(prev => {
               const existingIds = new Set(prev.map(p => p.item_id));
-              const newOnes = results.filter(p => !existingIds.has(p.item_id));
-              return [...newOnes, ...prev].slice(0, 30);
+              if (existingIds.has(product.item_id)) return prev;
+              return [product, ...prev].slice(0, 30);
             });
-            setSelectedProduct(results[0]);
+            setSelectedProduct(product);
             setStep("list");
-            void researchTikTok(results[0]);
+            void researchTikTok(product);
             setCustomLink("");
-            showToast(`✅ Produto encontrado!`);
+            showToast("✅ Produto encontrado!");
             return;
           }
         } catch (_) { /* fallback abaixo */ }
 
-        // 3️⃣ Keyword search genérico como backup
-        try {
-          showToast("🌐 Buscando por nome...");
-          const results = await ShopeeService.searchProducts(
-            { keyword: offerId, sort_by: "sales", page_size: 10 } as any,
-            userShopeeId || undefined
-          );
-          if (results.length > 0) {
-            setActiveItems(prev => {
-              const existingIds = new Set(prev.map(p => p.item_id));
-              const newOnes = results.filter(p => !existingIds.has(p.item_id));
-              return [...newOnes, ...prev].slice(0, 30);
-            });
-            setSelectedProduct(results[0]);
-            setStep("list");
-            void researchTikTok(results[0]);
-            setCustomLink("");
-            showToast(`✅ ${results.length} produto(s) encontrado(s)!`);
-            return;
-          }
-        } catch (_) { /* fallback abaixo */ }
-
-        // 4️⃣ Último recurso: tenta como short link via proxy
-        extractedName = `https://s.shopee.com.br/${offerIdLower}`;
+        // 3️⃣ Fallback: tenta link curto direto via proxy
         showToast("🌐 Tentando via link curto...");
+        extractedName = `https://s.shopee.com.br/${offerId}`;
       }
       // ─────────────────────────────────────────────────────────────────────────
 
