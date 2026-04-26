@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ShopeeRequest {
-  action: "search_products" | "generate_links" | "get_item_detail";
+  action: "search_products" | "generate_links" | "get_item_detail" | "get_offer_by_id";
   params: any;
 }
 
@@ -159,6 +159,34 @@ serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
+    } else if (action === "get_offer_by_id") {
+      // Busca produto pelo Offer ID da plataforma de afiliados (ex: BBX-GNA-ZFX)
+      const { offer_id } = params;
+      if (!offer_id) throw new Error("Missing offer_id");
+
+      // Usa o mesmo endpoint de search com o offer_id como keyword
+      // A API Shopee indexa o offer_id como campo buscável
+      graphqlQuery = `
+        query productOfferV2($keyword: String, $page: Int, $limit: Int) {
+          productOfferV2(keyword: $keyword, page: $page, limit: $limit) {
+            nodes {
+              itemId
+              shopId
+              productName
+              productLink
+              imageUrl
+              price
+              commissionRate
+              sales
+            }
+          }
+        }
+      `;
+      variables = {
+        keyword: offer_id,
+        page: 1,
+        limit: 20,
+      };
     } else {
       throw new Error(`Invalid action: ${action}`);
     }

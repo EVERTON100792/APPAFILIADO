@@ -1557,15 +1557,33 @@ const App: React.FC = () => {
           return;
         }
 
-        // 2️⃣ Tenta via API da Shopee fazendo busca pelo ID como keyword
+        // 2️⃣ Busca via método dedicado da API Shopee para Offer IDs
         try {
-          showToast("🌐 Consultando Shopee...");
+          showToast("🌐 Consultando Shopee com ID...");
+          const results = await ShopeeService.getProductByOfferId(offerId, userShopeeId || undefined);
+          if (results.length > 0) {
+            setActiveItems(prev => {
+              const existingIds = new Set(prev.map(p => p.item_id));
+              const newOnes = results.filter(p => !existingIds.has(p.item_id));
+              return [...newOnes, ...prev].slice(0, 30);
+            });
+            setSelectedProduct(results[0]);
+            setStep("list");
+            void researchTikTok(results[0]);
+            setCustomLink("");
+            showToast(`✅ Produto encontrado!`);
+            return;
+          }
+        } catch (_) { /* fallback abaixo */ }
+
+        // 3️⃣ Keyword search genérico como backup
+        try {
+          showToast("🌐 Buscando por nome...");
           const results = await ShopeeService.searchProducts(
             { keyword: offerId, sort_by: "sales", page_size: 10 } as any,
             userShopeeId || undefined
           );
           if (results.length > 0) {
-            // Adiciona os resultados e seleciona o primeiro
             setActiveItems(prev => {
               const existingIds = new Set(prev.map(p => p.item_id));
               const newOnes = results.filter(p => !existingIds.has(p.item_id));
@@ -1580,8 +1598,7 @@ const App: React.FC = () => {
           }
         } catch (_) { /* fallback abaixo */ }
 
-        // 3️⃣ Último recurso: converte para short link e tenta resolver via proxy
-        // Tenta com e sem dashes (alguns IDs são diferentes)
+        // 4️⃣ Último recurso: tenta como short link via proxy
         extractedName = `https://s.shopee.com.br/${offerIdLower}`;
         showToast("🌐 Tentando via link curto...");
       }
