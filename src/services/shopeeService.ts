@@ -62,6 +62,13 @@ export class ShopeeService {
     console.log(`✅ Encontrados: ${nodes.length} itens`);
     console.groupEnd();
 
+    // Fallback: Se não encontrar nada e a keyword for longa, tenta simplificar
+    if (nodes.length === 0 && (filters.keyword || "").split(" ").length > 2) {
+      const simplifiedKw = (filters.keyword || "").split(" ").slice(0, -1).join(" ");
+      console.warn(`⚠️ 0 itens para "${filters.keyword}". Tentando simplificar para: "${simplifiedKw}"`);
+      return this.searchProducts({ ...filters, keyword: simplifiedKw }, userShopeeId);
+    }
+
     if (nodes.length === 0) return [];
 
     // ── CONVERSÃO DE LINKS ────────────────────────────────────────────────────────

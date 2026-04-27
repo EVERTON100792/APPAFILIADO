@@ -165,7 +165,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isMiniScanning, setIsMiniScanning] = useState(false);
   const [activeNicheId, setActiveNicheId] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [visibleCount, setVisibleCount] = useState(50);
   
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [pickerImages, setPickerImages] = useState<string[]>([]);
@@ -182,24 +182,26 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
   const niches = [
-    { id: "viral",     name: "Achadinhos",   icon: "🔥", keyword: "achadinhos shopee utilidades virais tiktok" },
-    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keyword: "utensílios cozinha criativos gadgets inteligentes" },
-    { id: "beleza",    name: "Beleza",       icon: "💄", keyword: "maquiagem skincare viral tiktok coreana" },
-    { id: "casa",      name: "Casa",         icon: "🏠", keyword: "decoração casa inteligente utilidades práticas" },
-    { id: "organizer", name: "Organização",  icon: "📂", keyword: "organizador casa closet cozinha praticidade" },
-    { id: "tech",      name: "Tecnologia",   icon: "💻", keyword: "gadgets eletrônicos inteligentes inovadores" },
-    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keyword: "limpeza inteligente aspirador robô utilidades" },
-    { id: "carro",     name: "Automotivo",   icon: "🚗", keyword: "acessórios carro inteligentes utilidades" },
-    { id: "kids",      name: "Kids",         icon: "🧸", keyword: "brinquedo educativo criativo montessori viral" },
-    { id: "pet",       name: "Pets",         icon: "🐾", keyword: "acessórios pet inteligentes gatos cães" },
-    { id: "banheiro",  name: "Banheiro",     icon: "🚿", keyword: "acessórios banheiro inteligentes utilidades" },
-    { id: "ferramentas",name: "Ferramentas", icon: "🛠️", keyword: "ferramentas inteligentes multiuso casa" },
+    { id: "viral",     name: "Achadinhos",   icon: "🔥", keywords: ["achadinhos shopee", "produtos virais tiktok", "utilidades práticas", "achados inovadores", "itens criativos shopee", "gadgets úteis casa", "coisas baratas e úteis", "achadinhos must have"] },
+    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keywords: ["utensílios cozinha criativos", "gadgets cozinha tiktok", "cozinha inteligente inovação", "organizadores cozinha luxo", "itens práticos culinária", "achadinhos cozinha", "acessórios cozinha fun", "utensílios que facilitam vida"] },
+    { id: "beleza",    name: "Beleza",       icon: "💄", keywords: ["maquiagem viral tiktok", "skincare coreana", "beleza inovação", "acessórios maquiagem luxo", "itens beleza inteligentes", "ferramentas de beleza", "achadinhos skincare"] },
+    { id: "casa",      name: "Casa",         icon: "🏠", keywords: ["decoração casa moderna", "casa inteligente gadgets", "utilidades domésticas luxo", "organização casa criativa", "achadinhos decoração", "itens fofos decoração", "estética casa viral"] },
+    { id: "organizer", name: "Organização",  icon: "📂", keywords: ["organizadores closet luxo", "caixas organizadoras criativas", "praticidade casa organização", "organizadores inteligentes", "closet organizado", "truques organização casa", "armário otimizado"] },
+    { id: "tech",      name: "Tecnologia",   icon: "💻", keywords: ["gadgets eletrônicos 2024", "smartwatch luxo", "fone bluetooth viral tiktok", "acessórios tech criativos", "tecnologia inovadora", "tech must haves", "setup gamer barato"] },
+    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keywords: ["limpeza inteligente casa", "mop limpeza luxo", "aspirador robô viral", "acessórios limpeza práticos", "limpeza fácil", "truques limpeza rápida", "produtos limpeza virais"] },
+    { id: "carro",     name: "Automotivo",   icon: "🚗", keywords: ["acessórios carro luxo", "gadgets automotivos tiktok", "limpeza carro inteligente", "utilidades carro praticidade", "organização interna carro", "gadgets carro úteis"] },
+    { id: "kids",      name: "Kids",         icon: "🧸", keywords: ["brinquedos educativos luxo", "brinquedos tiktok viral", "itens bebê criativos", "moda infantil estilosa", "kids gadgets", "brinquedos sensoriais virais"] },
+    { id: "pet",       name: "Pets",         icon: "🐾", keywords: ["acessórios pet luxo", "brinquedos gato inteligentes", "coleira inovadora", "cama pet design", "pet gadgets", "itens pet úteis tiktok"] },
+    { id: "banheiro",  name: "Banheiro",     icon: "🚿", keywords: ["acessórios banheiro luxo", "organizador banheiro criativo", "utilidades banheiro design", "itens luxo higiene", "acessórios banheiro inteligentes"] },
+    { id: "ferramentas",name: "Ferramentas", icon: "🛠️", keywords: ["ferramentas multiuso luxo", "kit ferramentas completo", "parafusadeira inteligente", "gadgets obra criativos"] },
   ];
 
   const BLACKLIST_WORDS = [
     "gerador", "diesel", "motor", "industrial", "caminhão", "retroescavadeira", 
-    "pneu", "peças", "carro", "moto", "serviço", "aluguel", "maquinário", 
-    "rolamento", "engrenagem", "trator", "reboque", "frete", "consultoria"
+    "lixeira", "lixeiro", "balde", "lixo", "saco de lixo", "descarte", "entulho", "reciclagem",
+    "peças motor", "usinado", "atacado", "moto", "serviço", "aluguel", "maquinário", 
+    "rolamento", "engrenagem", "trator", "reboque", "frete", "consultoria", "vaga",
+    "limpeza bico", "manutenção", "conserto", "reforma"
   ];
 
   useEffect(() => {
@@ -227,12 +229,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
     }
   }, [activeTab, isLoadingProfile]);
 
-  const LIGHTNING_KEYWORDS = ["oferta relâmpago viral", "promoção relâmpago achadinhos", "queima estoque hoje tiktok", "liquidação relâmpago utilidades", "oferta única shopee"];
-  const OFF50_KEYWORDS = ["cupom shopee 50% viral", "desconto 70% achadinhos", "promoção metades preço utilidades", "super oferta shopee tiktok", "preço de custo achadinhos"];
+  const LIGHTNING_KEYWORDS = ["oferta relâmpago achadinhos", "promoção relâmpago shopee", "queima estoque tiktok", "liquidação utilidades"];
+  const OFF50_KEYWORDS = ["desconto 50% achadinhos", "cupom shopee viral", "metade preço utilidades", "super oferta tiktok"];
   const TOP_KEYWORDS = [
-    "mais vendidos shopee tiktok", "top achadinhos viral shopee", "shopee best seller utilidades", 
-    "produtos tendência tiktok brasil", "utilidades domésticas viral tiktok", "gadgets inteligentes viral",
-    "itens que você precisa ter", "achadinhos que resolvem problemas"
+    "mais vendidos tiktok", "top achadinhos viral", "shopee best seller", 
+    "tendência tiktok brasil", "utilidades domésticas viral", "gadgets inteligentes viral"
   ];
 
   const calcDiscount = (p: { price: number; original_price: number; discount: number }): number => {
@@ -243,23 +244,44 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
     return 0;
   };
 
-  const parallelSearch = async (keywords: string[], sortBy: number = 3, pagesPerKeyword: number = 2) => {
-    const requests: Promise<any[]>[] = [];
-    keywords.forEach(kw => {
-      for (let page = 1; page <= 3; page++) {
-        requests.push(ShopeeService.searchProducts({ keyword: kw.trim(), sort_by: 3, page_number: page }, userShopeeId || undefined).catch(() => []));
+  const parallelSearch = async (keywords: string[], sortBy: number = 1, pagesPerKeyword: number = 2) => {
+    const allItems: any[] = [];
+    
+    // SortBy: 1 = Best Selling em v2
+    const batchSize = 2;
+    for (let i = 0; i < keywords.length; i += batchSize) {
+      const batch = keywords.slice(i, i + batchSize);
+      const batchRequests: Promise<any[]>[] = [];
+      
+      batch.forEach(kw => {
+        // Buscar múltiplas páginas para garantir volume
+        for (let page = 1; page <= pagesPerKeyword; page++) {
+          batchRequests.push(ShopeeService.searchProducts({ 
+            keyword: kw.trim(), 
+            sort_by: sortBy, 
+            page_number: page,
+            page_size: 50 // Aumentar limite por request
+          }, userShopeeId || undefined).catch(() => []));
+        }
+      });
+      
+      const results = await Promise.all(batchRequests);
+      results.forEach(items => allItems.push(...items));
+      
+      if (i + batchSize < keywords.length) {
+        await new Promise(r => setTimeout(r, 400));
       }
-    });
-    const batches = await Promise.all(requests);
-    const allItems = ([] as any[]).concat(...batches);
-    return deduplicate(allItems);
+    }
+    
+    // Shuffle final para dar variedade
+    return deduplicate(allItems).sort(() => Math.random() - 0.5);
   };
 
   const handleSearch = async (overrideKeyword?: string, forceRefresh = false) => {
     setIsSearching(true);
     if (forceRefresh) {
       setProducts([]);
-      setVisibleCount(12);
+      setVisibleCount(50); // Aumentar para 50 itens por padrão
     }
     
     // Auto-trigger Radar Elite se a aba for Elite e estiver vazia
@@ -307,40 +329,43 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
           }
         }
 
-        // Se temos um nicho ativo e estamos dando refresh global (overrideKeyword undefined)
-        // usamos a keyword do nicho para manter o contexto correto
-        if (overrideKeyword === undefined && activeNicheId) {
+        // Se temos um nicho ativo ou uma busca específica, garantir volume
+        if (activeNicheId) {
           const currentNiche = niches.find(n => n.id === activeNicheId);
-          if (currentNiche) searchKw = currentNiche.keyword;
+          if (currentNiche) {
+            // Se o usuário digitou algo no search, usamos isso + keywords do nicho
+            // Se não, pegamos 4 keywords aleatórias do pool do nicho para máximo volume e variedade
+            const pool = overrideKeyword ? [overrideKeyword, ...currentNiche.keywords] : currentNiche.keywords;
+            const shuffledKws = [...pool].sort(() => Math.random() - 0.5).slice(0, 4);
+            finalProducts = await parallelSearch(shuffledKws, 1, 3); // 1 = Best Selling, 3 páginas por kw
+          }
         }
 
-        const [p1, p2, p3] = await Promise.all([
-          ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 1 }, userShopeeId || undefined).catch(() => []),
-          ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 3, page_number: 2 }, userShopeeId || undefined).catch(() => []),
-          ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 2, page_number: 1 }, userShopeeId || undefined).catch(() => []),
-        ]);
-        finalProducts = deduplicate([...p1, ...p2, ...p3]);
+        if (finalProducts.length === 0) {
+          const [p1, p2, p3] = await Promise.all([
+            ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 1, page_number: 1, page_size: 50 }, userShopeeId || undefined).catch(() => []),
+            ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 1, page_number: 2, page_size: 50 }, userShopeeId || undefined).catch(() => []),
+            ShopeeService.searchProducts({ keyword: searchKw.trim(), sort_by: 0, page_number: 1, page_size: 50 }, userShopeeId || undefined).catch(() => []),
+          ]);
+          finalProducts = deduplicate([...p1, ...p2, ...p3]);
+        }
+
         if (overrideKeyword !== undefined) {
-          finalProducts = finalProducts.filter(p => p.price >= 5 && p.price <= 1000).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
+          finalProducts = finalProducts.sort((a, b) => (b.sales || 0) - (a.sales || 0));
         } else {
           finalProducts = finalProducts.sort(() => Math.random() - 0.5);
         }
       } else if (activeTab === "lightning") {
-        finalProducts = await parallelSearch(LIGHTNING_KEYWORDS, 3, 2);
+        finalProducts = await parallelSearch(LIGHTNING_KEYWORDS, 1, 3);
         const withRealDiscount = finalProducts.map(p => ({ ...p, _disc: calcDiscount(p) })).filter(p => p._disc > 0).sort((a, b) => b._disc - a._disc);
-        finalProducts = withRealDiscount.length >= 10 ? withRealDiscount : finalProducts.sort((a, b) => a.price - b.price);
+        // Se temos poucos com desconto real, mesclamos com os melhores da busca
+        finalProducts = withRealDiscount.length >= 10 ? withRealDiscount : finalProducts.sort((a, b) => b.sales - a.sales);
       } else if (activeTab === "50off") {
-        finalProducts = await parallelSearch(OFF50_KEYWORDS, 3, 2);
+        finalProducts = await parallelSearch(OFF50_KEYWORDS, 1, 3);
         const withCalcDisc = finalProducts.map(p => ({ ...p, _disc: calcDiscount(p) }));
-        const g50 = withCalcDisc.filter(p => p._disc >= 50).sort((a, b) => b._disc - a._disc);
-        const g30 = withCalcDisc.filter(p => p._disc >= 30).sort((a, b) => b._disc - a._disc);
-        const g15 = withCalcDisc.filter(p => p._disc >= 15).sort((a, b) => b._disc - a._disc);
-        const gAny = withCalcDisc.filter(p => p._disc > 0).sort((a, b) => b._disc - a._disc);
-        if (g50.length >= 8) finalProducts = g50;
-        else if (g30.length >= 8) finalProducts = g30;
-        else if (g15.length >= 8) finalProducts = g15;
-        else if (gAny.length >= 4) finalProducts = gAny;
-        else finalProducts = withCalcDisc.sort((a, b) => b._disc - a._disc);
+        const highDisc = withCalcDisc.filter(p => p._disc >= 30).sort((a, b) => b._disc - a._disc);
+        // Fallback: se não achar descontos altos, mostra qualquer desconto ou os melhores itens
+        finalProducts = highDisc.length >= 10 ? highDisc : withCalcDisc.sort((a, b) => b.sales - a.sales);
       } else if (activeTab === "top_day" || activeTab === "top_week") {
         // Rotacionar keywords para sempre trazer algo novo
         const shuffledKeywords = [...TOP_KEYWORDS].sort(() => Math.random() - 0.5).slice(0, 3);
@@ -351,11 +376,11 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
 
       if (finalProducts.length === 0) {
         const fallbackKw = activeTab === "all" && overrideKeyword !== undefined ? overrideKeyword : (keyword || "achadinhos shopee");
-        let fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 3, page_number: 1 }, userShopeeId || undefined);
+        let fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 1, page_number: 1, page_size: 50 }, userShopeeId || undefined);
         if (fallback.length === 0) {
-            fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 0, page_number: 1 }, userShopeeId || undefined);
+            fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 0, page_number: 1, page_size: 50 }, userShopeeId || undefined);
         }
-        finalProducts = deduplicate(fallback).filter(p => p.price <= 800).sort((a, b) => ((b.sales || 0) * (b.commission_rate || 1)) - ((a.sales || 0) * (a.commission_rate || 1)));
+        finalProducts = deduplicate(fallback).filter(p => p.price <= 1500).sort((a, b) => (b.sales || 0) - (a.sales || 0));
       }
 
       // Filtro de Blacklist Universal
@@ -598,7 +623,8 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
                 onClick={() => { 
                   setKeyword(n.name); 
                   setActiveNicheId(n.id);
-                  handleSearch(n.keyword, true); 
+                  // handleSearch agora cuida de pegar as keywords do pool se activeNicheId estiver setado
+                  handleSearch(undefined, true); 
                 }}
                 className={`flex flex-col items-center justify-center gap-1.5 min-w-[72px] shrink-0 snap-start active:scale-95 transition-all outline-none relative group`}
               >
@@ -667,7 +693,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
       {visibleCount < (products || []).length && (
         <div className="flex justify-center mt-4">
           <button 
-            onClick={() => setVisibleCount(prev => prev + 12)}
+            onClick={() => setVisibleCount(prev => prev + 50)}
             className="w-full h-14 bg-slate-900 border border-white/5 rounded-2xl flex items-center justify-center gap-3 text-white font-black text-[11px] uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-black/40"
           >
             <RefreshCw size={16} className="text-emerald-500" />

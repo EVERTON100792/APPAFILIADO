@@ -533,6 +533,11 @@ export class VideoProcessor {
 
         const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre);
 
+        // Pre-selecionar transições para cada slide para consistência
+        const transitionTypes = ['zoomBurst', 'whipRight', 'scaleDown', 'pushUp', 'crossFade'];
+        const slideTransitions = imgs.map(() => transitionTypes[Math.floor(Math.random() * transitionTypes.length)]);
+        const kbDirections = imgs.map(() => Math.random() > 0.5 ? 1 : -1);
+
         for (let i = 0; i < totalFrames; i++) {
           const currentTime = i / fps;
           const slideIdx = Math.min(Math.floor(currentTime / slideDuration), imgs.length - 1);
@@ -542,36 +547,42 @@ export class VideoProcessor {
           this.ctx.fillStyle = '#000';
           this.ctx.fillRect(0, 0, W, H);
 
-          // Efeito Ken Burns Profissional
+          const fadeTime = 0.6;
+          const isTransitioning = (currentTime % slideDuration) < fadeTime && slideIdx > 0;
+          const transProgress = (currentTime % slideDuration) / fadeTime;
+          const currentTrans = slideTransitions[slideIdx];
+
+          // Desenhar Slide Anterior (se em transição)
+          if (isTransitioning) {
+            const prevImg = imgs[slideIdx - 1];
+            this.ctx.save();
+            const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * (1.12 + (kbDirections[slideIdx-1] * 0.05));
+            this.applyProfessionalTransitionOut(currentTrans, transProgress, W, H);
+            this.ctx.filter = filterCSS;
+            this.ctx.drawImage(prevImg, (W - prevImg.width * prevScale)/2, (H - prevImg.height * prevScale)/2, prevImg.width * prevScale, prevImg.height * prevScale);
+            this.ctx.restore();
+          }
+
+          // Desenhar Slide Atual
+          this.ctx.save();
+          if (isTransitioning) {
+            this.applyProfessionalTransitionIn(currentTrans, transProgress, W, H);
+          }
+
           const baseScale = Math.max(W / img.width, H / img.height);
-          const kbScale = 1 + (progress * 0.12); // Zoom in suave
+          const kbDirection = kbDirections[slideIdx];
+          const kbScale = kbDirection > 0 ? 1 + (progress * 0.15) : 1.15 - (progress * 0.15);
+          
           const sw = img.width * baseScale * kbScale;
           const sh = img.height * baseScale * kbScale;
           const sx = (W - sw) / 2;
           const sy = (H - sh) / 2;
 
-          this.ctx.save();
-          
-          // Transição de Crossfade
-          const fadeTime = 0.5;
-          if (currentTime % slideDuration < fadeTime && slideIdx > 0) {
-            const prevImg = imgs[slideIdx - 1];
-            const alpha = (currentTime % slideDuration) / fadeTime;
-            
-            // Desenhar anterior
-            const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * 1.12;
-            this.ctx.globalAlpha = 1 - alpha;
-            this.ctx.drawImage(prevImg, (W - prevImg.width * prevScale)/2, (H - prevImg.height * prevScale)/2, prevImg.width * prevScale, prevImg.height * prevScale);
-            
-            // Desenhar atual
-            this.ctx.globalAlpha = alpha;
-          }
-
           this.ctx.filter = filterCSS;
           this.ctx.drawImage(img, sx, sy, sw, sh);
           this.ctx.restore();
 
-          // Overlays
+          // Overlays e Partículas (Premium)
           this.ctx.globalAlpha = 1;
           this.ctx.filter = 'none';
           
@@ -580,7 +591,9 @@ export class VideoProcessor {
           }
           
           this.drawVignette(W, H);
+          this.drawParticles(W, H, currentTime);
           this.drawCinematicOverlay(W, H, currentTime);
+          this.drawProgressBar(W, H, currentTime, targetDuration);
 
           // Frame output
           const timestamp = currentTime * 1_000_000;
@@ -1094,6 +1107,53 @@ export class VideoProcessor {
     
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, W, H);
+    this.ctx.restore();
+  }
+
+  private drawParticles(W: number, H: number, time: number) {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.globalCompositeOperation = 'screen';
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    
+    // 25 partículas flutuantes
+    for (let i = 0; i < 25; i++) {
+      const seed = i * 13.5;
+      const x = ((Math.sin(time * 0.2 + seed) * 0.5 + 0.5) * W);
+      const y = ((Math.cos(time * 0.15 + seed * 0.8) * 0.5 + 0.5) * H);
+      const size = Math.abs(Math.sin(time * 0.5 + seed)) * 4 + 1;
+      
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, size, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+    this.ctx.restore();
+  }
+
+  private drawProgressBar(W: number, H: number, time: number, duration: number) {
+    const progress = time / duration;
+    const barH = 6;
+    
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    
+    // Fundo da barra
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    this.ctx.fillRect(0, H - barH, W, barH);
+    
+    // Progresso
+    const grad = this.ctx.createLinearGradient(0, 0, W * progress, 0);
+    grad.addColorStop(0, '#10b981'); // Emerald 500
+    grad.addColorStop(1, '#34d399'); // Emerald 400
+    
+    this.ctx.fillStyle = grad;
+    this.ctx.fillRect(0, H - barH, W * progress, barH);
+    
+    // Glow no final do progresso
+    this.ctx.shadowBlur = 15;
+    this.ctx.shadowColor = '#10b981';
+    this.ctx.fillRect(W * progress - 2, H - barH, 2, barH);
+    
     this.ctx.restore();
   }
 
