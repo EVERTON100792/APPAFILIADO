@@ -24,6 +24,7 @@ export interface ShopeeSearchFilters {
   sort_by?: "sales" | "price" | "commission" | number;
   list_type?: number;
   page_number?: number;
+  page_size?: number;
 }
 
 export class ShopeeService {

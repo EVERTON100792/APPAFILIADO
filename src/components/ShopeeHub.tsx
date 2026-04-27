@@ -181,7 +181,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
   const [isScanningGlobal, setIsScanningGlobal] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
-  const niches = [
+  const niches: { id: string; name: string; icon: string; keywords: string[] }[] = [
     { id: "viral",     name: "Achadinhos",   icon: "🔥", keywords: ["achadinhos shopee", "produtos virais tiktok", "utilidades práticas", "achados inovadores", "itens criativos shopee", "gadgets úteis casa", "coisas baratas e úteis", "achadinhos must have"] },
     { id: "cozinha",   name: "Cozinha",     icon: "🍳", keywords: ["utensílios cozinha criativos", "gadgets cozinha tiktok", "cozinha inteligente inovação", "organizadores cozinha luxo", "itens práticos culinária", "achadinhos cozinha", "acessórios cozinha fun", "utensílios que facilitam vida"] },
     { id: "beleza",    name: "Beleza",       icon: "💄", keywords: ["maquiagem viral tiktok", "skincare coreana", "beleza inovação", "acessórios maquiagem luxo", "itens beleza inteligentes", "ferramentas de beleza", "achadinhos skincare"] },
@@ -457,7 +457,12 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
       const niche = scanNiches[i];
       setScanProgress({ current: i + 1, total: totalNiches, niche: niche.name });
       try {
-        const searchResults = await ShopeeService.searchProducts({ keyword: niche.keyword, sort_by: 3 }, userShopeeId || undefined);
+        const searchResults = await ShopeeService.searchProducts({ 
+          keyword: niche.keywords[0], 
+          sort_by: 3,
+          page_number: 1,
+          page_size: 50
+        }, userShopeeId || undefined);
         const elite = searchResults.filter(p => {
           const rate = parseFloat(p.commission_rate?.toString() || "0");
           const lowerName = p.item_name.toLowerCase();
