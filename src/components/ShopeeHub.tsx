@@ -181,19 +181,17 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
   const [isScanningGlobal, setIsScanningGlobal] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 20, niche: "" });
 
-  const niches: { id: string; name: string; icon: string; keywords: string[] }[] = [
-    { id: "viral",     name: "Achadinhos",   icon: "🔥", keywords: ["achadinhos shopee", "produtos virais tiktok", "utilidades práticas", "achados inovadores", "itens criativos shopee", "gadgets úteis casa", "coisas baratas e úteis", "achadinhos must have"] },
-    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keywords: ["utensílios cozinha criativos", "gadgets cozinha tiktok", "cozinha inteligente inovação", "organizadores cozinha luxo", "itens práticos culinária", "achadinhos cozinha", "acessórios cozinha fun", "utensílios que facilitam vida"] },
-    { id: "beleza",    name: "Beleza",       icon: "💄", keywords: ["maquiagem viral tiktok", "skincare coreana", "beleza inovação", "acessórios maquiagem luxo", "itens beleza inteligentes", "ferramentas de beleza", "achadinhos skincare"] },
-    { id: "casa",      name: "Casa",         icon: "🏠", keywords: ["decoração casa moderna", "casa inteligente gadgets", "utilidades domésticas luxo", "organização casa criativa", "achadinhos decoração", "itens fofos decoração", "estética casa viral"] },
-    { id: "organizer", name: "Organização",  icon: "📂", keywords: ["organizadores closet luxo", "caixas organizadoras criativas", "praticidade casa organização", "organizadores inteligentes", "closet organizado", "truques organização casa", "armário otimizado"] },
-    { id: "tech",      name: "Tecnologia",   icon: "💻", keywords: ["gadgets eletrônicos 2024", "smartwatch luxo", "fone bluetooth viral tiktok", "acessórios tech criativos", "tecnologia inovadora", "tech must haves", "setup gamer barato"] },
-    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keywords: ["limpeza inteligente casa", "mop limpeza luxo", "aspirador robô viral", "acessórios limpeza práticos", "limpeza fácil", "truques limpeza rápida", "produtos limpeza virais"] },
-    { id: "carro",     name: "Automotivo",   icon: "🚗", keywords: ["acessórios carro luxo", "gadgets automotivos tiktok", "limpeza carro inteligente", "utilidades carro praticidade", "organização interna carro", "gadgets carro úteis"] },
-    { id: "kids",      name: "Kids",         icon: "🧸", keywords: ["brinquedos educativos luxo", "brinquedos tiktok viral", "itens bebê criativos", "moda infantil estilosa", "kids gadgets", "brinquedos sensoriais virais"] },
-    { id: "pet",       name: "Pets",         icon: "🐾", keywords: ["acessórios pet luxo", "brinquedos gato inteligentes", "coleira inovadora", "cama pet design", "pet gadgets", "itens pet úteis tiktok"] },
-    { id: "banheiro",  name: "Banheiro",     icon: "🚿", keywords: ["acessórios banheiro luxo", "organizador banheiro criativo", "utilidades banheiro design", "itens luxo higiene", "acessórios banheiro inteligentes"] },
-    { id: "ferramentas",name: "Ferramentas", icon: "🛠️", keywords: ["ferramentas multiuso luxo", "kit ferramentas completo", "parafusadeira inteligente", "gadgets obra criativos"] },
+  const niches: { id: string; name: string; icon: string; keywords: string[]; validation: string[] }[] = [
+    { id: "viral",     name: "Achadinhos",   icon: "🔥", keywords: ["achadinhos shopee viral", "utilidades domésticas criativas", "shopee tiktok brasil"], validation: ["shopee", "achadinho", "utilidade", "viral", "tiktok", "casa", "cozinha"] },
+    { id: "cozinha",   name: "Cozinha",     icon: "🍳", keywords: ["cozinha viral tiktok", "utensílio inteligente cozinha", "mop triangular limpeza", "organizador pia suspenso"], validation: ["cozinha", "culinária", "pia", "gourmet", "panela", "copo", "prato", "utensílio", "alimento", "faca", "tempero", "mesa", "mop", "esfregão", "lixeira", "pote", "hermético", "fritadeira", "ralador", "tábua", "escorredor", "processador", "dispenser", "afiador", "esponja", "balança"] },
+    { id: "beleza",    name: "Beleza",       icon: "💄", keywords: ["maquiagem viral tiktok", "skincare coreana original", "escova secadora rotativa"], validation: ["maquiagem", "pele", "cabelo", "rosto", "batom", "rímel", "creme", "sérum", "perfume", "estética", "esmalte", "unha", "pincel", "secador", "chapinha", "babyliss", "corretivo", "base", "protetor", "massageador", "espelho", "cílios", "sobrancelha"] },
+    { id: "casa",      name: "Casa",         icon: "🏠", keywords: ["decoração aesthetic quarto", "casa inteligente alexa", "luminária projetor astronauta"], validation: ["casa", "quarto", "sala", "decoração", "luminária", "tapete", "almofada", "parede", "espelho", "móvel", "organizador", "quadro", "difusor", "umidificador", "lençol", "cortina", "abajur", "fita led", "projetor", "vassoura", "mop"] },
+    { id: "organizer", name: "Organização",  icon: "📂", keywords: ["organizador gaveta viral", "caixa organizadora empilhável", "organizador sapatos"], validation: ["organizador", "gaveta", "closet", "caixa", "arrumação", "cabide", "suporte", "prateleira", "gancho", "divisória", "cesto", "maleta", "sapateira", "colmeia", "organizadora"] },
+    { id: "tech",      name: "Tecnologia",   icon: "💻", keywords: ["gadgets tecnológicos úteis", "fone bluetooth pro viral", "smartwatch ultra 9"], validation: ["fone", "carregador", "usb", "smart", "relógio", "celular", "fio", "cabo", "teclado", "mouse", "led", "gadget", "computador", "gaming", "headset", "caixa som", "tripé", "ring light", "power bank", "adaptador"] },
+    { id: "limpeza",   name: "Limpeza",      icon: "🧹", keywords: ["limpeza prática viral", "mop spray original", "aspirador portátil potente"], validation: ["limpeza", "mop", "vassoura", "aspirador", "pano", "balde", "esfregão", "lavar", "sujeira", "escova", "esponja", "detergente", "rodo", "limpador", "desinfetante"] },
+    { id: "kids",      name: "Kids",         icon: "🧸", keywords: ["brinquedo montessori viral", "luminária infantil projetor", "copo treinamento antivazamento"], validation: ["brinquedo", "criança", "bebê", "baby", "infantil", "jogo", "educativo", "maternidade", "mamadeira", "chupeta", "fralda", "urso", "boneca", "carrinho", "lousa", "pelúcia"] },
+    { id: "pet",       name: "Pets",         icon: "🐾", keywords: ["acessórios pet inteligentes", "brinquedo gato interativo", "bebedouro fonte gato"], validation: ["pet", "gato", "cachorro", "cão", "animal", "ração", "coleira", "aquário", "pássaro", "tapete higiênico", "comedouro", "bebedouro", "tosca", "pelos", "brinquedo", "arranhador"] },
+    { id: "carro",     name: "Automotivo",   icon: "🚗", keywords: ["acessórios carro luxo", "gadgets automotivos tiktok"], validation: ["carro", "veículo", "automóvel", "painel", "farol", "roda", "multimídia", "limpeza carro"] },
   ];
 
   const BLACKLIST_WORDS = [
@@ -244,7 +242,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
     return 0;
   };
 
-  const parallelSearch = async (keywords: string[], sortBy: number = 1, pagesPerKeyword: number = 2) => {
+  const parallelSearch = async (keywords: string[], sortBy: number = 1, pagesPerKeyword: number = 2, skipLinkConversion = true) => {
     const allItems: any[] = [];
     
     // SortBy: 1 = Best Selling em v2
@@ -261,7 +259,7 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
             sort_by: sortBy, 
             page_number: page,
             page_size: 50 // Aumentar limite por request
-          }, userShopeeId || undefined).catch(() => []));
+          }, undefined, skipLinkConversion).catch(() => []));
         }
       });
       
@@ -333,11 +331,15 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
         if (activeNicheId) {
           const currentNiche = niches.find(n => n.id === activeNicheId);
           if (currentNiche) {
-            // Se o usuário digitou algo no search, usamos isso + keywords do nicho
-            // Se não, pegamos 4 keywords aleatórias do pool do nicho para máximo volume e variedade
             const pool = overrideKeyword ? [overrideKeyword, ...currentNiche.keywords] : currentNiche.keywords;
-            const shuffledKws = [...pool].sort(() => Math.random() - 0.5).slice(0, 4);
-            finalProducts = await parallelSearch(shuffledKws, 1, 3); // 1 = Best Selling, 3 páginas por kw
+            const shuffledKws = [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
+            finalProducts = await parallelSearch(shuffledKws, 1, 3);
+            
+            // Filtro inteligente por nicho
+            finalProducts = finalProducts.filter(p => {
+              const name = p.item_name.toLowerCase();
+              return currentNiche.validation.some(v => name.includes(v));
+            });
           }
         }
 
@@ -375,12 +377,33 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
       }
 
       if (finalProducts.length === 0) {
-        const fallbackKw = activeTab === "all" && overrideKeyword !== undefined ? overrideKeyword : (keyword || "achadinhos shopee");
-        let fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 1, page_number: 1, page_size: 50 }, userShopeeId || undefined);
+        const niche = niches.find(n => n.id === activeNicheId);
+        const fallbackKw = activeTab === "all" && activeNicheId ? niche?.keywords[0] : (keyword || "achadinhos shopee");
+        
+        let fallback = await ShopeeService.searchProducts({ keyword: fallbackKw || "achadinhos", sort_by: 3, page_number: 1 }, undefined, true);
         if (fallback.length === 0) {
-            fallback = await ShopeeService.searchProducts({ keyword: fallbackKw, sort_by: 0, page_number: 1, page_size: 50 }, userShopeeId || undefined);
+            fallback = await ShopeeService.searchProducts({ keyword: fallbackKw || "achadinhos", sort_by: 0, page_number: 1 }, undefined, true);
         }
         finalProducts = deduplicate(fallback).filter(p => p.price <= 1500).sort((a, b) => (b.sales || 0) - (a.sales || 0));
+      }
+
+      // ── CONVERSÃO DE LINKS EM LOTE (PREVENT 500 ERRORS) ──────────────────────────
+      const productsToConvert = finalProducts.slice(0, 60);
+      if (productsToConvert.length > 0) {
+        try {
+          const urlsToConvert = productsToConvert.map(p => p.product_link);
+          const convertedLinks = await ShopeeService.convertLinks(urlsToConvert, userShopeeId || undefined);
+          
+          finalProducts = finalProducts.map(p => {
+            const idx = productsToConvert.findIndex(pc => pc.item_id === p.item_id);
+            if (idx !== -1 && convertedLinks[idx]) {
+              return { ...p, product_link: convertedLinks[idx], affiliate_link: convertedLinks[idx] };
+            }
+            return p;
+          });
+        } catch (err) {
+          console.warn("[ShopeeHub] Erro na conversão em lote:", err);
+        }
       }
 
       // Filtro de Blacklist Universal

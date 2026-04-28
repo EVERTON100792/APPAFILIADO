@@ -33,7 +33,7 @@ export class ShopeeService {
    * Always converts productLinks to short links (s.shopee.com.br/xxx) to avoid
    * captcha pages and ensure proper affiliate tracking.
    */
-  static async searchProducts(filters: ShopeeSearchFilters, userShopeeId?: string): Promise<ShopeeProduct[]> {
+  static async searchProducts(filters: ShopeeSearchFilters, userShopeeId?: string, skipLinkConversion = false): Promise<ShopeeProduct[]> {
     let shopeeSort = filters.sort_by === "sales" ? 3 : 2;
     if (typeof filters.sort_by === "number") shopeeSort = filters.sort_by;
 
@@ -42,7 +42,7 @@ export class ShopeeService {
         action: "search_products",
         params: {
           keyword: filters.keyword || "",
-          page_size: 50,
+          page_size: filters.page_size || 50,
           page_number: filters.page_number || 1,
           sort_by: shopeeSort,
           list_type: filters.list_type || 0,
@@ -67,35 +67,29 @@ export class ShopeeService {
     if (nodes.length === 0 && (filters.keyword || "").split(" ").length > 2) {
       const simplifiedKw = (filters.keyword || "").split(" ").slice(0, -1).join(" ");
       console.warn(`⚠️ 0 itens para "${filters.keyword}". Tentando simplificar para: "${simplifiedKw}"`);
-      return this.searchProducts({ ...filters, keyword: simplifiedKw }, userShopeeId);
+      return this.searchProducts({ ...filters, keyword: simplifiedKw }, userShopeeId, skipLinkConversion);
     }
 
     if (nodes.length === 0) return [];
 
     // ── CONVERSÃO DE LINKS ────────────────────────────────────────────────────────
-    // Sempre converter para shortLink (s.shopee.com.br/xxx).
-    // O shortLink:
-    //   1. Nunca aciona captcha
-    //   2. Já tem rastreamento da conta de afiliado da API
-    //   3. Redireciona corretamente para o app/site da Shopee
     const urlToShortLink = new Map<string, string>();
 
-    const productLinks = nodes.map((n: any) => n.productLink).filter(Boolean) as string[];
+    if (!skipLinkConversion) {
+      const productLinks = nodes.map((n: any) => n.productLink).filter(Boolean) as string[];
 
-    if (productLinks.length > 0) {
-      try {
-        // Sempre chamar generate_links, independente de ter userShopeeId
-        const shortLinks = await this.convertLinks(productLinks, userShopeeId);
-        productLinks.forEach((url: string, i: number) => {
-          if (shortLinks[i]) {
-            urlToShortLink.set(url, shortLinks[i]);
-          }
-        });
-        console.log(`🔗 Short links gerados: ${urlToShortLink.size}/${productLinks.length}`);
-      } catch (err) {
-        // Em caso de falha na conversão, usar productLink original da API
-        // (já tem rastreamento do app_id, porém é uma URL longa)
-        console.warn("⚠️ Falha ao gerar short links — usando productLink original:", err);
+      if (productLinks.length > 0) {
+        try {
+          const shortLinks = await this.convertLinks(productLinks, userShopeeId);
+          productLinks.forEach((url: string, i: number) => {
+            if (shortLinks[i]) {
+              urlToShortLink.set(url, shortLinks[i]);
+            }
+          });
+          console.log(`🔗 Short links gerados: ${urlToShortLink.size}/${productLinks.length}`);
+        } catch (err) {
+          console.warn("⚠️ Falha ao gerar short links — usando productLink original:", err);
+        }
       }
     }
 

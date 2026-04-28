@@ -261,7 +261,7 @@ export class VideoProcessor {
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
         const targetSampleRate = 44100;
-        const pitchFactor = (options.isAutoral && !options.mobileTurbo) ? 0.92 : 1.0;
+        const pitchFactor = 1.0; // Não mexer na voz conforme solicitado
         let mainAudioBuffer = await this.processAudioBuffer(await (await fetch(videoUrl)).arrayBuffer(), targetSampleRate, pitchFactor);
         if (options.musicUrl) {
           const bg = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
@@ -500,16 +500,17 @@ export class VideoProcessor {
   }
 
   public async renderAutoralSlideshow(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
-    const frames = await this.extractFrames(videoUrl, 10);
-    return this.renderSlideshowFromBitmaps(frames, options);
+    const frames = await this.extractFrames(videoUrl, 12); // Aumentado para mais dinamismo
+    // Extrair áudio original para manter a voz no slideshow
+    const audioBuffer = await this.loadAndResampleAudio(videoUrl, 44100);
+    return this.renderSlideshowFromBitmaps(frames, options, audioBuffer);
   }
 
-  private async renderSlideshowFromBitmaps(imgs: ImageBitmap[], options: ProcessingOptions): Promise<Blob> {
+  private async renderSlideshowFromBitmaps(imgs: ImageBitmap[], options: ProcessingOptions, originalAudio?: AudioBuffer): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const W = isMobile ? 720 : 1080; 
-        const H = isMobile ? 1280 : 1920;
+        const W = 1080; // Resolução full para máxima qualidade
+        const H = 1920;
         this.canvas.width = W; this.canvas.height = H;
 
         const targetDuration = 25; // Slideshows autorais são mais dinâmicos
@@ -526,12 +527,32 @@ export class VideoProcessor {
         });
         
         const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
-        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 4_000_000 });
+        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 6_000_000 }); // Bitrate premium
         
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
-        const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre);
+        let audioBuffer = originalAudio;
+        if (options.musicUrl) {
+          const bg = await this.loadAndResampleAudio(options.musicUrl, 44100, options.musicBpm, options.musicGenre);
+          if (originalAudio) {
+            // Mixar voz original com música de fundo
+            const mixed = new AudioBuffer({ numberOfChannels: 2, length: Math.max(originalAudio.length, bg.length), sampleRate: 44100 });
+            for (let ch = 0; ch < 2; ch++) {
+              const m = originalAudio.getChannelData(ch % originalAudio.numberOfChannels);
+              const b = bg.getChannelData(ch % bg.numberOfChannels);
+              const out = mixed.getChannelData(ch);
+              for (let s = 0; s < mixed.length; s++) {
+                out[s] = (m[s] || 0) * 1.0 + (b[s % b.length] || 0) * 0.3; // Voz 100% + Música 30%
+              }
+            }
+            audioBuffer = mixed;
+          } else {
+            audioBuffer = bg;
+          }
+        } else if (!audioBuffer) {
+           audioBuffer = await this.loadAndResampleAudio('', 44100); // Silêncio se nada houver
+        }
 
         // Pre-selecionar transições para cada slide para consistência
         const transitionTypes = ['zoomBurst', 'whipRight', 'scaleDown', 'pushUp', 'crossFade'];
@@ -547,7 +568,7 @@ export class VideoProcessor {
           this.ctx.fillStyle = '#000';
           this.ctx.fillRect(0, 0, W, H);
 
-          const fadeTime = 0.6;
+          const fadeTime = 0.4; // Transição mais rápida para cortes perfeitos
           const isTransitioning = (currentTime % slideDuration) < fadeTime && slideIdx > 0;
           const transProgress = (currentTime % slideDuration) / fadeTime;
           const currentTrans = slideTransitions[slideIdx];
@@ -571,7 +592,7 @@ export class VideoProcessor {
 
           const baseScale = Math.max(W / img.width, H / img.height);
           const kbDirection = kbDirections[slideIdx];
-          const kbScale = kbDirection > 0 ? 1 + (progress * 0.15) : 1.15 - (progress * 0.15);
+          const kbScale = kbDirection > 0 ? 1 + (progress * 0.20) : 1.20 - (progress * 0.20); // Zoom mais profundo
           
           const sw = img.width * baseScale * kbScale;
           const sh = img.height * baseScale * kbScale;
