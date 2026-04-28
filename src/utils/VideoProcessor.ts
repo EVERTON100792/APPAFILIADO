@@ -255,8 +255,8 @@ export class VideoProcessor {
           video.onerror = (e) => rej(e);
         });
         
-        const W = 1080;
-        const H = 1920;
+        const W = isMobile ? 720 : 1080;
+        const H = isMobile ? 1280 : 1920;
         this.canvas.width = W; this.canvas.height = H;
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
@@ -285,9 +285,10 @@ export class VideoProcessor {
           firstTimestampBehavior: 'offset' 
         });
         const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
-        const targetBitrate = options.isAutoral ? 6_000_000 : 4_000_000;
+        const baseBitrate = options.isAutoral ? 6_000_000 : 4_000_000;
+        const targetBitrate = isMobile ? Math.min(baseBitrate, 2_500_000) : baseBitrate;
         videoEncoder.configure({ 
-          codec: 'avc1.4d002a',
+          codec: isMobile ? 'avc1.42E032' : 'avc1.4d002a',
           width: W, height: H, 
           bitrate: targetBitrate,
           latencyMode: 'quality'
@@ -430,6 +431,8 @@ export class VideoProcessor {
           
           i++; // Avança para o próximo frame
 
+          if (i % (isMobile ? 5 : 10) === 0) await new Promise(r => setTimeout(r, 0));
+
           // CONTROLE DE FLUXO E ESTABILIDADE:
           // Se o encoder estiver ficando para trás (muitos frames na fila), pausamos o vídeo
           // Isso evita que o vídeo toque até o fim e a gente perca os frames intermediários.
@@ -484,7 +487,17 @@ export class VideoProcessor {
             });
             
             tCtx.drawImage(video, 0, 0);
-            frames.push(await createImageBitmap(tempCanvas));
+            // Reduzir tamanho dos bitmaps extraídos no mobile para economizar RAM
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+            if (isMobile) {
+              const bW = 720;
+              const bH = (video.videoHeight / video.videoWidth) * bW;
+              frames.push(await createImageBitmap(tempCanvas, 0, 0, video.videoWidth, video.videoHeight, { resizeWidth: bW, resizeHeight: bH }));
+            } else {
+              frames.push(await createImageBitmap(tempCanvas));
+            }
+            // Pequena pausa para o GC respirar entre extrações
+            if (i % 3 === 0) await new Promise(r => setTimeout(r, 10));
           }
           
           video.src = "";
@@ -509,12 +522,20 @@ export class VideoProcessor {
   private async renderSlideshowFromBitmaps(imgs: ImageBitmap[], options: ProcessingOptions, originalAudio?: AudioBuffer): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        const W = 1080; // Resolução full para máxima qualidade
-        const H = 1920;
-        this.canvas.width = W; this.canvas.height = H;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+        
+        // Mobile Optimization: Downscale if on mobile to prevent OOM (Out of Memory)
+        const W = isMobile ? 720 : 1080;
+        const H = isMobile ? 1280 : 1920;
+        const bitrate = isMobile ? 2_500_000 : 6_000_000;
+        const fps = 30;
+        
+        console.log(`[VideoProcessor] Renderizando Slideshow (${W}x${H}) @ ${bitrate/1000000}Mbps | Mobile: ${isMobile}`);
+
+        this.canvas.width = W;
+        this.canvas.height = H;
 
         const targetDuration = 25; // Slideshows autorais são mais dinâmicos
-        const fps = 30;
         const totalFrames = targetDuration * fps;
         const slideDuration = targetDuration / imgs.length;
         const filterCSS = this.getFilterCSS(options.filter || 'cinematic');
@@ -526,8 +547,17 @@ export class VideoProcessor {
           fastStart: 'in-memory'
         });
         
-        const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
-        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 6_000_000 }); // Bitrate premium
+        const videoEncoder = new VideoEncoder({
+          output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
+          error: (e) => reject(e)
+        });
+        videoEncoder.configure({
+          codec: 'avc1.42E032', // Baseline profile para máxima compatibilidade mobile
+          width: W,
+          height: H,
+          bitrate: bitrate,
+          latencyMode: 'quality'
+        });
         
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
@@ -635,11 +665,18 @@ export class VideoProcessor {
             audioData.close();
           }
 
-          if (i % 30 === 0) options.onProgress?.((i / totalFrames) * 100);
+          if (i % (isMobile ? 15 : 30) === 0) options.onProgress?.((i / totalFrames) * 100);
           
-          if (videoEncoder.encodeQueueSize > 10) {
-            await new Promise(r => setTimeout(r, 10));
+          const maxQueueSize = isMobile ? 5 : 12;
+          if (videoEncoder.encodeQueueSize > maxQueueSize) {
+            if (isMobile) {
+              await new Promise(r => requestAnimationFrame(r));
+            } else {
+              await new Promise(r => setTimeout(r, 10));
+            }
           }
+          
+          if (i % (isMobile ? 5 : 10) === 0) await new Promise(r => setTimeout(r, 0));
         }
 
         await videoEncoder.flush();
@@ -685,6 +722,7 @@ export class VideoProcessor {
           }
         })).then(results => results.filter((img): img is ImageBitmap => img !== null));
 
+        const bitrate = isMobile ? 2_500_000 : 6_000_000;
         const muxer = new Muxer({ 
           target: new ArrayBufferTarget(), 
           video: { codec: 'avc', width: W, height: H }, 
@@ -693,8 +731,14 @@ export class VideoProcessor {
           firstTimestampBehavior: 'offset' 
         });
         const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
-        // Usar Baseline profile (42E01E) e bitrate menor para máxima compatibilidade e leveza
-        videoEncoder.configure({ codec: 'avc1.4d002a', width: W, height: H, bitrate: 3_000_000 });
+        // Baseline profile para máxima compatibilidade mobile
+        videoEncoder.configure({
+          codec: 'avc1.42E032',
+          width: W,
+          height: H,
+          bitrate: bitrate,
+          latencyMode: 'quality'
+        });
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
@@ -838,14 +882,16 @@ export class VideoProcessor {
           videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
           vFrame.close();
 
-          // CONTROLE DE FLUXO: Evita que a memória RAM estoure se o encoder for mais lento que o loop
-          if (videoEncoder.encodeQueueSize > 5) {
-            await new Promise(r => setTimeout(r, 20)); // Pausa para o processador respirar
-            if (videoEncoder.encodeQueueSize > 15) {
-              await new Promise(r => setTimeout(r, 100)); // Pausa maior se a fila estiver crítica
+          const maxQueueSize = isMobile ? 5 : 12;
+          if (videoEncoder.encodeQueueSize > maxQueueSize) {
+            if (isMobile) {
+              await new Promise(r => requestAnimationFrame(r));
+            } else {
+              await new Promise(r => setTimeout(r, 10));
             }
           }
 
+          if (i % (isMobile ? 5 : 10) === 0) await new Promise(r => setTimeout(r, 0));
 
           if (audioBuffer) {
             const start = Math.floor(i * (44100 / fps));
