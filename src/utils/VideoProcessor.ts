@@ -555,8 +555,8 @@ export class VideoProcessor {
         this.canvas.width = W;
         this.canvas.height = H;
 
-        const targetDuration = 25; // Slideshows autorais são mais dinâmicos
-        const totalFrames = targetDuration * fps;
+        const targetDuration = originalAudio ? Math.max(originalAudio.duration, 5) : 25; // Sincroniza com áudio original se existir
+        const totalFrames = Math.floor(targetDuration * fps);
         const slideDuration = targetDuration / imgs.length;
         const filterCSS = this.getFilterCSS(options.filter || 'cinematic');
 
@@ -687,7 +687,11 @@ export class VideoProcessor {
             const aData = new Float32Array(len * 2);
             for (let ch = 0; ch < 2; ch++) {
               const src = audioBuffer.getChannelData(ch);
-              for (let s = 0; s < len; s++) aData[ch * len + s] = src[(start + s) % src.length] || 0;
+              for (let s = 0; s < len; s++) {
+                // Removemos o loop (%) para evitar que a voz repita. 
+                // A música de fundo já foi mixada com loop no 'mixed' buffer.
+                aData[ch * len + s] = src[start + s] || 0;
+              }
             }
             const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
             try {
@@ -938,7 +942,10 @@ export class VideoProcessor {
             const aData = new Float32Array(len * 2);
             for (let ch = 0; ch < 2; ch++) {
               const src = audioBuffer.getChannelData(ch);
-              for (let s = 0; s < len; s++) aData[ch * len + s] = src[(start + s) % src.length] || 0;
+              for (let s = 0; s < len; s++) {
+                // No modo viral, se o áudio acabar, melhor silêncio do que voz repetida.
+                aData[ch * len + s] = src[start + s] || 0;
+              }
             }
             const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
             try {
