@@ -79,6 +79,28 @@ export class VideoProcessor {
     }
   }
 
+  private getRenderingConfig(isAutoral: boolean = false) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ("ontouchstart" in window);
+    const deviceRAM = (navigator as any).deviceMemory || 4;
+    const cpuCores = navigator.hardwareConcurrency || 4;
+    const isLowEnd = isMobile && (deviceRAM <= 2 || cpuCores <= 4);
+    
+    let W = 1080;
+    let H = 1920;
+    let bitrate = isAutoral ? 6_000_000 : 4_000_000;
+
+    if (isLowEnd) {
+      W = 540; H = 960;
+      bitrate = 1_500_000;
+      console.log("[VideoProcessor] Modo Ultra Compatibilidade Ativado (540p)");
+    } else if (isMobile) {
+      W = 720; H = 1280;
+      bitrate = 2_500_000;
+    }
+
+    return { W, H, bitrate, isMobile, isLowEnd };
+  }
+
   private async fetchAsBlob(url: string, type: 'image' | 'video' = 'video'): Promise<string> {
     if (url.startsWith('blob:') || url.startsWith('data:') || url.includes('localhost') || url.startsWith('/')) {
       return url;
@@ -245,7 +267,7 @@ export class VideoProcessor {
   public async renderVideo(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const { W, H, bitrate, isMobile, isLowEnd } = this.getRenderingConfig(options.isAutoral);
         const sourceUrl = await this.fetchAsBlob(videoUrl, 'video');
         const video = this.ownedVideo;
         video.crossOrigin = 'anonymous';
@@ -255,8 +277,6 @@ export class VideoProcessor {
           video.onerror = (e) => rej(e);
         });
         
-        const W = isMobile ? 720 : 1080;
-        const H = isMobile ? 1280 : 1920;
         this.canvas.width = W; this.canvas.height = H;
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
@@ -289,13 +309,13 @@ export class VideoProcessor {
           output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), 
           error: (e) => { isError = true; console.error("VideoEncoder error:", e); reject(e); } 
         });
-        const baseBitrate = options.isAutoral ? 6_000_000 : 4_000_000;
-        const targetBitrate = isMobile ? Math.min(baseBitrate, 2_500_000) : baseBitrate;
+
+        const targetBitrate = bitrate;
         videoEncoder.configure({ 
           codec: isMobile ? 'avc1.42E032' : 'avc1.4d002a',
           width: W, height: H, 
           bitrate: targetBitrate,
-          latencyMode: 'quality'
+          latencyMode: isLowEnd ? 'realtime' : 'quality'
         });
         const audioEncoder = new AudioEncoder({ 
           output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), 
@@ -449,13 +469,13 @@ export class VideoProcessor {
 
           if (i % (isMobile ? 5 : 10) === 0) await new Promise(r => setTimeout(r, 0));
 
-          // CONTROLE DE FLUXO E ESTABILIDADE:
-          // Se o encoder estiver ficando para trás (muitos frames na fila), pausamos o vídeo
-          // Isso evita que o vídeo toque até o fim e a gente perca os frames intermediários.
-          if (videoEncoder.encodeQueueSize > 5) {
+          // CONTROLE DE FLUXO ULTRA AGRESSIVO:
+          // Se o encoder estiver ficando para trás, pausamos tudo para liberar RAM e CPU.
+          const maxQueueSize = isLowEnd ? 2 : 5;
+          if (videoEncoder.encodeQueueSize > maxQueueSize) {
             video.pause();
-            while (videoEncoder.encodeQueueSize > 2) {
-              await new Promise(r => setTimeout(r, 20));
+            while (videoEncoder.encodeQueueSize > 1) {
+              await new Promise(r => setTimeout(r, isLowEnd ? 100 : 30));
             }
             await video.play();
           }
@@ -542,15 +562,9 @@ export class VideoProcessor {
   private async renderSlideshowFromBitmaps(imgs: ImageBitmap[], options: ProcessingOptions, originalAudio?: AudioBuffer): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+        const { W, H, bitrate, isMobile, isLowEnd } = this.getRenderingConfig(options.isAutoral);
         
-        // Mobile Optimization: Downscale if on mobile to prevent OOM (Out of Memory)
-        const W = isMobile ? 720 : 1080;
-        const H = isMobile ? 1280 : 1920;
-        const bitrate = isMobile ? 2_500_000 : 6_000_000;
-        const fps = 30;
-        
-        console.log(`[VideoProcessor] Renderizando Slideshow (${W}x${H}) @ ${bitrate/1000000}Mbps | Mobile: ${isMobile}`);
+        console.log(`[VideoProcessor] Renderizando Slideshow (${W}x${H}) | LowEnd: ${isLowEnd}`);
 
         this.canvas.width = W;
         this.canvas.height = H;
@@ -704,9 +718,11 @@ export class VideoProcessor {
 
           if (i % (isMobile ? 15 : 30) === 0) options.onProgress?.((i / totalFrames) * 100);
           
-          const maxQueueSize = isMobile ? 5 : 12;
+          const maxQueueSize = isLowEnd ? 2 : (isMobile ? 5 : 12);
           if (videoEncoder.encodeQueueSize > maxQueueSize) {
-            if (isMobile) {
+            if (isLowEnd) {
+               await new Promise(r => setTimeout(r, 100)); // Pausa longa no low-end
+            } else if (isMobile) {
               await new Promise(r => requestAnimationFrame(r));
             } else {
               await new Promise(r => setTimeout(r, 10));
@@ -727,16 +743,14 @@ export class VideoProcessor {
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
       try {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const W = isMobile ? 720 : 1080; 
-        const H = isMobile ? 1280 : 1920;
+        const { W, H, bitrate, isMobile, isLowEnd } = this.getRenderingConfig(options.isAutoral);
         this.canvas.width = W; this.canvas.height = H;
         let isError = false;
 
-        const targetDuration = 35;
+        const targetDuration = 15;
         const fps = 30;
         const totalFrames = targetDuration * fps;
-        const slideDuration = 3.5;
+        const slideDuration = 1.5;
         const filterCSS = this.getFilterCSS(options.filter);
 
         const imgs = await Promise.all(imageUrls.map(async url => {
@@ -925,9 +939,11 @@ export class VideoProcessor {
           } catch (e) { isError = true; reject(e); vFrame.close(); break; }
           vFrame.close();
 
-          const maxQueueSize = isMobile ? 5 : 12;
+          const maxQueueSize = isLowEnd ? 2 : (isMobile ? 5 : 12);
           if (videoEncoder.encodeQueueSize > maxQueueSize) {
-            if (isMobile) {
+            if (isLowEnd) {
+               await new Promise(r => setTimeout(r, 100)); // Pausa longa no low-end
+            } else if (isMobile) {
               await new Promise(r => requestAnimationFrame(r));
             } else {
               await new Promise(r => setTimeout(r, 10));
