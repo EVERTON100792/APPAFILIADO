@@ -284,7 +284,11 @@ export class VideoProcessor {
           fastStart: 'in-memory',
           firstTimestampBehavior: 'offset' 
         });
-        const videoEncoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => console.error(e) });
+        let isError = false;
+        const videoEncoder = new VideoEncoder({ 
+          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), 
+          error: (e) => { isError = true; console.error("VideoEncoder error:", e); reject(e); } 
+        });
         const baseBitrate = options.isAutoral ? 6_000_000 : 4_000_000;
         const targetBitrate = isMobile ? Math.min(baseBitrate, 2_500_000) : baseBitrate;
         videoEncoder.configure({ 
@@ -293,7 +297,10 @@ export class VideoProcessor {
           bitrate: targetBitrate,
           latencyMode: 'quality'
         });
-        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
+        const audioEncoder = new AudioEncoder({ 
+          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), 
+          error: (e) => { isError = true; console.error("AudioEncoder error:", e); reject(e); } 
+        });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
         const fps = 30;
@@ -320,6 +327,7 @@ export class VideoProcessor {
         let i = 0;
 
         while (i < totalFrames) {
+          if (isError) break;
           const currentTime = i / fps;
           const targetTime = currentTime % video.duration;
 
@@ -411,7 +419,11 @@ export class VideoProcessor {
 
           const timestamp = currentTime * 1_000_000;
           const vFrame = new VideoFrame(this.canvas, { timestamp });
-          videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
+          try {
+            if (videoEncoder.state === 'configured') {
+              videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
+            }
+          } catch (e) { isError = true; reject(e); vFrame.close(); break; }
           vFrame.close();
 
           if (mainAudioBuffer) {
@@ -423,7 +435,11 @@ export class VideoProcessor {
               for (let s = 0; s < len; s++) aData[ch * len + s] = src[start + s] || 0;
             }
             const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
-            audioEncoder.encode(audioData);
+            try {
+              if (audioEncoder.state === 'configured') {
+                audioEncoder.encode(audioData);
+              }
+            } catch (e) { isError = true; reject(e); audioData.close(); break; }
             audioData.close();
           }
           
@@ -445,10 +461,14 @@ export class VideoProcessor {
           }
         }
 
-        await videoEncoder.flush();
-        await audioEncoder.flush();
-        muxer.finalize();
-        resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
+        if (!isError) {
+          await videoEncoder.flush();
+          await audioEncoder.flush();
+          muxer.finalize();
+          resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
+        } else {
+          reject(new Error("Erro durante o processamento do vídeo (Mobile Safety)"));
+        }
       } catch (err) { reject(err); }
     });
   }
@@ -547,9 +567,10 @@ export class VideoProcessor {
           fastStart: 'in-memory'
         });
         
+        let isError = false;
         const videoEncoder = new VideoEncoder({
           output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
-          error: (e) => reject(e)
+          error: (e) => { isError = true; console.error("VideoEncoder error:", e); reject(e); }
         });
         videoEncoder.configure({
           codec: 'avc1.42E032', // Baseline profile para máxima compatibilidade mobile
@@ -559,7 +580,10 @@ export class VideoProcessor {
           latencyMode: 'quality'
         });
         
-        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
+        const audioEncoder = new AudioEncoder({ 
+          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), 
+          error: (e) => { isError = true; console.error("AudioEncoder error:", e); reject(e); } 
+        });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
         let audioBuffer = originalAudio;
@@ -590,6 +614,7 @@ export class VideoProcessor {
         const kbDirections = imgs.map(() => Math.random() > 0.5 ? 1 : -1);
 
         for (let i = 0; i < totalFrames; i++) {
+          if (isError) break;
           const currentTime = i / fps;
           const slideIdx = Math.min(Math.floor(currentTime / slideDuration), imgs.length - 1);
           const img = imgs[slideIdx];
@@ -649,10 +674,14 @@ export class VideoProcessor {
           // Frame output
           const timestamp = currentTime * 1_000_000;
           const vFrame = new VideoFrame(this.canvas, { timestamp });
-          videoEncoder.encode(vFrame, { keyFrame: i % 30 === 0 });
+          try {
+            if (videoEncoder.state === 'configured') {
+              videoEncoder.encode(vFrame, { keyFrame: i % 30 === 0 });
+            }
+          } catch (e) { isError = true; reject(e); vFrame.close(); break; }
           vFrame.close();
 
-          if (audioBuffer) {
+          if (audioBuffer && !isError) {
             const start = Math.floor(i * (44100 / fps));
             const len = Math.floor(44100 / fps);
             const aData = new Float32Array(len * 2);
@@ -661,7 +690,11 @@ export class VideoProcessor {
               for (let s = 0; s < len; s++) aData[ch * len + s] = src[(start + s) % src.length] || 0;
             }
             const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
-            audioEncoder.encode(audioData);
+            try {
+              if (audioEncoder.state === 'configured') {
+                audioEncoder.encode(audioData);
+              }
+            } catch (e) { isError = true; reject(e); audioData.close(); break; }
             audioData.close();
           }
 
@@ -694,6 +727,7 @@ export class VideoProcessor {
         const W = isMobile ? 720 : 1080; 
         const H = isMobile ? 1280 : 1920;
         this.canvas.width = W; this.canvas.height = H;
+        let isError = false;
 
         const targetDuration = 35;
         const fps = 30;
@@ -760,6 +794,7 @@ export class VideoProcessor {
         }
 
         for (let i = 0; i < totalFrames; i++) {
+          if (isError) break;
           const currentTime = i / fps;
           const slideIdx = Math.floor(currentTime / slideDuration) % imgs.length;
           const img = imgs[slideIdx];
@@ -879,7 +914,11 @@ export class VideoProcessor {
 
           const timestamp = currentTime * 1_000_000;
           const vFrame = new VideoFrame(this.canvas, { timestamp });
-          videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
+          try {
+            if (videoEncoder.state === 'configured') {
+              videoEncoder.encode(vFrame, { keyFrame: i % 60 === 0 });
+            }
+          } catch (e) { isError = true; reject(e); vFrame.close(); break; }
           vFrame.close();
 
           const maxQueueSize = isMobile ? 5 : 12;
@@ -902,7 +941,11 @@ export class VideoProcessor {
               for (let s = 0; s < len; s++) aData[ch * len + s] = src[(start + s) % src.length] || 0;
             }
             const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
-            audioEncoder.encode(audioData);
+            try {
+              if (audioEncoder.state === 'configured') {
+                audioEncoder.encode(audioData);
+              }
+            } catch (e) { isError = true; reject(e); audioData.close(); break; }
             audioData.close();
           }
           options.onProgress?.((i / totalFrames) * 100);
