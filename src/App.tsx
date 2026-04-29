@@ -1369,7 +1369,7 @@ const App: React.FC = () => {
       return caption;
     }
     
-    // Shopee: Estilo Ultra-Viral com Títulos Rotativos (Limite 150 chars)
+    // Shopee: Estilo Focado em Vendas e Busca (Buyer Intent)
     const titles = [
       "💎 ACHADO EXCLUSIVO 💎",
       "✨ ACHADINHO DE HOJE ✨",
@@ -1385,20 +1385,30 @@ const App: React.FC = () => {
       "✅ TESTADO E APROVADO ✅"
     ];
     
-    // Seleção aleatória para nunca se repetir
     const seed = Math.floor(Math.random() * 1000);
     const selectedTitle = titles[seed % titles.length];
     
-    // Bloco denso de hashtags para alcance máximo
+    // Hashtags de Intenção de Compra (Pessoas que estão procurando produtos)
     const hashtags = [
-      "#shopeefinds", "#viralvideos", "#dicasdecasa", "#utilidadedomestica", 
-      "#achadosdasemana", "#produtosvirais", "#casaorganizada", "#achadinhosbr",
-      "#shopeebr", "#achados", "#shopee", "#comprinhas", "#viral", "#shopeevideo", "#achadinhosshopee"
+      "#achadosshopee",   // Termo #1 de busca
+      "#comprinhas",      // Atrai quem quer gastar
+      "#shopeefinds",     // Público que busca curadoria
+      "#utilidades",      // Nicho de alta conversão
+      "#dicasdecasa",     // Público que compra para o lar
+      "#ofertas",         // Gatilho para quem busca preço
+      "#achadinhos",      // Termo clássico de descoberta
+      "#shopeevideo",     // Essencial para o algoritmo interno
+      "#produtosshopee",  // Busca direta por itens
+      "#cupomshopee",     // Atrai quem já está com o carrinho aberto
+      "#shopeebr",        // Base de localização
+      "#promoção",        // Palavra-chave de venda
+      "#casaorganizada",  // Nicho de organização (vende muito)
+      "#shopeebrasil",    // Tag de confiança
+      "#viral"            // Impulso de alcance
     ].join(" ");
     
     let result = `${selectedTitle}\n${hashtags}`;
     
-    // Ajuste dinâmico para os 150 caracteres da Shopee
     if (result.length > 150) {
       const tagsArray = hashtags.split(" ");
       while (tagsArray.length > 1 && `${selectedTitle}\n${tagsArray.join(" ")}`.length > 150) {
