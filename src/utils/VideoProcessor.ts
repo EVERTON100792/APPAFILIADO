@@ -61,21 +61,21 @@ export class VideoProcessor {
   }
 
   private getFilterCSS(filter: string): string {
+    // Otimização de filtros para qualidade superior ao original
     switch (filter) {
-      case 'elite':     return 'contrast(1.35) saturate(1.7) brightness(1.15)';
-      case 'vhs':       return 'contrast(0.9) saturate(0.55) sepia(0.3) brightness(1.1)'; // Removido blur
-      case 'cinematic': return 'contrast(1.3) saturate(1.1) brightness(1.05) hue-rotate(-5deg)';
-      case 'bw':        // Removido filtros de imagem (contrast/brightness) para evitar travamentos em celulares
-        return 'none';
-      case 'bloom':     return 'brightness(1.2) saturate(1.3)';
-      case 'glitch':    return 'hue-rotate(90deg) brightness(1.2) contrast(1.25)';
-      case 'ultra8k':   return 'contrast(1.4) saturate(1.8) brightness(1.12)'; // Removido drop-shadow
-      case 'dramatic':  return 'contrast(1.5) saturate(0.9) brightness(0.9) sepia(0.1)';
-      case 'tealAndOrange': return 'contrast(1.2) saturate(1.4) hue-rotate(-10deg) sepia(0.1) brightness(1.1)';
-      case 'vintageGold': return 'sepia(0.4) contrast(1.1) brightness(1.1) saturate(1.3)';
-      case 'professional': return 'contrast(1.15) saturate(1.15) brightness(1.08)';
-      case 'tiktok viral': return 'contrast(1.25) saturate(1.35) brightness(1.1) brightness(1.12)';
-      default:          return 'contrast(1.08) saturate(1.08)';
+      case 'elite':     return 'contrast(1.45) saturate(1.8) brightness(1.1)';
+      case 'vhs':       return 'contrast(0.95) saturate(0.65) sepia(0.25) brightness(1.05)';
+      case 'cinematic': return 'contrast(1.35) saturate(1.2) brightness(1.05) hue-rotate(-2deg)';
+      case 'bw':        return 'contrast(1.2) grayscale(1)';
+      case 'bloom':     return 'brightness(1.15) saturate(1.4) contrast(1.1)';
+      case 'glitch':    return 'hue-rotate(90deg) brightness(1.15) contrast(1.3)';
+      case 'ultra8k':   return 'contrast(1.5) saturate(1.9) brightness(1.1)';
+      case 'dramatic':  return 'contrast(1.6) saturate(0.85) brightness(0.95)';
+      case 'tealAndOrange': return 'contrast(1.25) saturate(1.5) hue-rotate(-8deg) brightness(1.05)';
+      case 'vintageGold': return 'sepia(0.3) contrast(1.2) brightness(1.08) saturate(1.4)';
+      case 'professional': return 'contrast(1.2) saturate(1.2) brightness(1.05)';
+      case 'tiktok viral': return 'contrast(1.3) saturate(1.4) brightness(1.05)';
+      default:          return 'contrast(1.15) saturate(1.15) brightness(1.05)';
     }
   }
 
@@ -370,8 +370,9 @@ export class VideoProcessor {
           if (options.isAutoral) {
             this.ctx.translate(W, 0);
             this.ctx.scale(-1, 1);
+            // Reduzido zoom para evitar cortes excessivos e vultos
             this.ctx.translate(W/2, H/2);
-            this.ctx.scale(1.05, 1.05);
+            this.ctx.scale(1.03, 1.03);
             this.ctx.translate(-W/2, -H/2);
           }
           
@@ -554,6 +555,8 @@ export class VideoProcessor {
 
         this.canvas.width = W;
         this.canvas.height = H;
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
 
         const targetDuration = originalAudio ? Math.max(originalAudio.duration, 5) : 25; // Sincroniza com áudio original se existir
         const totalFrames = Math.floor(targetDuration * fps);
@@ -646,8 +649,8 @@ export class VideoProcessor {
           }
 
           const baseScale = Math.max(W / img.width, H / img.height);
-          const kbDirection = kbDirections[slideIdx];
-          const kbScale = kbDirection > 0 ? 1 + (progress * 0.20) : 1.20 - (progress * 0.20); // Zoom mais profundo
+          // Imagem parada conforme solicitado para evitar vultos e desfoque de movimento
+          const kbScale = 1.05;
           
           const sw = img.width * baseScale * kbScale;
           const sh = img.height * baseScale * kbScale;
@@ -814,7 +817,7 @@ export class VideoProcessor {
           if (beatPhase < 0.1 && !isCTA) beatPulse = 1 + (1 - beatPhase / 0.1) * 0.03;
 
           // --- CROSSFADE PROFISSIONAL ENTRE SLIDES ---
-          const FADE_DURATION = 0.45; // 450ms de crossfade suave
+          const FADE_DURATION = 0.35; // Transição mais curta para corte perfeito e seco
           const slideProgress = currentTime % slideDuration; // tempo dentro do slide atual
           const isInTransitionOut = slideProgress > (slideDuration - FADE_DURATION); // saindo
           const isInTransitionIn  = slideProgress < FADE_DURATION;                   // entrando
@@ -839,7 +842,7 @@ export class VideoProcessor {
             const nextImg = imgs[nextSlideIdx];
             if (nextImg) {
               const bsNext = Math.max(W / nextImg.width, H / nextImg.height);
-              const kbNext = 1 + (0) * 0.1;
+              const kbNext = 1.05;
               const sxNext = (W - nextImg.width * bsNext * kbNext) / 2;
               const syNext = (H - nextImg.height * bsNext * kbNext) / 2;
               this.ctx.globalAlpha = easedOut;
@@ -851,7 +854,7 @@ export class VideoProcessor {
             // Desenhar slide atual por cima com efeito de saída
             this.applyProfessionalTransitionOut(currentTransition, easedOut, W, H);
             const baseScale2 = Math.max(W / img.width, H / img.height);
-            const kbScale2 = 1 + progress * 0.08;
+            const kbScale2 = 1.05;
             const sx2 = (W - img.width * baseScale2 * kbScale2) / 2;
             const sy2 = (H - img.height * baseScale2 * kbScale2) / 2;
             this.ctx.filter = filterCSS;
@@ -867,7 +870,7 @@ export class VideoProcessor {
             const prevImg = imgs[prevSlideIdx];
             if (prevImg) {
               const bsPrev = Math.max(W / prevImg.width, H / prevImg.height);
-              const kbPrev = 1 + 0.08;
+              const kbPrev = 1.05;
               const sxPrev = (W - prevImg.width * bsPrev * kbPrev) / 2;
               const syPrev = (H - prevImg.height * bsPrev * kbPrev) / 2;
               this.ctx.globalAlpha = 1;
@@ -878,7 +881,7 @@ export class VideoProcessor {
             // Slide atual entrando com efeito
             this.applyProfessionalTransitionIn(nextTransition, easedIn, W, H);
             const baseScale3 = Math.max(W / img.width, H / img.height);
-            const kbScale3 = 1 + progress * 0.08;
+            const kbScale3 = 1.05;
             const sx3 = (W - img.width * baseScale3 * kbScale3) / 2;
             const sy3 = (H - img.height * baseScale3 * kbScale3) / 2;
             this.ctx.filter = filterCSS;
@@ -887,7 +890,7 @@ export class VideoProcessor {
           } else {
             // Slide estável: Ken Burns suave
             const baseScale = Math.max(W / img.width, H / img.height);
-            const kbScale = 1 + progress * 0.08;
+            const kbScale = 1.05;
             const scrollX = (W - img.width * baseScale * kbScale) / 2;
             const scrollY = (H - img.height * baseScale * kbScale) / 2;
             this.ctx.globalAlpha = 1;
@@ -1016,7 +1019,7 @@ export class VideoProcessor {
     const rectH = lines.length * lineHeight + padding * 2;
     const rectW = W * 0.85;
     const rectX = (W - rectW) / 2;
-    const rectY = H * 0.72; // POSICIONADO NO RODAPÉ (AJUSTADO PARA ~72-78% DA TELA)
+    const rectY = H * 0.76; // Ajustado mais para baixo para não tapar o produto no centro
 
     // Aplicar Transformação de Pop
     this.ctx.translate(W/2, rectY + rectH/2);
