@@ -1369,29 +1369,42 @@ const App: React.FC = () => {
       return caption;
     }
     
-    // Shopee: Estilo Ultra-Direto para Viralizar (Limite 150 chars)
-    const intro = "💎 ACHADO EXCLUSIVO 💎";
-    const productTitle = selectedProduct?.item_name || selectedProduct?.title || "este item";
+    // Shopee: Estilo Ultra-Viral com Títulos Rotativos (Limite 150 chars)
+    const titles = [
+      "💎 ACHADO EXCLUSIVO 💎",
+      "✨ ACHADINHO DE HOJE ✨",
+      "🔥 O MAIS VENDIDO 🔥",
+      "😱 OLHA ESSE ACHADO 😱",
+      "🏆 QUALIDADE PREMIUM 🏆",
+      "🎁 PRESENTE PERFEITO 🎁",
+      "💎 ACHADO DE OURO 💎",
+      "⭐ RECOMENDADO ⭐",
+      "🛒 DIRETO DA SHOPEE 🛒",
+      "💥 PROMOÇÃO FLASH 💥",
+      "🚀 ITEM MAIS VIRAL 🚀",
+      "✅ TESTADO E APROVADO ✅"
+    ];
     
-    // Nome do produto limpo e curto
-    const productLine = `✨ ${productTitle.substring(0, 40).trim()}`;
+    // Seleção aleatória para nunca se repetir
+    const seed = Math.floor(Math.random() * 1000);
+    const selectedTitle = titles[seed % titles.length];
     
-    // Bloco expandido de hashtags para alcance máximo
+    // Bloco denso de hashtags para alcance máximo
     const hashtags = [
       "#shopeefinds", "#viralvideos", "#dicasdecasa", "#utilidadedomestica", 
       "#achadosdasemana", "#produtosvirais", "#casaorganizada", "#achadinhosbr",
-      "#shopeebr", "#achados", "#shopee", "#comprinhas", "#viral", "#home", "#dicas"
+      "#shopeebr", "#achados", "#shopee", "#comprinhas", "#viral", "#shopeevideo", "#achadinhosshopee"
     ].join(" ");
     
-    let result = `${intro}\n${productLine}\n${hashtags}`;
+    let result = `${selectedTitle}\n${hashtags}`;
     
-    // Ajuste dinâmico para caber no limite de 150 da Shopee, priorizando as tags
+    // Ajuste dinâmico para os 150 caracteres da Shopee
     if (result.length > 150) {
       const tagsArray = hashtags.split(" ");
-      while (tagsArray.length > 1 && `${intro}\n${productLine}\n${tagsArray.join(" ")}`.length > 150) {
+      while (tagsArray.length > 1 && `${selectedTitle}\n${tagsArray.join(" ")}`.length > 150) {
         tagsArray.pop();
       }
-      result = `${intro}\n${productLine}\n${tagsArray.join(" ")}`;
+      result = `${selectedTitle}\n${tagsArray.join(" ")}`;
     }
     
     return result.substring(0, 150);
