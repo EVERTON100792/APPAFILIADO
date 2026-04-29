@@ -1369,48 +1369,46 @@ const App: React.FC = () => {
       return caption;
     }
     
-    // Shopee: Estilo Focado em Vendas e Busca (Buyer Intent)
+    // Shopee: Estilo Focado em Vendas + Nicho Dinâmico (Limite 150 chars)
     const titles = [
-      "💎 ACHADO EXCLUSIVO 💎",
-      "✨ ACHADINHO DE HOJE ✨",
-      "🔥 O MAIS VENDIDO 🔥",
-      "😱 OLHA ESSE ACHADO 😱",
-      "🏆 QUALIDADE PREMIUM 🏆",
-      "🎁 PRESENTE PERFEITO 🎁",
-      "💎 ACHADO DE OURO 💎",
-      "⭐ RECOMENDADO ⭐",
-      "🛒 DIRETO DA SHOPEE 🛒",
-      "💥 PROMOÇÃO FLASH 💥",
-      "🚀 ITEM MAIS VIRAL 🚀",
-      "✅ TESTADO E APROVADO ✅"
+      "💎 ACHADO EXCLUSIVO 💎", "✨ ACHADINHO DE HOJE ✨", "🔥 O MAIS VENDIDO 🔥",
+      "😱 OLHA ESSE ACHADO 😱", "🏆 QUALIDADE PREMIUM 🏆", "🎁 PRESENTE PERFEITO 🎁",
+      "💎 ACHADO DE OURO 💎", "⭐ RECOMENDADO ⭐", "🛒 DIRETO DA SHOPEE 🛒",
+      "💥 PROMOÇÃO FLASH 💥", "🚀 ITEM MAIS VIRAL 🚀", "✅ TESTADO E APROVADO ✅"
     ];
     
     const seed = Math.floor(Math.random() * 1000);
     const selectedTitle = titles[seed % titles.length];
     
-    // Hashtags de Intenção de Compra (Pessoas que estão procurando produtos)
-    const hashtags = [
-      "#achadosshopee",   // Termo #1 de busca
-      "#comprinhas",      // Atrai quem quer gastar
-      "#shopeefinds",     // Público que busca curadoria
-      "#utilidades",      // Nicho de alta conversão
-      "#dicasdecasa",     // Público que compra para o lar
-      "#ofertas",         // Gatilho para quem busca preço
-      "#achadinhos",      // Termo clássico de descoberta
-      "#shopeevideo",     // Essencial para o algoritmo interno
-      "#produtosshopee",  // Busca direta por itens
-      "#cupomshopee",     // Atrai quem já está com o carrinho aberto
-      "#shopeebr",        // Base de localização
-      "#promoção",        // Palavra-chave de venda
-      "#casaorganizada",  // Nicho de organização (vende muito)
-      "#shopeebrasil",    // Tag de confiança
-      "#viral"            // Impulso de alcance
-    ].join(" ");
+    // Lógica de Detecção de Nicho
+    const productTitle = (selectedProduct?.item_name || selectedProduct?.title || "").toLowerCase();
+    const nicheTags: string[] = [];
     
-    let result = `${selectedTitle}\n${hashtags}`;
+    if (productTitle.includes("cozinha") || productTitle.includes("detergente") || productTitle.includes("prato") || productTitle.includes("copo")) {
+      nicheTags.push("#cozinha", "#utensilios", "#utilidadesdomesticas");
+    } else if (productTitle.includes("limpeza") || productTitle.includes("banheiro") || productTitle.includes("faxina")) {
+      nicheTags.push("#limpeza", "#casaorganizada", "#dicasdecasa");
+    } else if (productTitle.includes("fone") || productTitle.includes("relogio") || productTitle.includes("smartwatch") || productTitle.includes("gamer")) {
+      nicheTags.push("#tecnologia", "#eletronicos", "#gadgets");
+    } else if (productTitle.includes("maquiagem") || productTitle.includes("beleza") || productTitle.includes("skincare")) {
+      nicheTags.push("#beleza", "#maquiagem", "#autocuidado");
+    } else if (productTitle.includes("organizador") || productTitle.includes("caixa") || productTitle.includes("suporte")) {
+      nicheTags.push("#organização", "#casa", "#pessoalorganizer");
+    } else {
+      nicheTags.push("#utilidades", "#dicas", "#casa");
+    }
+
+    // Hashtags de Intenção de Compra Fixas
+    const baseTags = [
+      "#achadosshopee", "#comprinhas", "#shopeefinds", "#ofertas", 
+      "#achadinhos", "#shopeevideo", "#shopeebr", "#promoção"
+    ];
+    
+    const allTags = [...new Set([...nicheTags, ...baseTags])].join(" ");
+    let result = `${selectedTitle}\n${allTags}`;
     
     if (result.length > 150) {
-      const tagsArray = hashtags.split(" ");
+      const tagsArray = allTags.split(" ");
       while (tagsArray.length > 1 && `${selectedTitle}\n${tagsArray.join(" ")}`.length > 150) {
         tagsArray.pop();
       }
