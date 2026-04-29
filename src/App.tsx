@@ -1366,36 +1366,36 @@ const App: React.FC = () => {
     if (!caption) return "";
     
     if (platform === "tiktok") {
-      // TikTok: Sem limite rigoroso (atualmente ~4000 caracteres)
+      // TikTok: Mantém a legenda criativa completa
       return caption;
     }
     
-    // Shopee: Limite de 150 caracteres para legendas de vídeos
-    if (caption.length <= 150) return caption;
+    // Shopee: Estilo Inteligente focado no Produto (Limite 150 chars)
+    const intro = "💎 ACHADO EXCLUSIVO 💎";
+    const productTitle = selectedProduct?.item_name || selectedProduct?.title || "este achadinho";
     
-    const lines = caption.split('\n').filter(l => l.trim() !== "");
-    const hashtags = lines.find(l => l.includes("#")) || "#shopee #achadinhos #viral";
-    const title = lines[0] || "Achadinho Viral!";
+    // Frase inteligente e curta focada no produto
+    const body = `Olha esse ${productTitle.substring(0, 35).trim()} que encontrei! ✨`;
     
-    // Tenta: Título + Hashtags
-    let result = `${title}\n${hashtags}`;
+    // Hashtags de alto alcance baseadas no print do usuário
+    const hashtags = [
+      "#shopeefinds", "#viralvideos", "#dicasdecasa", "#utilidadedomestica", 
+      "#achadosdasemana", "#produtosvirais", "#casaorganizada", "#achadinhosbr",
+      "#shopeebr", "#achados", "#shopee"
+    ].join(" ");
     
+    let result = `${intro}\n${body}\n${hashtags}`;
+    
+    // Se passar de 150, remove hashtags do final até caber perfeitamente
     if (result.length > 150) {
-      // Se ainda for grande, remove hashtags do final até caber
-      const tagsArray = hashtags.split(' ');
-      let currentTags = [...tagsArray];
-      while (currentTags.length > 2 && (`${title}\n${currentTags.join(' ')}`).length > 150) {
-        currentTags.pop();
+      const tagsArray = hashtags.split(" ");
+      while (tagsArray.length > 1 && `${intro}\n${body}\n${tagsArray.join(" ")}`.length > 150) {
+        tagsArray.pop();
       }
-      result = `${title}\n${currentTags.join(' ')}`;
+      result = `${intro}\n${body}\n${tagsArray.join(" ")}`;
     }
     
-    if (result.length > 150) {
-      // Caso extremo: corta o título
-      const availableSpace = 150 - 25; // deixa espaço para algumas tags
-      result = `${title.substring(0, availableSpace)}...\n#shopee #achados`;
-    }
-    
+    // Garantia final de 150 caracteres (limite Shopee Video)
     return result.substring(0, 150);
   };
 
