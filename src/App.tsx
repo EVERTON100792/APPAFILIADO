@@ -1366,36 +1366,34 @@ const App: React.FC = () => {
     if (!caption) return "";
     
     if (platform === "tiktok") {
-      // TikTok: Mantém a legenda criativa completa
       return caption;
     }
     
-    // Shopee: Estilo Inteligente focado no Produto (Limite 150 chars)
+    // Shopee: Estilo Ultra-Direto para Viralizar (Limite 150 chars)
     const intro = "💎 ACHADO EXCLUSIVO 💎";
-    const productTitle = selectedProduct?.item_name || selectedProduct?.title || "este achadinho";
+    const productTitle = selectedProduct?.item_name || selectedProduct?.title || "este item";
     
-    // Frase inteligente e curta focada no produto
-    const body = `Olha esse ${productTitle.substring(0, 35).trim()} que encontrei! ✨`;
+    // Nome do produto limpo e curto
+    const productLine = `✨ ${productTitle.substring(0, 40).trim()}`;
     
-    // Hashtags de alto alcance baseadas no print do usuário
+    // Bloco expandido de hashtags para alcance máximo
     const hashtags = [
       "#shopeefinds", "#viralvideos", "#dicasdecasa", "#utilidadedomestica", 
       "#achadosdasemana", "#produtosvirais", "#casaorganizada", "#achadinhosbr",
-      "#shopeebr", "#achados", "#shopee"
+      "#shopeebr", "#achados", "#shopee", "#comprinhas", "#viral", "#home", "#dicas"
     ].join(" ");
     
-    let result = `${intro}\n${body}\n${hashtags}`;
+    let result = `${intro}\n${productLine}\n${hashtags}`;
     
-    // Se passar de 150, remove hashtags do final até caber perfeitamente
+    // Ajuste dinâmico para caber no limite de 150 da Shopee, priorizando as tags
     if (result.length > 150) {
       const tagsArray = hashtags.split(" ");
-      while (tagsArray.length > 1 && `${intro}\n${body}\n${tagsArray.join(" ")}`.length > 150) {
+      while (tagsArray.length > 1 && `${intro}\n${productLine}\n${tagsArray.join(" ")}`.length > 150) {
         tagsArray.pop();
       }
-      result = `${intro}\n${body}\n${tagsArray.join(" ")}`;
+      result = `${intro}\n${productLine}\n${tagsArray.join(" ")}`;
     }
     
-    // Garantia final de 150 caracteres (limite Shopee Video)
     return result.substring(0, 150);
   };
 
