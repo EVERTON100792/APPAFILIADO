@@ -577,8 +577,8 @@ const App: React.FC = () => {
 
   const getPlatformUrl = (type: "shopee" | "tiktok") => {
     if (type === "shopee") {
-      // Web fallback - usado se o app não estiver instalado
-      return "https://shopee.com.br/m/shopee-video";
+      // Deep Link para App Shopee (Brasil) ou fallback Web
+      return isMobile ? "shopeebr://shopee-video" : "https://shopee.com.br/m/shopee-video";
     } else {
       if (isMobile) return "snssdk1233://";
       return "https://www.tiktok.com/upload";
@@ -3208,12 +3208,27 @@ const App: React.FC = () => {
           window.open("https://www.tiktok.com/upload", "_blank", "noopener,noreferrer");
         }
       } else if (selectedPlatform === "shopee") {
-        // Android Intent URL - abre o app Shopee diretamente pelo package name
-        // Se não estiver instalado, o Android redireciona para a Play Store ou URL de fallback
-        const intentUrl = "intent://shopee.com.br/#Intent;scheme=https;package=com.shopee.br;S.browser_fallback_url=https%3A%2F%2Fshopee.com.br%2Fm%2Fshopee-video;end";
-        addLog("Abrindo Shopee...", "info");
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const shopeeDeepLink = "shopeebr://shopee-video";
+        const shopeeFallback = "https://shopee.com.br/m/shopee-video";
+
+        addLog("Iniciando Deep Link Shopee...", "info");
+        
         if (isMobileDevice) {
-          window.location.href = intentUrl;
+          if (isIOS) {
+            // iOS: Tentativa direta com fallback manual por visibilidade
+            window.location.href = shopeeDeepLink;
+            setTimeout(() => {
+              if (document.visibilityState === "visible") {
+                addLog("App não detectado. Abrindo navegador...", "warn");
+                window.open(shopeeFallback, "_blank");
+              }
+            }, 2000);
+          } else {
+            // Android: Intent robusto para abrir app ou Play Store/Browser
+            const intentUrl = `intent://shopee.com.br/#Intent;scheme=https;package=com.shopee.br;S.browser_fallback_url=${encodeURIComponent(shopeeFallback)};end`;
+            window.location.href = intentUrl;
+          }
         } else {
           window.open("https://affiliate.shopee.com.br/offer/product_offer", "_blank", "noopener,noreferrer");
         }
