@@ -14,6 +14,7 @@ export interface ShopeeProduct {
   shop_name: string;
   product_link: string;
   affiliate_link?: string;
+  is_international?: boolean;
 }
 
 export interface ShopeeSearchFilters {
@@ -140,6 +141,10 @@ export class ShopeeService {
         sales: Number(item.sales) || Number(item.sold) || 0,
         shop_name: item.shop_name || item.shopName || "Shopee",
         product_link: finalLink,
+        is_international: item.is_oversea === true || 
+                        item.is_international === true || 
+                        !!item.oversea ||
+                        (item.shop_location && (item.shop_location.toLowerCase().includes('overseas') || item.shop_location.toLowerCase().includes('internacional'))),
       };
     });
   }

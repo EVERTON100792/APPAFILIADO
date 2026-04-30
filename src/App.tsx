@@ -75,24 +75,24 @@ const HOTMART_CHECKOUT_URL = "https://pay.hotmart.com/S105263156D";
 
 const NICHE_KEYWORDS: Record<string, { positive: string[]; negative: string[] }> = {
   Cozinha: {
-    positive: ["cozinha", "comida", "chef", "receita", "utilidade", "casa", "lar", "utensilio", "preparo", "fritadeira", "airfryer", "organizador"],
+    positive: ["cozinha", "comida", "chef", "receita", "utilidade", "casa", "lar", "utensilio", "preparo", "fritadeira", "airfryer", "organizador", "limpeza", "decoração"],
     negative: ["maquiagem", "pc", "gamer", "pet", "cachorro", "bebe", "kids", "fitness", "cosplay"],
   },
   Tecnologia: {
-    positive: ["tech", "gadget", "unboxing", "setup", "pc", "smartphone", "eletronico", "acessorio", "inteligente", "smart", "bluetooth"],
+    positive: ["tech", "gadget", "unboxing", "setup", "pc", "smartphone", "eletronico", "acessorio", "inteligente", "smart", "bluetooth", "gamer", "computador"],
     negative: ["cozinha", "panela", "maquiagem", "bebe", "infantil", "pet", "limpeza"],
   },
   Beleza: {
-    positive: ["make", "maquiagem", "skin", "cabelo", "beleza", "beauty", "tutorial", "cuidado", "pele", "rosto", "cosmetico"],
+    positive: ["make", "maquiagem", "skin", "cabelo", "beleza", "beauty", "tutorial", "cuidado", "pele", "rosto", "cosmetico", "perfume", "saúde"],
     negative: ["ferramenta", "carro", "moto", "gamer", "tecnologia", "comida", "pesca"],
   },
-  Decoração: {
-    positive: ["casa", "decor", "quarto", "sala", "iluminação", "led", "reforma", "estilo", "design", "ambiente"],
-    negative: ["maquiagem", "carro", "pet", "comida", "eletronico"],
+  Kids: {
+    positive: ["bebe", "baby", "infantil", "criança", "kids", "brinquedo", "maternidade", "enxoval", "drone", "slime", "popit", "educativo"],
+    negative: ["cerveja", "maquiagem", "limpeza", "casa", "cozinha"],
   },
-  Pet: {
-    positive: ["pet", "gato", "cachorro", "dog", "cat", "animal", "fofo", "rastreador", "brinquedo", "coleira"],
-    negative: ["maquiagem", "cozinha", "gamer", "carro"],
+  Utilidades: {
+    positive: ["utilidade", "viral", "achadinho", "diferente", "incrível", "gadget", "curiosidade", "ferramenta", "resolvido", "problema"],
+    negative: ["comida", "roupa", "infantil"],
   },
 };
 
@@ -946,8 +946,8 @@ const App: React.FC = () => {
     { id: "Cozinha", label: "Cozinha", icon: "🍳" },
     { id: "Tecnologia", label: "Eletrônicos", icon: "⚡" },
     { id: "Beleza", label: "Beleza", icon: "💄" },
-    { id: "Decoração", label: "Casa & Deco", icon: "🏠" },
-    { id: "Pet", label: "Pet", icon: "🐾" },
+    { id: "Kids", label: "Kids & Brinquedos", icon: "🧸" },
+    { id: "Utilidades", label: "Utilidades", icon: "💡" },
   ];
   const getProductScore = (product: any) => {
     const salesStr = product.sales || "";
@@ -1668,7 +1668,27 @@ const App: React.FC = () => {
         extractedName = "Achadinho Shopee Brasil";
       }
 
-      // Tenta arrancar o core da pesquisa
+      // 4️⃣ BUSCA POR PALAVRA-CHAVE (UNLOCKED)
+      // Se não for link nem Offer ID, buscamos no catálogo real da Shopee
+      showToast(`🔍 Buscando "${extractedName}" na Shopee...`);
+      try {
+        const results = await ShopeeService.searchProducts({ 
+          keyword: extractedName,
+          page_size: 20
+        }, userShopeeId || undefined);
+
+        if (results && results.length > 0) {
+          setActiveItems(results);
+          setStep("list");
+          setCustomLink("");
+          showToast(`✅ ${results.length} produtos encontrados!`);
+          return;
+        }
+      } catch (err) {
+        console.error("Erro na busca por palavra-chave:", err);
+      }
+
+      // 5️⃣ Fallback: Se tudo falhar, mantém o comportamento original de criar item genérico
       const searchWords = getSmartSearchName(extractedName);
       const finalQuery = searchWords.length > 3 ? searchWords : extractedName;
 
@@ -3817,8 +3837,8 @@ const App: React.FC = () => {
                       type="text"
                       value={customLink}
                       onChange={(e) => setCustomLink(e.target.value)}
-                      placeholder="Qual produto deseja buscar?"
-                      className="w-full bg-slate-950/80 border border-white/5 rounded-2xl pl-10 pr-24 py-3.5 text-[12px] text-white focus:outline-none focus:border-accent/40 shadow-2xl placeholder:text-white/20 transition-all font-medium relative z-10"
+                      placeholder="Busque qualquer produto na Shopee..."
+                      className="w-full bg-slate-950/90 border border-white/10 rounded-2xl pl-10 pr-24 py-4 text-[13px] text-white focus:outline-none focus:border-accent/60 shadow-[0_0_30px_rgba(0,0,0,0.5)] placeholder:text-white/30 transition-all font-bold relative z-10"
                     />
                     <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20">
                       <motion.button
@@ -3994,6 +4014,14 @@ const App: React.FC = () => {
                               <span className="text-[8px] font-black uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded border border-white/5">
                                 POSTADO
                               </span>
+                            )}
+                            {p.is_international && (
+                              <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                                <Globe size={8} className="text-blue-400" />
+                                <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">
+                                  INTERNACIONAL
+                                </span>
+                              </div>
                             )}
                           </div>
 

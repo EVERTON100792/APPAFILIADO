@@ -412,6 +412,10 @@ export class VideoProcessor {
           if (options.isAutoral) {
             this.drawVignette(W, H);
             this.drawCinematicOverlay(W, H, currentTime);
+            // Novos efeitos anti-algoritmo + Bloom
+            this.drawRandomFlash(W, H, currentTime);
+            this.drawRandomLightLeak(W, H, currentTime);
+            this.drawCinematicBloom(W, H);
           }
 
           if (options.storeName && !options.isAutoral) {
@@ -672,6 +676,12 @@ export class VideoProcessor {
           this.drawVignette(W, H);
           this.drawParticles(W, H, currentTime);
           this.drawCinematicOverlay(W, H, currentTime);
+          
+          // Novos efeitos anti-algoritmo + Bloom
+          this.drawRandomFlash(W, H, currentTime);
+          this.drawRandomLightLeak(W, H, currentTime);
+          this.drawCinematicBloom(W, H);
+          
           this.drawProgressBar(W, H, currentTime, targetDuration);
 
           // Frame output
@@ -1021,8 +1031,9 @@ export class VideoProcessor {
     const rectX = (W - rectW) / 2;
     const rectY = H * 0.76; // Ajustado mais para baixo para não tapar o produto no centro
 
-    // Aplicar Transformação de Pop
-    this.ctx.translate(W/2, rectY + rectH/2);
+    // Aplicar Transformação de Pop + Pequena variação aleatória para cada vídeo (Anti-Algoritmo)
+    const spintaxOffset = isAutoral ? (Math.sin(time * 100) * 0.5) : 0;
+    this.ctx.translate(W/2 + spintaxOffset, rectY + rectH/2 + spintaxOffset);
     this.ctx.scale(popScale, popScale);
     this.ctx.translate(-W/2, -(rectY + rectH/2));
 
@@ -1274,6 +1285,65 @@ export class VideoProcessor {
     this.ctx.shadowColor = '#10b981';
     this.ctx.fillRect(W * progress - 2, H - barH, 2, barH);
     
+    this.ctx.restore();
+  }
+
+  private drawRandomFlash(W: number, H: number, time: number) {
+    // Flash ocorre a cada ~3-4 segundos de forma semi-aleatória
+    const flashFreq = 3.5;
+    const flashDur = 0.08;
+    const isFlash = (time % flashFreq) < flashDur;
+    
+    if (isFlash) {
+      this.ctx.save();
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const intensity = 1 - (time % flashFreq) / flashDur;
+      this.ctx.fillStyle = `rgba(255, 255, 255, ${intensity * 0.4})`;
+      this.ctx.fillRect(0, 0, W, H);
+      this.ctx.restore();
+    }
+  }
+
+  private drawRandomLightLeak(W: number, H: number, time: number) {
+    // Vazamento de luz que muda de cor e posição lentamente
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.globalCompositeOperation = 'screen';
+    
+    const colors = [
+      'rgba(255, 100, 0, 0.08)', // Laranja
+      'rgba(0, 200, 255, 0.05)', // Azul
+      'rgba(255, 0, 255, 0.04)', // Magenta
+      'rgba(255, 255, 0, 0.06)'  // Amarelo
+    ];
+    
+    const colorIdx = Math.floor((time / 4) % colors.length);
+    const x = (Math.sin(time * 0.4) * 0.5 + 0.5) * W;
+    const y = (Math.cos(time * 0.3) * 0.5 + 0.5) * H;
+    
+    const grad = this.ctx.createRadialGradient(x, y, 0, x, y, W * 1.2);
+    grad.addColorStop(0, colors[colorIdx]);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    
+    this.ctx.fillStyle = grad;
+    this.ctx.fillRect(0, 0, W, H);
+    this.ctx.restore();
+  }
+
+  private drawCinematicBloom(W: number, H: number) {
+    // Adiciona um brilho suave (bloom) nas partes claras do vídeo
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.globalCompositeOperation = 'screen';
+    this.ctx.globalAlpha = 0.15;
+    
+    // Gradiente central para simular bloom de lente
+    const grad = this.ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    
+    this.ctx.fillStyle = grad;
+    this.ctx.fillRect(0, 0, W, H);
     this.ctx.restore();
   }
 
