@@ -75,7 +75,7 @@ const HOTMART_CHECKOUT_URL = "https://pay.hotmart.com/S105263156D";
 
 const NICHE_KEYWORDS: Record<string, { positive: string[]; negative: string[] }> = {
   Cozinha: {
-    positive: ["cozinha", "comida", "chef", "receita", "utilidade", "casa", "lar", "utensilio", "preparo", "fritadeira", "airfryer", "organizador", "limpeza", "decoração"],
+    positive: ["cozinha", "utensílios criativos", "airfryer", "panelas", "potes herméticos", "organizador cozinha", "itens tiktok", "receita", "utilidade", "casa", "lar"],
     negative: ["maquiagem", "pc", "gamer", "pet", "cachorro", "bebe", "kids", "fitness", "cosplay"],
   },
   Tecnologia: {
