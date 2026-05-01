@@ -63,19 +63,19 @@ export class VideoProcessor {
   private getFilterCSS(filter: string): string {
     // Otimização de filtros para qualidade superior ao original
     switch (filter) {
-      case 'elite':     return 'contrast(1.45) saturate(1.8) brightness(1.1)';
-      case 'vhs':       return 'contrast(0.95) saturate(0.65) sepia(0.25) brightness(1.05)';
-      case 'cinematic': return 'contrast(1.35) saturate(1.2) brightness(1.05) hue-rotate(-2deg)';
-      case 'bw':        return 'contrast(1.2) grayscale(1)';
-      case 'bloom':     return 'brightness(1.15) saturate(1.4) contrast(1.1)';
-      case 'glitch':    return 'hue-rotate(90deg) brightness(1.15) contrast(1.3)';
-      case 'ultra8k':   return 'contrast(1.5) saturate(1.9) brightness(1.1)';
-      case 'dramatic':  return 'contrast(1.6) saturate(0.85) brightness(0.95)';
-      case 'tealAndOrange': return 'contrast(1.25) saturate(1.5) hue-rotate(-8deg) brightness(1.05)';
-      case 'vintageGold': return 'sepia(0.3) contrast(1.2) brightness(1.08) saturate(1.4)';
-      case 'professional': return 'contrast(1.2) saturate(1.2) brightness(1.05)';
-      case 'tiktok viral': return 'contrast(1.3) saturate(1.4) brightness(1.05)';
-      default:          return 'contrast(1.15) saturate(1.15) brightness(1.05)';
+      case 'elite':     return 'contrast(1.7) saturate(2.1) brightness(1.02)';
+      case 'vhs':       return 'contrast(1.1) saturate(0.8) sepia(0.2) brightness(1.02)';
+      case 'cinematic': return 'contrast(1.6) saturate(1.5) brightness(0.98) hue-rotate(-2deg)';
+      case 'bw':        return 'contrast(1.4) grayscale(1)';
+      case 'bloom':     return 'brightness(1.05) saturate(1.7) contrast(1.3)';
+      case 'glitch':    return 'hue-rotate(90deg) brightness(1.1) contrast(1.5)';
+      case 'ultra8k':   return 'contrast(1.85) saturate(2.4) brightness(1.0)';
+      case 'dramatic':  return 'contrast(1.8) saturate(1.1) brightness(0.9)';
+      case 'tealAndOrange': return 'contrast(1.4) saturate(1.8) hue-rotate(-8deg) brightness(1.0)';
+      case 'vintageGold': return 'sepia(0.3) contrast(1.3) brightness(1.05) saturate(1.6)';
+      case 'professional': return 'contrast(1.35) saturate(1.4) brightness(1.0)';
+      case 'tiktok viral': return 'contrast(1.5) saturate(1.7) brightness(1.0)';
+      default:          return 'contrast(1.4) saturate(1.6) brightness(1.0)';
     }
   }
 
@@ -1212,10 +1212,10 @@ export class VideoProcessor {
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     
-    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 1.1);
+    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 1.05);
     gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.15)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.25)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
     
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, W, H);
@@ -1232,8 +1232,8 @@ export class VideoProcessor {
     const y = Math.cos(time * 0.3) * H * 0.5 + H * 0.5;
     
     const gradient = this.ctx.createRadialGradient(x, y, 0, x, y, W * 0.8);
-    gradient.addColorStop(0, 'rgba(255, 120, 0, 0.12)');
-    gradient.addColorStop(0.5, 'rgba(255, 50, 0, 0.05)');
+    gradient.addColorStop(0, 'rgba(255, 120, 0, 0.08)');
+    gradient.addColorStop(0.5, 'rgba(255, 50, 0, 0.03)');
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
     
     this.ctx.fillStyle = gradient;
@@ -1335,11 +1335,11 @@ export class VideoProcessor {
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.globalCompositeOperation = 'screen';
-    this.ctx.globalAlpha = 0.15;
+    this.ctx.globalAlpha = 0.07;
     
     // Gradiente central para simular bloom de lente
     const grad = this.ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W);
-    grad.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     
     this.ctx.fillStyle = grad;
