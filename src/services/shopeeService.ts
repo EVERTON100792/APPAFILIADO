@@ -207,6 +207,8 @@ export class ShopeeService {
     let shopId: number | null = null;
     let itemId: number | null = null;
 
+    console.log(`[ShopeeService] Resolvendo: "${cleanId}"`);
+
     // 1️⃣ EXTRAÇÃO DE IDs (Desktop e App Mobile)
     const productPathMatch = cleanId.match(/product\/(\d+)\/(\d+)/);
     if (productPathMatch) {

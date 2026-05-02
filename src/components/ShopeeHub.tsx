@@ -291,39 +291,34 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
 
     try {
       let finalProducts: any[] = [];
+      const currentKeyword = (overrideKeyword !== undefined ? overrideKeyword : keyword) || "";
+      const trimmedKw = currentKeyword.trim();
+
+      // DETECÇÃO UNIVERSAL DE LINK (Independente de Aba)
+      const isShopeeLink = trimmedKw.includes('shopee.com.br') || 
+                          trimmedKw.includes('shope.ee/') || 
+                          trimmedKw.includes('s.shopee.com.br');
+      const isAffiliateId = /^[A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6}$/.test(trimmedKw);
+
+      if ((isShopeeLink || isAffiliateId) && !overrideKeyword) {
+        onShowToast("🔍 BUSCA DIRETA POR ID...");
+        try {
+          const resolved = await ShopeeService.resolveShortLinkToProduct(trimmedKw, userShopeeId || undefined);
+          if (resolved) {
+            setProducts([resolved]);
+            setIsSearching(false);
+            return;
+          } else if (isShopeeLink) {
+             // Se for link e falhou a resolução, tentamos busca normal mas avisamos
+             onShowToast("⚠️ Link complexo. Tentando busca global...");
+          }
+        } catch (err) {
+          console.error("[ShopeeHub] Erro na busca direta:", err);
+        }
+      }
+
       if (activeTab === "all") {
         let searchKw = overrideKeyword !== undefined ? (overrideKeyword || "achadinhos shopee") : (keyword || "achadinhos shopee");
-        
-        // NOVO: Detectar ID de Afiliado, URL completa ou Short Link
-        const trimmedKw = searchKw.trim();
-        const isAffiliateId = /^[A-Z0-9]{2,}-[A-Z0-9]{2,}-[A-Z0-9]{2,}$/i.test(trimmedKw) || 
-                             /^[A-Z0-9]{8,15}$/i.test(trimmedKw) ||
-                             trimmedKw.includes('shope.ee/') ||
-                             trimmedKw.includes('shopee.com.br') ||
-                             trimmedKw.includes('s.shopee.com.br');
-                             
-        if (isAffiliateId && !overrideKeyword) {
-          onShowToast("🔍 BUSCA DIRETA POR ID...");
-          try {
-            const resolved = await ShopeeService.resolveShortLinkToProduct(trimmedKw, userShopeeId || undefined);
-            if (resolved) {
-              setProducts([resolved]);
-              setIsSearching(false);
-              return;
-            } else {
-              // Fallback: Se não achou por ID direto, tenta busca normal por keyword
-              onShowToast("⚠️ ID não mapeado. Tentando busca global...");
-              const fallbackResults = await ShopeeService.searchProducts({ keyword: trimmedKw, sort_by: 3, page_number: 1 }, userShopeeId || undefined);
-              if (fallbackResults && fallbackResults.length > 0) {
-                setProducts(fallbackResults);
-                setIsSearching(false);
-                return;
-              }
-            }
-          } catch (err) {
-            console.error("[ShopeeHub] Erro na busca direta:", err);
-          }
-        }
 
         // Se temos um nicho ativo ou uma busca específica, garantir volume
         if (activeNicheId) {
