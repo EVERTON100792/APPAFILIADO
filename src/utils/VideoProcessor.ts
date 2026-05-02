@@ -643,7 +643,7 @@ export class VideoProcessor {
             this.ctx.save();
             const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * (1.12 + (kbDirections[slideIdx-1] * 0.05));
             this.applyProfessionalTransitionOut(currentTrans, transProgress, W, H);
-            this.ctx.filter = filterCSS;
+            this.ctx.filter = baseFilterCSS;
             this.ctx.drawImage(prevImg, (W - prevImg.width * prevScale)/2, (H - prevImg.height * prevScale)/2, prevImg.width * prevScale, prevImg.height * prevScale);
             this.ctx.restore();
           }
@@ -754,14 +754,15 @@ export class VideoProcessor {
         const H = isMobile ? 1280 : 1920;
         this.canvas.width = W; this.canvas.height = H;
         let isError = false;
+        let imgs: ImageBitmap[] = [];
 
         const targetDuration = 35;
         const fps = 30;
         const totalFrames = targetDuration * fps;
         const slideDuration = 3.5;
         const filterCSS = this.getFilterCSS(options.filter);
-
-        const imgs = await Promise.all(imageUrls.map(async url => {
+        
+        imgs = await Promise.all(imageUrls.map(async url => {
           try {
             const blobUrl = await this.fetchAsBlob(url, 'image');
             const img = new Image();
@@ -916,7 +917,7 @@ export class VideoProcessor {
             
             // Hue-shift dinâmico para garantir que cada frame seja tecnicamente único
             const hueShift = options.isAutoral ? ` hue-rotate(${Math.sin(currentTime * 5) * 0.4}deg)` : '';
-            this.ctx.filter = baseFilterCSS + hueShift;
+            this.ctx.filter = filterCSS + hueShift;
             this.ctx.drawImage(img, scrollX, scrollY, img.width * baseScale * kbScale, img.height * baseScale * kbScale);
           }
 
@@ -992,7 +993,7 @@ export class VideoProcessor {
       } catch (err) { 
         reject(err); 
       } finally {
-        imgs.forEach(img => {
+        imgs.forEach((img: ImageBitmap) => {
           try { img.close(); } catch(e) {}
         });
       }
