@@ -183,13 +183,13 @@ export class VideoProcessor {
     return buf;
   }
 
-  private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house'): Promise<AudioBuffer> {
+  private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house', pitchFactor: number = 1.15): Promise<AudioBuffer> {
     const SUPABASE_PROXY = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
     if (url.startsWith('blob:') || url.startsWith('http://localhost') || url.startsWith('/')) {
       try {
         const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
-        return this.processAudioBuffer(arrayBuffer, targetSampleRate, 1.14); // Pitch viral energético
+        return this.processAudioBuffer(arrayBuffer, targetSampleRate, pitchFactor);
       } catch (e) { console.warn("[Audio] Falha ao carregar áudio local direto:", e); }
     }
     const proxies = [
@@ -202,7 +202,7 @@ export class VideoProcessor {
         const response = await fetch(proxyUrl);
         if (!response.ok) continue;
         const arrayBuffer = await response.arrayBuffer();
-        return this.processAudioBuffer(arrayBuffer, targetSampleRate, 1.14); // Pitch viral energético
+        return this.processAudioBuffer(arrayBuffer, targetSampleRate, pitchFactor);
       } catch (e) {}
     }
     return this.generateSyntheticBeat(targetSampleRate, bpm, 35, genre || 'phonk');
@@ -261,7 +261,7 @@ export class VideoProcessor {
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
         const targetSampleRate = 44100;
-        const pitchFactor = 1.0; // Não mexer na voz conforme solicitado
+        const pitchFactor = options.isAutoral ? 1.15 : 1.0;
         let mainAudioBuffer = await this.processAudioBuffer(await (await fetch(videoUrl)).arrayBuffer(), targetSampleRate, pitchFactor);
         if (options.musicUrl) {
           const bg = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
@@ -299,7 +299,7 @@ export class VideoProcessor {
         });
         const audioEncoder = new AudioEncoder({ 
           output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), 
-          error: (e) => { isError = true; console.error("AudioEncoder error:", e); reject(e); } 
+          error: (e) => { isError = true; console.error("VideoEncoder error:", e); reject(e); } 
         });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
@@ -542,7 +542,7 @@ export class VideoProcessor {
   public async renderAutoralSlideshow(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     const frames = await this.extractFrames(videoUrl, 12); // Aumentado para mais dinamismo
     // Extrair áudio original para manter a voz no slideshow
-    const audioBuffer = await this.loadAndResampleAudio(videoUrl, 44100);
+    const audioBuffer = await this.loadAndResampleAudio(videoUrl, 44100, 128, 'house', options.isAutoral ? 1.15 : 1.0);
     return this.renderSlideshowFromBitmaps(frames, options, audioBuffer);
   }
 
@@ -591,7 +591,7 @@ export class VideoProcessor {
         
         const audioEncoder = new AudioEncoder({ 
           output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), 
-          error: (e) => { isError = true; console.error("AudioEncoder error:", e); reject(e); } 
+          error: (e) => { isError = true; console.error("VideoEncoder error:", e); reject(e); } 
         });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
@@ -800,10 +800,10 @@ export class VideoProcessor {
           bitrate: bitrate,
           latencyMode: 'quality'
         });
-        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error(e) });
+        const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error("AudioEncoder error:", e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
-        const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre);
+        const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre, options.isAutoral ? 1.15 : 1.0);
 
         // Pré-carregar logo se existir
         if (options.storeLogo && (!this.logoCache || this.logoUrl !== options.storeLogo)) {
