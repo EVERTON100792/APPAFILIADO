@@ -305,7 +305,7 @@ export class VideoProcessor {
 
         const fps = 30;
         const totalFrames = Math.floor(video.duration * fps);
-        const filterCSS = this.getFilterCSS(options.filter);
+        const baseFilterCSS = this.getFilterCSS(options.filter);
         
         if (options.storeLogo && (!this.logoCache || this.logoUrl !== options.storeLogo)) {
           try {
@@ -370,9 +370,10 @@ export class VideoProcessor {
           if (options.isAutoral) {
             this.ctx.translate(W, 0);
             this.ctx.scale(-1, 1);
-            // Reduzido zoom para evitar cortes excessivos e vultos
+            // Zoom dinâmico "breathe" para enganar algoritmos (anti-duplicidade)
+            const breathe = 1.02 + Math.sin(currentTime * 0.5) * 0.015;
             this.ctx.translate(W/2, H/2);
-            this.ctx.scale(1.03, 1.03);
+            this.ctx.scale(breathe, breathe);
             this.ctx.translate(-W/2, -H/2);
           }
           
@@ -380,7 +381,9 @@ export class VideoProcessor {
             this.applyTransitionEffect(options.transition, currentTime, options.transitionTimestamps, W, H);
           }
 
-          this.ctx.filter = filterCSS;
+          // Hue-shift dinâmico para garantir que cada frame seja tecnicamente único
+          const hueShift = options.isAutoral ? ` hue-rotate(${Math.sin(currentTime * 5) * 0.4}deg)` : '';
+          this.ctx.filter = baseFilterCSS + hueShift;
           this.ctx.drawImage(this.auxCanvas, 0, 0, W, H);
           this.ctx.restore();
 
@@ -413,9 +416,9 @@ export class VideoProcessor {
             this.drawVignette(W, H);
             this.drawCinematicOverlay(W, H, currentTime);
             // Novos efeitos anti-algoritmo + Bloom
-            this.drawRandomFlash(W, H, currentTime);
             this.drawRandomLightLeak(W, H, currentTime);
             this.drawCinematicBloom(W, H);
+            this.drawFilmGrain(W, H);
           }
 
           if (options.storeName && !options.isAutoral) {
@@ -565,7 +568,7 @@ export class VideoProcessor {
         const targetDuration = originalAudio ? Math.max(originalAudio.duration, 5) : 25; // Sincroniza com áudio original se existir
         const totalFrames = Math.floor(targetDuration * fps);
         const slideDuration = targetDuration / imgs.length;
-        const filterCSS = this.getFilterCSS(options.filter || 'cinematic');
+        const baseFilterCSS = this.getFilterCSS(options.filter || 'cinematic');
 
         const muxer = new Muxer({ 
           target: new ArrayBufferTarget(), 
@@ -661,7 +664,9 @@ export class VideoProcessor {
           const sx = (W - sw) / 2;
           const sy = (H - sh) / 2;
 
-          this.ctx.filter = filterCSS;
+          // Hue-shift dinâmico para garantir que cada frame seja tecnicamente único
+          const hueShift = options.isAutoral ? ` hue-rotate(${Math.sin(currentTime * 5) * 0.4}deg)` : '';
+          this.ctx.filter = baseFilterCSS + hueShift;
           this.ctx.drawImage(img, sx, sy, sw, sh);
           this.ctx.restore();
 
@@ -678,9 +683,9 @@ export class VideoProcessor {
           this.drawCinematicOverlay(W, H, currentTime);
           
           // Novos efeitos anti-algoritmo + Bloom
-          this.drawRandomFlash(W, H, currentTime);
           this.drawRandomLightLeak(W, H, currentTime);
           this.drawCinematicBloom(W, H);
+          this.drawFilmGrain(W, H);
           
           this.drawProgressBar(W, H, currentTime, targetDuration);
 
@@ -910,7 +915,10 @@ export class VideoProcessor {
             const scrollX = (W - img.width * baseScale * kbScale) / 2;
             const scrollY = (H - img.height * baseScale * kbScale) / 2;
             this.ctx.globalAlpha = 1;
-            this.ctx.filter = filterCSS;
+            
+            // Hue-shift dinâmico para garantir que cada frame seja tecnicamente único
+            const hueShift = options.isAutoral ? ` hue-rotate(${Math.sin(currentTime * 5) * 0.4}deg)` : '';
+            this.ctx.filter = baseFilterCSS + hueShift;
             this.ctx.drawImage(img, scrollX, scrollY, img.width * baseScale * kbScale, img.height * baseScale * kbScale);
           }
 
@@ -928,6 +936,9 @@ export class VideoProcessor {
           if (options.isAutoral) {
             this.drawVignette(W, H);
             this.drawCinematicOverlay(W, H, currentTime);
+            this.drawRandomLightLeak(W, H, currentTime);
+            this.drawCinematicBloom(W, H);
+            this.drawFilmGrain(W, H);
           }
 
           // BRANDING: Apenas se não for autoral (Shopee ban)
@@ -1224,10 +1235,10 @@ export class VideoProcessor {
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     
-    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 1.05);
+    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.2, W / 2, H / 2, W * 1.1);
     gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.25)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
+    gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.15)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.65)');
     
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, W, H);
@@ -1300,20 +1311,23 @@ export class VideoProcessor {
     this.ctx.restore();
   }
 
-  private drawRandomFlash(W: number, H: number, time: number) {
-    // Flash ocorre a cada ~3-4 segundos de forma semi-aleatória
-    const flashFreq = 3.5;
-    const flashDur = 0.08;
-    const isFlash = (time % flashFreq) < flashDur;
+  private drawFilmGrain(W: number, H: number) {
+    // Adiciona uma granulação de filme sutil (noise)
+    // Isso ajuda a enganar algoritmos de detecção de duplicidade e dá um ar "cinematográfico"
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.globalAlpha = 0.05; // Extremamente sutil
+    this.ctx.globalCompositeOperation = 'overlay';
     
-    if (isFlash) {
-      this.ctx.save();
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const intensity = 1 - (time % flashFreq) / flashDur;
-      this.ctx.fillStyle = `rgba(255, 255, 255, ${intensity * 0.4})`;
-      this.ctx.fillRect(0, 0, W, H);
-      this.ctx.restore();
+    for (let i = 0; i < 4000; i++) {
+      const x = Math.random() * W;
+      const y = Math.random() * H;
+      const size = Math.random() * 1.5;
+      this.ctx.fillStyle = Math.random() > 0.5 ? '#fff' : '#000';
+      this.ctx.fillRect(x, y, size, size);
     }
+    
+    this.ctx.restore();
   }
 
   private drawRandomLightLeak(W: number, H: number, time: number) {
