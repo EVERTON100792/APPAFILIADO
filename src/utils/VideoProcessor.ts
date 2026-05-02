@@ -61,21 +61,21 @@ export class VideoProcessor {
   }
 
   private getFilterCSS(filter: string): string {
-    // Otimização de filtros para qualidade superior ao original
+    // Otimização de filtros para cores vibrantes e pretos profundos (anti-lavado)
     switch (filter) {
-      case 'elite':     return 'contrast(1.7) saturate(2.1) brightness(1.02)';
-      case 'vhs':       return 'contrast(1.1) saturate(0.8) sepia(0.2) brightness(1.02)';
-      case 'cinematic': return 'contrast(1.6) saturate(1.5) brightness(0.98) hue-rotate(-2deg)';
-      case 'bw':        return 'contrast(1.4) grayscale(1)';
-      case 'bloom':     return 'brightness(1.05) saturate(1.7) contrast(1.3)';
-      case 'glitch':    return 'hue-rotate(90deg) brightness(1.1) contrast(1.5)';
-      case 'ultra8k':   return 'contrast(1.85) saturate(2.4) brightness(1.0)';
-      case 'dramatic':  return 'contrast(1.8) saturate(1.1) brightness(0.9)';
-      case 'tealAndOrange': return 'contrast(1.4) saturate(1.8) hue-rotate(-8deg) brightness(1.0)';
-      case 'vintageGold': return 'sepia(0.3) contrast(1.3) brightness(1.05) saturate(1.6)';
-      case 'professional': return 'contrast(1.35) saturate(1.4) brightness(1.0)';
-      case 'tiktok viral': return 'contrast(1.5) saturate(1.7) brightness(1.0)';
-      default:          return 'contrast(1.4) saturate(1.6) brightness(1.0)';
+      case 'elite':     return 'contrast(1.8) saturate(2.3) brightness(1.05)';
+      case 'vhs':       return 'contrast(1.2) saturate(0.9) sepia(0.2) brightness(1.02)';
+      case 'cinematic': return 'contrast(1.7) saturate(1.6) brightness(1.0) hue-rotate(-2deg)';
+      case 'bw':        return 'contrast(1.5) grayscale(1)';
+      case 'bloom':     return 'brightness(1.05) saturate(1.8) contrast(1.4)';
+      case 'glitch':    return 'hue-rotate(90deg) brightness(1.1) contrast(1.6)';
+      case 'ultra8k':   return 'contrast(1.9) saturate(2.5) brightness(1.0)';
+      case 'dramatic':  return 'contrast(1.9) saturate(1.2) brightness(0.9)';
+      case 'tealAndOrange': return 'contrast(1.5) saturate(1.9) hue-rotate(-8deg) brightness(1.0)';
+      case 'vintageGold': return 'sepia(0.3) contrast(1.4) brightness(1.05) saturate(1.7)';
+      case 'professional': return 'contrast(1.4) saturate(1.5) brightness(1.0)';
+      case 'tiktok viral': return 'contrast(1.6) saturate(1.8) brightness(1.05)';
+      default:          return 'contrast(1.5) saturate(1.7) brightness(1.05)';
     }
   }
 
@@ -452,7 +452,7 @@ export class VideoProcessor {
           
           i++; // Avança para o próximo frame
 
-          if (i % (isMobile ? 5 : 10) === 0) await new Promise(r => setTimeout(r, 0));
+          if (i % (isMobile ? 3 : 10) === 0) await new Promise(r => setTimeout(r, 0));
 
           // CONTROLE DE FLUXO E ESTABILIDADE:
           // Se o encoder estiver ficando para trás (muitos frames na fila), pausamos o vídeo
@@ -726,14 +726,20 @@ export class VideoProcessor {
             }
           }
           
-          if (i % (isMobile ? 5 : 10) === 0) await new Promise(r => setTimeout(r, 0));
+          if (i % (isMobile ? 3 : 10) === 0) await new Promise(r => setTimeout(r, 0));
         }
 
         await videoEncoder.flush();
         await audioEncoder.flush();
         muxer.finalize();
         resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
-      } catch (err) { reject(err); }
+      } catch (err) { 
+        reject(err); 
+      } finally {
+        imgs.forEach(img => {
+          try { img.close(); } catch(e) {}
+        });
+      }
     });
   }
 
@@ -947,7 +953,7 @@ export class VideoProcessor {
             }
           }
 
-          if (i % (isMobile ? 5 : 10) === 0) await new Promise(r => setTimeout(r, 0));
+          if (i % (isMobile ? 3 : 10) === 0) await new Promise(r => setTimeout(r, 0));
 
           if (audioBuffer) {
             const start = Math.floor(i * (44100 / fps));
@@ -975,7 +981,13 @@ export class VideoProcessor {
         await audioEncoder.flush();
         muxer.finalize();
         resolve(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
-      } catch (err) { reject(err); }
+      } catch (err) { 
+        reject(err); 
+      } finally {
+        imgs.forEach(img => {
+          try { img.close(); } catch(e) {}
+        });
+      }
     });
   }
 
@@ -1332,14 +1344,15 @@ export class VideoProcessor {
 
   private drawCinematicBloom(W: number, H: number) {
     // Adiciona um brilho suave (bloom) nas partes claras do vídeo
+    // Reduzido para 0.04 para evitar aspecto "lavado/esbranquiçado"
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.globalCompositeOperation = 'screen';
-    this.ctx.globalAlpha = 0.07;
+    this.ctx.globalAlpha = 0.04;
     
     // Gradiente central para simular bloom de lente
     const grad = this.ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W);
-    grad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     
     this.ctx.fillStyle = grad;
