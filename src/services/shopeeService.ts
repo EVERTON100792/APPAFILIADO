@@ -202,30 +202,58 @@ export class ShopeeService {
   }
 
   static async resolveShortLinkToProduct(offerId: string, userShopeeId?: string): Promise<ShopeeProduct | null> {
-    let cleanId = offerId.trim();
+    // Limpeza rigorosa: remove aspas, espaços e parâmetros residuais
+    let cleanId = offerId.trim().replace(/["']/g, '');
     let shopId: number | null = null;
     let itemId: number | null = null;
 
-    // 1️⃣ DETECÇÃO DE URL COMPLETA OU SHORT LINK
-    // Padrão: https://shopee.com.br/product/SHOPID/ITEMID
+    // 1️⃣ EXTRAÇÃO DE IDs (Desktop e App Mobile)
     const productPathMatch = cleanId.match(/product\/(\d+)\/(\d+)/);
     if (productPathMatch) {
       shopId = Number(productPathMatch[1]);
       itemId = Number(productPathMatch[2]);
     }
 
-    // Padrão: https://shopee.com.br/NOME-i.SHOPID.ITEMID
     const productDotMatch = cleanId.match(/i\.(\d+)\.(\d+)/);
     if (productDotMatch) {
       shopId = Number(productDotMatch[1]);
       itemId = Number(productDotMatch[2]);
     }
 
-    // Se temos IDs diretos, usamos a busca por keyword com os IDs (mais preciso que offer_id bruto)
+    // Se temos IDs diretos, usamos a API de Detalhes (100% garantido para URLs)
     if (shopId && itemId) {
-      console.log(`[ShopeeService] IDs extraídos: Shop ${shopId}, Item ${itemId}`);
+      console.log(`[ShopeeService] IDs detectados via URL: Shop ${shopId}, Item ${itemId}`);
+      try {
+        const detail = await this.getItemDetail(shopId, itemId);
+        const item = detail?.item || detail;
+        if (item && (item.itemid || item.item_id)) {
+          // Mapeia o detalhe bruto para o formato ShopeeProduct
+          const price = (item.price || 0) / 100000;
+          const originalPrice = (item.price_before_discount || item.price || 0) / 100000;
+          
+          return {
+            item_id: item.itemid || item.item_id,
+            shop_id: item.shopid || item.shop_id,
+            item_name: item.name || item.item_name || "Produto Shopee",
+            item_image: item.image || item.item_image || "",
+            price: price > 0 ? price : item.price || 0,
+            original_price: originalPrice > 0 ? originalPrice : item.price_before_discount || 0,
+            discount: item.discount ? parseInt(item.discount) : 0,
+            commission_rate: 0,
+            commission: 0,
+            sales: item.historical_sold || item.sold || 0,
+            shop_name: item.shop_name || "Shopee",
+            product_link: `https://shopee.com.br/product/${shopId}/${itemId}`,
+            affiliate_link: `https://shopee.com.br/product/${shopId}/${itemId}`
+          };
+        }
+      } catch (err) {
+        console.warn("[ShopeeService] Falha ao buscar detalhe direto, tentando via busca...", err);
+      }
+      
+      // Fallback: Busca por ID como keyword se o detalhe direto falhar
       const results = await this.searchProducts({ keyword: `${itemId}`, page_size: 1 }, userShopeeId, true);
-      const matched = results.find(p => p.item_id === itemId || String(p.item_id).includes(String(itemId)));
+      const matched = results.find(p => String(p.item_id).includes(String(itemId)));
       if (matched) return matched;
     }
 
