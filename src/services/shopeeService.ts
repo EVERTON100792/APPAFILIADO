@@ -256,8 +256,8 @@ export class ShopeeService {
       return null;
     }
 
-    const shopId = item.shopId || item.shop_id || 0;
-    const itemId = item.itemId || item.item_id || 0;
+    shopId = item.shopId || item.shop_id || 0;
+    itemId = item.itemId || item.item_id || 0;
     const originalUrl = item.productLink || "";
 
     // 2️⃣ Constrói o produto com os dados retornados
@@ -283,8 +283,8 @@ export class ShopeeService {
     const commissionRate = Number(item.commissionRate) || 0;
 
     return {
-      item_id: itemId || Math.random(),
-      shop_id: shopId,
+      item_id: Number(itemId) || Math.random(),
+      shop_id: Number(shopId) || 0,
       item_name: item.productName || item.product_name || item.item_name || `Produto Shopee (${offerId})`,
       item_image: item.imageUrl || item.image_url || item.item_image || "",
       price,

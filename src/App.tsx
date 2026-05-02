@@ -2097,7 +2097,7 @@ const App: React.FC = () => {
 
           // 2.2 Filtro de Modelo Obrigatório
           if (productModels.length > 0) {
-            const hasModel = productModels.some(model => text.includes(model.toLowerCase()));
+            const hasModel = productModels.some((model: string) => text.includes(model.toLowerCase()));
             if (!hasModel) return null; // Se tem modelo no título shopee e não tem no vídeo, descarta
             score += 1000; // Bônus massivo para modelo exato
           }
