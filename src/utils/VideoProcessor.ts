@@ -63,19 +63,19 @@ export class VideoProcessor {
   private getFilterCSS(filter: string): string {
     // Otimização de filtros para cores vibrantes e pretos profundos (anti-lavado)
     switch (filter) {
-      case 'elite':     return 'contrast(1.8) saturate(2.3) brightness(1.05)';
-      case 'vhs':       return 'contrast(1.2) saturate(0.9) sepia(0.2) brightness(1.02)';
-      case 'cinematic': return 'contrast(1.7) saturate(1.6) brightness(1.0) hue-rotate(-2deg)';
-      case 'bw':        return 'contrast(1.5) grayscale(1)';
-      case 'bloom':     return 'brightness(1.05) saturate(1.8) contrast(1.4)';
-      case 'glitch':    return 'hue-rotate(90deg) brightness(1.1) contrast(1.6)';
-      case 'ultra8k':   return 'contrast(2.2) saturate(2.8) brightness(0.95)';
-      case 'dramatic':  return 'contrast(2.0) saturate(1.4) brightness(0.85)';
-      case 'tealAndOrange': return 'contrast(1.7) saturate(2.2) hue-rotate(-8deg) brightness(0.95)';
-      case 'vintageGold': return 'sepia(0.3) contrast(1.6) brightness(1.0) saturate(2.0)';
-      case 'professional': return 'contrast(1.6) saturate(1.8) brightness(1.0)';
-      case 'tiktok viral': return 'contrast(1.9) saturate(2.5) brightness(0.95)';
-      default:          return 'contrast(1.8) saturate(2.2) brightness(0.95)';
+      case 'elite':     return 'contrast(2.0) saturate(2.5) brightness(0.95)';
+      case 'vhs':       return 'contrast(1.3) saturate(1.1) sepia(0.2) brightness(1.0)';
+      case 'cinematic': return 'contrast(2.1) saturate(2.4) brightness(0.95) hue-rotate(-2deg)';
+      case 'bw':        return 'contrast(1.8) grayscale(1)';
+      case 'bloom':     return 'brightness(1.0) saturate(2.0) contrast(1.8)';
+      case 'glitch':    return 'hue-rotate(90deg) brightness(1.0) contrast(1.8)';
+      case 'ultra8k':   return 'contrast(2.5) saturate(3.0) brightness(0.9)';
+      case 'dramatic':  return 'contrast(2.2) saturate(1.6) brightness(0.8)';
+      case 'tealAndOrange': return 'contrast(1.9) saturate(2.4) hue-rotate(-8deg) brightness(0.92)';
+      case 'vintageGold': return 'sepia(0.3) contrast(1.8) brightness(0.95) saturate(2.2)';
+      case 'professional': return 'contrast(1.8) saturate(2.0) brightness(1.0)';
+      case 'tiktok viral': return 'contrast(2.2) saturate(2.8) brightness(0.92)';
+      default:          return 'contrast(2.0) saturate(2.5) brightness(0.95)';
     }
   }
 
@@ -1232,10 +1232,10 @@ export class VideoProcessor {
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     
-    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.2, W / 2, H / 2, W * 1.1);
+    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 1.2);
     gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.15)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.65)');
+    gradient.addColorStop(0.75, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
     
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, W, H);
