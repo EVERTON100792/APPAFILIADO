@@ -5,7 +5,13 @@ export function getSmartSearchName(title: string): string {
   let cleanTitle = title.split(/[-,\(\)\[\]|]/)[0]; 
   
   // 2. Termos técnicos que NÃO podem ser removidos (Power Words)
-  const powerWords = ['levitação', 'magnética', 'magnético', 'usb', 'led', 'bluetooth', 'portátil', 'mini', 'inteligente', 'smart', 'flutuante', 'gamer', 'rgb'];
+  const powerWords = [
+    'levitação', 'magnética', 'magnético', 'usb', 'led', 'bluetooth', 
+    'portátil', 'mini', 'inteligente', 'smart', 'flutuante', 'gamer', 'rgb',
+    'projetor', 'mixer', 'umidificador', 'aspirador', 'escova', 'fone', 'caixa',
+    'relógio', 'relógio', 'massageador', 'máquina', 'removedor', 'suporte',
+    'organizador', 'luminária', 'ventilador', 'processador', 'triturador'
+  ];
   
   // 3. Remover termos que poluem a busca e trazem resultados de baixa qualidade
   const marketJunk = [
@@ -14,8 +20,8 @@ export function getSmartSearchName(title: string): string {
     'peça', 'novo', 'nova', 'original', 'oficial', 'compre', 'aqui', 'clique', 
     'veja', 'olha', 'frete', 'grátis', 'pronta', 'entrega', 'envio', 'imediato',
     'atacado', 'varejo', 'premium', 'luxo', 'exclusivo', 'importado', 'envio em 24h',
-    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu', 'mini', 'grande', 
-    'portátil', 'colorido', 'pequeno', 'médio', 'super', 'ultra', 'top', 'melhor'
+    'shope', 'shein', 'aliexpress', 'mercadolivre', 'magalu', 'colorido', 
+    'super', 'ultra', 'top', 'melhor'
   ];
   
   const regexJunk = new RegExp(`\\b(${marketJunk.join('|')})\\b`, 'gi');

@@ -2015,19 +2015,20 @@ const App: React.FC = () => {
         "testei",
       ];
       const ptBrMustHave = [
-        "shopee",
-        "brasil",
-        "achadinho",
-        "comprinha",
-        "link",
-        "bio",
-        "utilidade",
-        "loja",
-        "br",
-        "achei",
-        "achado",
-        "comprei",
+        "shopee", "brasil", "achadinho", "comprinha", "link", "bio", 
+        "utilidade", "loja", "br", "achei", "achado", "comprei"
       ];
+
+      // 3.1 Filtros Negativos (Anti-Irrelevância)
+      const negativeKeywords = [
+        "receita", "tutorial", "como fazer", "diy", "passo a passo", 
+        "vlog", "arrume-se comigo", "maquiando", "desenho", "episódio",
+        "filme", "série", "gameplay", "ao vivo", "live", "assistir"
+      ];
+
+      // 3.2 Detecção de Modelos (Ex: F9, S22, V8)
+      const modelRegex = /\b([A-Z]+[0-9]+|[0-9]+[A-Z]+)\b/g;
+      const productModels = (product.title || "").match(modelRegex) || [];
 
       let rawVideos: any[] = [];
       setTreatingStatus("Buscando em larga escala (Equilíbrio Perfeito)...");
@@ -2112,7 +2113,18 @@ const App: React.FC = () => {
           const maxPossibleMatch = coreWords.length + 1; // +1 pelo peso dobrado da primeira
           const matchRatio = maxPossibleMatch > 0 ? matchCount / maxPossibleMatch : 0;
           
-          if (matchRatio < 0.55) return null; // Aumento de rigor para evitar vídeos errados (ex: vestidos)
+          // 2.1 Filtro de Negativas
+          const hasNegative = negativeKeywords.some(w => text.includes(w));
+          if (hasNegative) return null;
+
+          // 2.2 Filtro de Modelo Obrigatório
+          if (productModels.length > 0) {
+            const hasModel = productModels.some(model => text.includes(model.toLowerCase()));
+            if (!hasModel) return null; // Se tem modelo no título shopee e não tem no vídeo, descarta
+            score += 1000; // Bônus massivo para modelo exato
+          }
+          
+          if (matchRatio < 0.70) return null; // Aumento de rigor para 70% de compatibilidade
 
           if (matchRatio >= 0.8) score += 600;
           else if (matchRatio >= 0.5) score += 300;
