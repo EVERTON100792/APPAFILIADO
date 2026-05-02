@@ -748,13 +748,13 @@ export class VideoProcessor {
 
   public async renderSlideshow(imageUrls: string[], options: ProcessingOptions, price: string, productName: string): Promise<Blob> {
     return new Promise(async (resolve, reject) => {
+      let imgs: ImageBitmap[] = [];
       try {
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const W = isMobile ? 720 : 1080; 
         const H = isMobile ? 1280 : 1920;
         this.canvas.width = W; this.canvas.height = H;
         let isError = false;
-        let imgs: ImageBitmap[] = [];
 
         const targetDuration = 35;
         const fps = 30;
