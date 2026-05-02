@@ -202,10 +202,38 @@ export class ShopeeService {
   }
 
   static async resolveShortLinkToProduct(offerId: string, userShopeeId?: string): Promise<ShopeeProduct | null> {
-    // 1️⃣ Resolve o offerId usando a API de afiliados via keyword search
     let cleanId = offerId.trim();
+    let shopId: number | null = null;
+    let itemId: number | null = null;
+
+    // 1️⃣ DETECÇÃO DE URL COMPLETA OU SHORT LINK
+    // Padrão: https://shopee.com.br/product/SHOPID/ITEMID
+    const productPathMatch = cleanId.match(/product\/(\d+)\/(\d+)/);
+    if (productPathMatch) {
+      shopId = Number(productPathMatch[1]);
+      itemId = Number(productPathMatch[2]);
+    }
+
+    // Padrão: https://shopee.com.br/NOME-i.SHOPID.ITEMID
+    const productDotMatch = cleanId.match(/i\.(\d+)\.(\d+)/);
+    if (productDotMatch) {
+      shopId = Number(productDotMatch[1]);
+      itemId = Number(productDotMatch[2]);
+    }
+
+    // Se temos IDs diretos, usamos a busca por keyword com os IDs (mais preciso que offer_id bruto)
+    if (shopId && itemId) {
+      console.log(`[ShopeeService] IDs extraídos: Shop ${shopId}, Item ${itemId}`);
+      const results = await this.searchProducts({ keyword: `${itemId}`, page_size: 1 }, userShopeeId, true);
+      const matched = results.find(p => p.item_id === itemId || String(p.item_id).includes(String(itemId)));
+      if (matched) return matched;
+    }
+
+    // 2️⃣ RESOLUÇÃO POR OFFER_ID (Links curtos shope.ee/... ou s.shopee.com.br/...)
     if (cleanId.includes('shope.ee/')) {
-      cleanId = cleanId.split('shope.ee/')[1].split('?')[0];
+      cleanId = cleanId.split('shope.ee/')[1].split('?')[0].split('/')[0];
+    } else if (cleanId.includes('s.shopee.com.br/')) {
+      cleanId = cleanId.split('s.shopee.com.br/')[1].split('?')[0].split('/')[0];
     }
 
     const { data: result, error } = await supabase.functions.invoke("shopee-prod-search", {

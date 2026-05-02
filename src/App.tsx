@@ -1548,37 +1548,17 @@ const App: React.FC = () => {
       let extractedName = customLink.trim();
       let stringParseSuccess = false;
 
-      // ── OFFER ID DETECTION ────────────────────────────────────────────────────
-      // Detecta padrão de ID de afiliado da Shopee: ex. BBX-GNA-ZFX
-      const offerIdPattern = /^([A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6})$/;
-      const offerIdMatch = extractedName.match(offerIdPattern);
+      // ── DETECÇÃO UNIVERSAL SHOPEE (URL ou ID) ───────────────────────────────────
+      const isShopeeLink = extractedName.includes('shopee.com.br') || 
+                          extractedName.includes('shope.ee') || 
+                          extractedName.includes('s.shopee.com.br');
+      
+      const isAffiliateId = /^([A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6}-[A-Za-z0-9]{2,6})$/.test(extractedName);
 
-      if (offerIdMatch) {
-        const offerId = offerIdMatch[1].toUpperCase();
-        showToast(`🔍 Buscando produto: ${offerId}...`);
-
-        // 1️⃣ Busca instantânea no banco local
-        const allLocal = [...databaseProducts, ...activeItems];
-        const localMatch = allLocal.find(p =>
-          (p.product_link || "").toUpperCase().includes(offerId) ||
-          (p.affiliate_link || "").toUpperCase().includes(offerId) ||
-          String(p.item_id || "").toUpperCase() === offerId
-        );
-
-        if (localMatch) {
-          setSelectedProduct(localMatch);
-          setStep("list");
-          void researchTikTok(localMatch);
-          setCustomLink("");
-          showToast("✅ Produto encontrado na sua biblioteca!");
-          return;
-        }
-
-        // 2️⃣ Resolve o short link via API Shopee (urlGenerate):
-        // CHW-MAL-YCR → s.shopee.com.br/CHW-MAL-YCR → originLink com shopId+itemId real
+      if (isShopeeLink || isAffiliateId) {
+        showToast("🔍 Identificando item...");
         try {
-          showToast("🌐 Resolvendo ID via Shopee...");
-          const product = await ShopeeService.resolveShortLinkToProduct(offerId, userShopeeId || undefined);
+          const product = await ShopeeService.resolveShortLinkToProduct(extractedName, userShopeeId || undefined);
           if (product) {
             setActiveItems(prev => {
               const existingIds = new Set(prev.map(p => p.item_id));
@@ -1589,14 +1569,12 @@ const App: React.FC = () => {
             setStep("list");
             void researchTikTok(product);
             setCustomLink("");
-            showToast("✅ Produto encontrado!");
+            showToast("✅ Produto identificado com sucesso!");
             return;
           }
-        } catch (_) { /* fallback abaixo */ }
-
-        // 3️⃣ Fallback: tenta link curto direto via proxy
-        showToast("🌐 Tentando via link curto...");
-        extractedName = `https://s.shopee.com.br/${offerId}`;
+        } catch (err) {
+          console.warn("[App] Erro na resolução direta, tentando extração de nome...", err);
+        }
       }
       // ─────────────────────────────────────────────────────────────────────────
 

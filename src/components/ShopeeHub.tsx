@@ -294,11 +294,13 @@ export const ShopeeHub: React.FC<ShopeeHubProps> = ({
       if (activeTab === "all") {
         let searchKw = overrideKeyword !== undefined ? (overrideKeyword || "achadinhos shopee") : (keyword || "achadinhos shopee");
         
-        // NOVO: Detectar ID de Afiliado ou Short Link (ex: CHW-MAL-YCR ou shope.ee/...)
+        // NOVO: Detectar ID de Afiliado, URL completa ou Short Link
         const trimmedKw = searchKw.trim();
         const isAffiliateId = /^[A-Z0-9]{2,}-[A-Z0-9]{2,}-[A-Z0-9]{2,}$/i.test(trimmedKw) || 
                              /^[A-Z0-9]{8,15}$/i.test(trimmedKw) ||
-                             trimmedKw.includes('shope.ee/');
+                             trimmedKw.includes('shope.ee/') ||
+                             trimmedKw.includes('shopee.com.br') ||
+                             trimmedKw.includes('s.shopee.com.br');
                              
         if (isAffiliateId && !overrideKeyword) {
           onShowToast("🔍 BUSCA DIRETA POR ID...");
