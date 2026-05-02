@@ -69,13 +69,13 @@ export class VideoProcessor {
       case 'bw':        return 'contrast(1.5) grayscale(1)';
       case 'bloom':     return 'brightness(1.05) saturate(1.8) contrast(1.4)';
       case 'glitch':    return 'hue-rotate(90deg) brightness(1.1) contrast(1.6)';
-      case 'ultra8k':   return 'contrast(1.9) saturate(2.5) brightness(1.0)';
-      case 'dramatic':  return 'contrast(1.9) saturate(1.2) brightness(0.9)';
-      case 'tealAndOrange': return 'contrast(1.5) saturate(1.9) hue-rotate(-8deg) brightness(1.0)';
-      case 'vintageGold': return 'sepia(0.3) contrast(1.4) brightness(1.05) saturate(1.7)';
-      case 'professional': return 'contrast(1.4) saturate(1.5) brightness(1.0)';
-      case 'tiktok viral': return 'contrast(1.6) saturate(1.8) brightness(1.05)';
-      default:          return 'contrast(1.5) saturate(1.7) brightness(1.05)';
+      case 'ultra8k':   return 'contrast(2.2) saturate(2.8) brightness(0.95)';
+      case 'dramatic':  return 'contrast(2.0) saturate(1.4) brightness(0.85)';
+      case 'tealAndOrange': return 'contrast(1.7) saturate(2.2) hue-rotate(-8deg) brightness(0.95)';
+      case 'vintageGold': return 'sepia(0.3) contrast(1.6) brightness(1.0) saturate(2.0)';
+      case 'professional': return 'contrast(1.6) saturate(1.8) brightness(1.0)';
+      case 'tiktok viral': return 'contrast(1.9) saturate(2.5) brightness(0.95)';
+      default:          return 'contrast(1.8) saturate(2.2) brightness(0.95)';
     }
   }
 
@@ -415,9 +415,8 @@ export class VideoProcessor {
           if (options.isAutoral) {
             this.drawVignette(W, H);
             this.drawCinematicOverlay(W, H, currentTime);
-            // Novos efeitos anti-algoritmo + Bloom
+            // Novos efeitos anti-algoritmo (Removido Bloom/Mist por causar aspecto lavado)
             this.drawRandomLightLeak(W, H, currentTime);
-            this.drawCinematicBloom(W, H);
             this.drawFilmGrain(W, H);
           }
 
@@ -682,9 +681,8 @@ export class VideoProcessor {
           this.drawParticles(W, H, currentTime);
           this.drawCinematicOverlay(W, H, currentTime);
           
-          // Novos efeitos anti-algoritmo + Bloom
+          // Novos efeitos anti-algoritmo (Removido Bloom/Mist)
           this.drawRandomLightLeak(W, H, currentTime);
-          this.drawCinematicBloom(W, H);
           this.drawFilmGrain(W, H);
           
           this.drawProgressBar(W, H, currentTime, targetDuration);
@@ -937,7 +935,6 @@ export class VideoProcessor {
             this.drawVignette(W, H);
             this.drawCinematicOverlay(W, H, currentTime);
             this.drawRandomLightLeak(W, H, currentTime);
-            this.drawCinematicBloom(W, H);
             this.drawFilmGrain(W, H);
           }
 
@@ -1248,7 +1245,7 @@ export class VideoProcessor {
   private drawCinematicOverlay(W: number, H: number, time: number) {
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.ctx.globalCompositeOperation = 'screen';
+    this.ctx.globalCompositeOperation = 'soft-light';
     
     // Light leak simulado com gradiente linear móvel
     const x = Math.sin(time * 0.5) * W * 0.5 + W * 0.5;
