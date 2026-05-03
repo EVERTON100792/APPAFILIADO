@@ -215,7 +215,8 @@ export class VideoProcessor {
       // Se pitchFactor > 1, estamos mudando a identidade da voz (estilo TikTok viral)
       const durationFactor = 1 / pitchFactor;
       const newLen = Math.ceil(originalBuffer.duration * targetSampleRate * durationFactor);
-      const offlineCtx = new OfflineAudioContext(originalBuffer.numberOfChannels, newLen, targetSampleRate);
+      const targetChannels = 2; // Sempre forçar Stereo para o encoder AAC
+      const offlineCtx = new OfflineAudioContext(targetChannels, newLen, targetSampleRate);
       
       const src = offlineCtx.createBufferSource();
       src.buffer = originalBuffer;
@@ -232,7 +233,12 @@ export class VideoProcessor {
       src.connect(compressor);
       compressor.connect(offlineCtx.destination);
       src.start();
-      return await offlineCtx.startRendering();
+      const renderedBuffer = await offlineCtx.startRendering();
+      console.log(`[VideoProcessor] Audio processado: ${renderedBuffer.numberOfChannels} canais, ${renderedBuffer.duration.toFixed(2)}s, Pitch: ${pitchFactor}x`);
+      return renderedBuffer;
+    } catch (e) {
+      console.error("[VideoProcessor] Erro no processAudioBuffer:", e);
+      throw e;
     } finally { await audioCtx.close(); }
   }
 
@@ -262,7 +268,10 @@ export class VideoProcessor {
 
         const targetSampleRate = 44100;
         const pitchFactor = options.isAutoral ? 1.15 : 1.0;
-        let mainAudioBuffer = await this.processAudioBuffer(await (await fetch(videoUrl)).arrayBuffer(), targetSampleRate, pitchFactor);
+        
+        // CORREÇÃO: Usar sourceUrl (blob local) em vez de videoUrl direto para evitar CORS
+        const audioArrayBuffer = await (await fetch(sourceUrl)).arrayBuffer();
+        let mainAudioBuffer = await this.processAudioBuffer(audioArrayBuffer, targetSampleRate, pitchFactor);
         if (options.musicUrl) {
           const bg = await this.loadAndResampleAudio(options.musicUrl, targetSampleRate);
           const mixed = new AudioBuffer({ numberOfChannels: 2, length: Math.max(mainAudioBuffer.length, bg.length), sampleRate: targetSampleRate });
@@ -481,10 +490,13 @@ export class VideoProcessor {
   }
 
   private async extractFrames(videoUrl: string, count: number = 10): Promise<ImageBitmap[]> {
+    // CORREÇÃO: Usar proxy para evitar CORS no extractFrames
+    const finalUrl = await this.fetchAsBlob(videoUrl, 'video');
+    
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
-      video.src = videoUrl;
+      video.src = finalUrl;
       video.muted = true;
       video.playsInline = true;
 
@@ -702,7 +714,7 @@ export class VideoProcessor {
             const len = Math.floor(44100 / fps);
             const aData = new Float32Array(len * 2);
             for (let ch = 0; ch < 2; ch++) {
-              const src = audioBuffer.getChannelData(ch);
+              const src = audioBuffer.getChannelData(ch % audioBuffer.numberOfChannels);
               for (let s = 0; s < len; s++) {
                 // Removemos o loop (%) para evitar que a voz repita. 
                 // A música de fundo já foi mixada com loop no 'mixed' buffer.
@@ -969,7 +981,7 @@ export class VideoProcessor {
             const len = Math.floor(44100 / fps);
             const aData = new Float32Array(len * 2);
             for (let ch = 0; ch < 2; ch++) {
-              const src = audioBuffer.getChannelData(ch);
+              const src = audioBuffer.getChannelData(ch % audioBuffer.numberOfChannels);
               for (let s = 0; s < len; s++) {
                 // No modo viral, se o áudio acabar, melhor silêncio do que voz repetida.
                 aData[ch * len + s] = src[start + s] || 0;

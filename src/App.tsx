@@ -2372,7 +2372,7 @@ const App: React.FC = () => {
       showToast("Renderizando com spintax...");
 
       const blob = await processor.renderAutoralSlideshow(targetVideoData.url, options);
-
+      console.log(`[App] Transformação Autoral concluída. Blob size: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
       setTreatingProgress(80);
 
       const newUrl = URL.createObjectURL(blob);
@@ -6022,6 +6022,7 @@ const App: React.FC = () => {
                 controls
                 autoPlay
                 loop
+                muted={false} // Garantir que não comece mudo se possível
                 playsInline
                 onError={(e) => {
                   const target = e.target as HTMLVideoElement;
