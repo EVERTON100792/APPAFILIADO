@@ -580,15 +580,29 @@ export class VideoProcessor {
         this.ctx.imageSmoothingEnabled = true;
         this.ctx.imageSmoothingQuality = 'high';
 
-        const targetDuration = originalAudio ? originalAudio.duration : 25; // Sincroniza exatamente com áudio original
+        const targetDuration = originalAudio ? originalAudio.duration : 25;
         const totalFrames = Math.floor(targetDuration * fps);
         
-        // Ajuste dinâmico: Garantir que não troque rápido demais (mínimo 1.5s por imagem)
-        // Se a duração for curta demais para 12 imagens, reduzimos para o ideal mantendo a qualidade.
+        // --- UNICIDADE: Embaralhar imagens para cada vídeo ser único ---
+        let processedImgs = [...imgs];
+        if (options.isAutoral) {
+          for (let i = processedImgs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [processedImgs[i], processedImgs[j]] = [processedImgs[j], processedImgs[i]];
+          }
+        }
+
         const maxImages = Math.floor(targetDuration / 1.5);
-        const finalImgs = imgs.slice(0, Math.max(4, Math.min(imgs.length, maxImages)));
-        const slideDuration = targetDuration / finalImgs.length;
+        const finalImgs = processedImgs.slice(0, Math.max(4, Math.min(processedImgs.length, maxImages)));
         
+        // --- JITTER: Durações levemente diferentes para cada slide (Impressão Digital Única) ---
+        const baseDuration = targetDuration / finalImgs.length;
+        const slideTimings = finalImgs.map((_, idx) => {
+          if (idx === finalImgs.length - 1) return targetDuration; // Último vai até o fim
+          const jitter = (Math.random() * 0.4 - 0.2); // +/- 0.2s de variação
+          return (idx + 1) * baseDuration + jitter;
+        });
+
         const baseFilterCSS = this.getFilterCSS(options.filter || 'cinematic');
 
         const muxer = new Muxer({ 
@@ -645,24 +659,32 @@ export class VideoProcessor {
         const kbDirections = finalImgs.map(() => Math.random() > 0.5 ? 1 : -1);
 
         const beatInterval = 60 / (options.musicBpm || 128);
+        const randomSeeds = finalImgs.map(() => Math.random()); // Sementes únicas por slide
 
         for (let i = 0; i < totalFrames; i++) {
           if (isError) break;
           const currentTime = i / fps;
-          const slideIdx = Math.min(Math.floor(currentTime / slideDuration), finalImgs.length - 1);
+          
+          // Encontrar slide atual baseado nos timings variados
+          let slideIdx = 0;
+          while (slideIdx < finalImgs.length - 1 && currentTime > slideTimings[slideIdx]) {
+            slideIdx++;
+          }
+          
           const img = finalImgs[slideIdx];
-          const progress = (currentTime % slideDuration) / slideDuration;
+          const prevTime = slideIdx > 0 ? slideTimings[slideIdx - 1] : 0;
+          const currentSlideDuration = (slideTimings[slideIdx] - prevTime);
+          const slideProgress = currentTime - prevTime;
 
           this.ctx.fillStyle = '#010409';
           this.ctx.fillRect(0, 0, W, H);
 
-          // Efeito de Batida (Beat Pulse) para estética profissional
+          // Efeito de Batida (Beat Pulse)
           const beatPhase = (currentTime % beatInterval) / beatInterval;
           let beatPulse = 1;
           if (beatPhase < 0.1) beatPulse = 1 + (1 - beatPhase / 0.1) * 0.02;
 
-          const fadeTime = Math.min(0.4, slideDuration * 0.3); // Transição suave proporcional
-          const slideProgress = currentTime % slideDuration;
+          const fadeTime = Math.min(0.4, currentSlideDuration * 0.3);
           const isInTransition = slideProgress < fadeTime && slideIdx > 0;
           const transProgress = slideProgress / fadeTime;
           const currentTrans = slideTransitions[slideIdx];
@@ -671,7 +693,8 @@ export class VideoProcessor {
           if (isInTransition) {
             const prevImg = finalImgs[slideIdx - 1];
             this.ctx.save();
-            const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * (1.1 + (kbDirections[slideIdx-1] * 0.05));
+            // Zoom aleatório para cada render
+            const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * (1.05 + (randomSeeds[slideIdx-1] * 0.1));
             this.applyProfessionalTransitionOut(currentTrans, transProgress, W, H);
             this.ctx.filter = baseFilterCSS;
             this.ctx.drawImage(prevImg, (W - prevImg.width * prevScale)/2, (H - prevImg.height * prevScale)/2, prevImg.width * prevScale, prevImg.height * prevScale);
@@ -683,8 +706,9 @@ export class VideoProcessor {
           if (options.isAutoral) {
             this.ctx.translate(W, 0);
             this.ctx.scale(-1, 1);
-            // Zoom dinâmico "breathe" + Beat Pulse
-            const breathe = (1.03 + Math.sin(currentTime * 0.5) * 0.02) * beatPulse;
+            // Breathe aleatório por render
+            const breatheFreq = 0.4 + randomSeeds[slideIdx] * 0.2;
+            const breathe = (1.03 + Math.sin(currentTime * breatheFreq) * 0.02) * beatPulse;
             this.ctx.translate(W/2, H/2);
             this.ctx.scale(breathe, breathe);
             this.ctx.translate(-W/2, -H/2);
@@ -695,15 +719,19 @@ export class VideoProcessor {
           }
 
           const baseScale = Math.max(W / img.width, H / img.height);
-          const kbScale = 1.05;
+          const kbScale = 1.05 + (randomSeeds[slideIdx] * 0.02); // Variação leve no zoom
           
           const sw = img.width * baseScale * kbScale;
           const sh = img.height * baseScale * kbScale;
           const sx = (W - sw) / 2;
           const sy = (H - sh) / 2;
 
-          const hueShift = options.isAutoral ? ` hue-rotate(${Math.sin(currentTime * 5) * 0.4}deg)` : '';
-          this.ctx.filter = baseFilterCSS + hueShift;
+          // Hue Shift e variação de cor microscópica para unicidade digital
+          const hueFreq = 4 + randomSeeds[slideIdx] * 2;
+          const hueShift = options.isAutoral ? ` hue-rotate(${Math.sin(currentTime * hueFreq) * 0.4}deg)` : '';
+          const uniqueNoise = ` brightness(${0.999 + Math.random() * 0.002}) contrast(${0.999 + Math.random() * 0.002})`;
+          
+          this.ctx.filter = baseFilterCSS + hueShift + uniqueNoise;
           this.ctx.drawImage(img, sx, sy, sw, sh);
           this.ctx.restore();
 
