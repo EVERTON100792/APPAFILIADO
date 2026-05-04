@@ -758,7 +758,7 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Erro ao verificar acesso:", err?.message || err);
-      if (err?.name === "AbortError" || err?.message?.includes("Lock broken")) {
+      if (err?.message?.includes("Lock broken")) {
         await new Promise(r => setTimeout(r, 1000));
       }
     } finally {
@@ -2365,6 +2365,7 @@ const App: React.FC = () => {
         storeLogo: user?.user_metadata?.store_settings?.profile_image || undefined,
         storeName: user?.user_metadata?.store_name || storeSlug.replace('@', '').toUpperCase(),
         isAutoral: true,
+        musicBpm: VIRAL_MUSIC.find(m => m.url === selectedMusic)?.bpm || 128,
         onProgress: (p: number) => setTreatingProgress(Math.floor(p))
       };
 

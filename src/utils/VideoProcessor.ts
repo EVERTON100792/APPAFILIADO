@@ -580,9 +580,15 @@ export class VideoProcessor {
         this.ctx.imageSmoothingEnabled = true;
         this.ctx.imageSmoothingQuality = 'high';
 
-        const targetDuration = originalAudio ? Math.max(originalAudio.duration, 5) : 25; // Sincroniza com áudio original se existir
+        const targetDuration = originalAudio ? originalAudio.duration : 25; // Sincroniza exatamente com áudio original
         const totalFrames = Math.floor(targetDuration * fps);
-        const slideDuration = targetDuration / imgs.length;
+        
+        // Ajuste dinâmico: Garantir que não troque rápido demais (mínimo 1.5s por imagem)
+        // Se a duração for curta demais para 12 imagens, reduzimos para o ideal mantendo a qualidade.
+        const maxImages = Math.floor(targetDuration / 1.5);
+        const finalImgs = imgs.slice(0, Math.max(4, Math.min(imgs.length, maxImages)));
+        const slideDuration = targetDuration / finalImgs.length;
+        
         const baseFilterCSS = this.getFilterCSS(options.filter || 'cinematic');
 
         const muxer = new Muxer({ 
@@ -635,29 +641,37 @@ export class VideoProcessor {
 
         // Pre-selecionar transições para cada slide para consistência
         const transitionTypes = ['zoomBurst', 'whipRight', 'scaleDown', 'pushUp', 'crossFade'];
-        const slideTransitions = imgs.map(() => transitionTypes[Math.floor(Math.random() * transitionTypes.length)]);
-        const kbDirections = imgs.map(() => Math.random() > 0.5 ? 1 : -1);
+        const slideTransitions = finalImgs.map(() => transitionTypes[Math.floor(Math.random() * transitionTypes.length)]);
+        const kbDirections = finalImgs.map(() => Math.random() > 0.5 ? 1 : -1);
+
+        const beatInterval = 60 / (options.musicBpm || 128);
 
         for (let i = 0; i < totalFrames; i++) {
           if (isError) break;
           const currentTime = i / fps;
-          const slideIdx = Math.min(Math.floor(currentTime / slideDuration), imgs.length - 1);
-          const img = imgs[slideIdx];
+          const slideIdx = Math.min(Math.floor(currentTime / slideDuration), finalImgs.length - 1);
+          const img = finalImgs[slideIdx];
           const progress = (currentTime % slideDuration) / slideDuration;
 
-          this.ctx.fillStyle = '#000';
+          this.ctx.fillStyle = '#010409';
           this.ctx.fillRect(0, 0, W, H);
 
-          const fadeTime = 0.4; // Transição mais rápida para cortes perfeitos
-          const isTransitioning = (currentTime % slideDuration) < fadeTime && slideIdx > 0;
-          const transProgress = (currentTime % slideDuration) / fadeTime;
+          // Efeito de Batida (Beat Pulse) para estética profissional
+          const beatPhase = (currentTime % beatInterval) / beatInterval;
+          let beatPulse = 1;
+          if (beatPhase < 0.1) beatPulse = 1 + (1 - beatPhase / 0.1) * 0.02;
+
+          const fadeTime = Math.min(0.4, slideDuration * 0.3); // Transição suave proporcional
+          const slideProgress = currentTime % slideDuration;
+          const isInTransition = slideProgress < fadeTime && slideIdx > 0;
+          const transProgress = slideProgress / fadeTime;
           const currentTrans = slideTransitions[slideIdx];
 
           // Desenhar Slide Anterior (se em transição)
-          if (isTransitioning) {
-            const prevImg = imgs[slideIdx - 1];
+          if (isInTransition) {
+            const prevImg = finalImgs[slideIdx - 1];
             this.ctx.save();
-            const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * (1.12 + (kbDirections[slideIdx-1] * 0.05));
+            const prevScale = Math.max(W / prevImg.width, H / prevImg.height) * (1.1 + (kbDirections[slideIdx-1] * 0.05));
             this.applyProfessionalTransitionOut(currentTrans, transProgress, W, H);
             this.ctx.filter = baseFilterCSS;
             this.ctx.drawImage(prevImg, (W - prevImg.width * prevScale)/2, (H - prevImg.height * prevScale)/2, prevImg.width * prevScale, prevImg.height * prevScale);
@@ -669,14 +683,14 @@ export class VideoProcessor {
           if (options.isAutoral) {
             this.ctx.translate(W, 0);
             this.ctx.scale(-1, 1);
-            // Zoom dinâmico "breathe" para enganar algoritmos
-            const breathe = 1.03 + Math.sin(currentTime * 0.5) * 0.02;
+            // Zoom dinâmico "breathe" + Beat Pulse
+            const breathe = (1.03 + Math.sin(currentTime * 0.5) * 0.02) * beatPulse;
             this.ctx.translate(W/2, H/2);
             this.ctx.scale(breathe, breathe);
             this.ctx.translate(-W/2, -H/2);
           }
 
-          if (isTransitioning) {
+          if (isInTransition) {
             this.applyProfessionalTransitionIn(currentTrans, transProgress, W, H);
           }
 
@@ -728,8 +742,6 @@ export class VideoProcessor {
             for (let ch = 0; ch < 2; ch++) {
               const src = audioBuffer.getChannelData(ch % audioBuffer.numberOfChannels);
               for (let s = 0; s < len; s++) {
-                // Removemos o loop (%) para evitar que a voz repita. 
-                // A música de fundo já foi mixada com loop no 'mixed' buffer.
                 aData[ch * len + s] = src[start + s] || 0;
               }
             }
@@ -746,10 +758,8 @@ export class VideoProcessor {
           
           const maxQueueSize = isMobile ? 5 : 12;
           if (videoEncoder.encodeQueueSize > maxQueueSize) {
-            if (isMobile) {
-              await new Promise(r => requestAnimationFrame(r));
-            } else {
-              await new Promise(r => setTimeout(r, 10));
+            while (videoEncoder.encodeQueueSize > (isMobile ? 2 : 4)) {
+              await new Promise(r => setTimeout(r, 15));
             }
           }
           
@@ -979,10 +989,8 @@ export class VideoProcessor {
 
           const maxQueueSize = isMobile ? 5 : 12;
           if (videoEncoder.encodeQueueSize > maxQueueSize) {
-            if (isMobile) {
-              await new Promise(r => requestAnimationFrame(r));
-            } else {
-              await new Promise(r => setTimeout(r, 10));
+            while (videoEncoder.encodeQueueSize > (isMobile ? 2 : 4)) {
+              await new Promise(r => setTimeout(r, 15));
             }
           }
 
