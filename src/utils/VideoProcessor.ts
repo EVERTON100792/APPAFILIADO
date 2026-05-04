@@ -666,12 +666,21 @@ export class VideoProcessor {
 
           // Desenhar Slide Atual
           this.ctx.save();
+          if (options.isAutoral) {
+            this.ctx.translate(W, 0);
+            this.ctx.scale(-1, 1);
+            // Zoom dinâmico "breathe" para enganar algoritmos
+            const breathe = 1.03 + Math.sin(currentTime * 0.5) * 0.02;
+            this.ctx.translate(W/2, H/2);
+            this.ctx.scale(breathe, breathe);
+            this.ctx.translate(-W/2, -H/2);
+          }
+
           if (isTransitioning) {
             this.applyProfessionalTransitionIn(currentTrans, transProgress, W, H);
           }
 
           const baseScale = Math.max(W / img.width, H / img.height);
-          // Imagem parada conforme solicitado para evitar vultos e desfoque de movimento
           const kbScale = 1.05;
           
           const sw = img.width * baseScale * kbScale;
@@ -679,7 +688,6 @@ export class VideoProcessor {
           const sx = (W - sw) / 2;
           const sy = (H - sh) / 2;
 
-          // Hue-shift dinâmico para garantir que cada frame seja tecnicamente único
           const hueShift = options.isAutoral ? ` hue-rotate(${Math.sin(currentTime * 5) * 0.4}deg)` : '';
           this.ctx.filter = baseFilterCSS + hueShift;
           this.ctx.drawImage(img, sx, sy, sw, sh);
@@ -1066,7 +1074,7 @@ export class VideoProcessor {
     const rectH = lines.length * lineHeight + padding * 2;
     const rectW = W * 0.85;
     const rectX = (W - rectW) / 2;
-    const rectY = H * 0.76; // Ajustado mais para baixo para não tapar o produto no centro
+    const rectY = isAutoral ? H * 0.08 : H * 0.76; // No topo no modo Autoral para não tapar o produto
 
     // Aplicar Transformação de Pop + Pequena variação aleatória para cada vídeo (Anti-Algoritmo)
     const spintaxOffset = isAutoral ? (Math.sin(time * 100) * 0.5) : 0;
@@ -1152,8 +1160,9 @@ export class VideoProcessor {
       this.ctx.font = `italic 800 ${Math.floor(W * 0.045)}px "Inter"`;
       this.ctx.fillStyle = '#FFD700';
       this.ctx.textAlign = 'center';
-      // Posicionar handle logo abaixo do box central
-      this.ctx.fillText(`@${storeSlug.replace('@', '')}`, W/2, rectY + rectH + 60);
+      // Posicionar handle de forma inteligente baseado na posição do box
+      const handleY = isAutoral ? (rectY - 40) : (rectY + rectH + 60);
+      this.ctx.fillText(`@${storeSlug.replace('@', '')}`, W/2, handleY);
     }
 
     this.ctx.restore();
