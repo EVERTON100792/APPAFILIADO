@@ -61,21 +61,21 @@ export class VideoProcessor {
   }
 
   private getFilterCSS(filter: string): string {
-    // Otimização de filtros para cores vibrantes e pretos profundos (anti-lavado)
+    // Otimização de filtros para qualidade premium (iPhone/Ultra) - Cores naturais e nítidas
     switch (filter) {
-      case 'elite':     return 'contrast(2.0) saturate(2.5) brightness(0.95)';
-      case 'vhs':       return 'contrast(1.3) saturate(1.1) sepia(0.2) brightness(1.0)';
-      case 'cinematic': return 'contrast(2.1) saturate(2.4) brightness(0.95) hue-rotate(-2deg)';
-      case 'bw':        return 'contrast(1.8) grayscale(1)';
-      case 'bloom':     return 'brightness(1.0) saturate(2.0) contrast(1.8)';
-      case 'glitch':    return 'hue-rotate(90deg) brightness(1.0) contrast(1.8)';
-      case 'ultra8k':   return 'contrast(2.5) saturate(3.0) brightness(0.9)';
-      case 'dramatic':  return 'contrast(2.2) saturate(1.6) brightness(0.8)';
-      case 'tealAndOrange': return 'contrast(1.9) saturate(2.4) hue-rotate(-8deg) brightness(0.92)';
-      case 'vintageGold': return 'sepia(0.3) contrast(1.8) brightness(0.95) saturate(2.2)';
-      case 'professional': return 'contrast(1.8) saturate(2.0) brightness(1.0)';
-      case 'tiktok viral': return 'contrast(2.2) saturate(2.8) brightness(0.92)';
-      default:          return 'contrast(2.0) saturate(2.5) brightness(0.95)';
+      case 'elite':         return 'contrast(1.25) saturate(1.3) brightness(1.02)';
+      case 'vhs':           return 'contrast(1.1) saturate(1.0) sepia(0.15) brightness(1.0)';
+      case 'cinematic':     return 'contrast(1.2) saturate(1.25) brightness(1.0) hue-rotate(-1deg)';
+      case 'bw':            return 'contrast(1.3) grayscale(1)';
+      case 'bloom':         return 'brightness(1.02) saturate(1.2) contrast(1.15)';
+      case 'glitch':        return 'hue-rotate(45deg) brightness(1.0) contrast(1.15)';
+      case 'ultra8k':       return 'contrast(1.3) saturate(1.35) brightness(1.0)';
+      case 'dramatic':      return 'contrast(1.4) saturate(1.1) brightness(0.95)';
+      case 'tealAndOrange': return 'contrast(1.2) saturate(1.3) hue-rotate(-5deg) brightness(1.0)';
+      case 'vintageGold':   return 'sepia(0.2) contrast(1.15) brightness(1.0) saturate(1.25)';
+      case 'professional':  return 'contrast(1.15) saturate(1.2) brightness(1.02)';
+      case 'tiktok viral':  return 'contrast(1.25) saturate(1.4) brightness(1.0)';
+      default:              return 'contrast(1.15) saturate(1.2) brightness(1.02)'; // Novo padrão: Professional
     }
   }
 
@@ -183,7 +183,7 @@ export class VideoProcessor {
     return buf;
   }
 
-  private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house', pitchFactor: number = 1.15): Promise<AudioBuffer> {
+  private async loadAndResampleAudio(url: string, targetSampleRate: number, bpm: number = 128, genre: string = 'house', pitchFactor: number = 1.3): Promise<AudioBuffer> {
     const SUPABASE_PROXY = 'https://vzydpqilvyjqjbhzgzhq.supabase.co/functions/v1/video-proxy';
     if (url.startsWith('blob:') || url.startsWith('http://localhost') || url.startsWith('/')) {
       try {
@@ -267,7 +267,7 @@ export class VideoProcessor {
         this.auxCanvas.width = W; this.auxCanvas.height = H;
 
         const targetSampleRate = 44100;
-        const pitchFactor = options.isAutoral ? 1.15 : 1.0;
+        const pitchFactor = options.isAutoral ? 1.3 : 1.0;
         
         // CORREÇÃO: Usar sourceUrl (blob local) em vez de videoUrl direto para evitar CORS
         const audioArrayBuffer = await (await fetch(sourceUrl)).arrayBuffer();
@@ -447,8 +447,12 @@ export class VideoProcessor {
             const len = Math.floor(targetSampleRate / fps);
             const aData = new Float32Array(len * 2);
             for (let ch = 0; ch < 2; ch++) {
-              const src = mainAudioBuffer.getChannelData(ch);
-              for (let s = 0; s < len; s++) aData[ch * len + s] = src[start + s] || 0;
+              const src = mainAudioBuffer.getChannelData(ch % mainAudioBuffer.numberOfChannels);
+              for (let s = 0; s < len; s++) {
+                // Se a voz acabou por estar mais rápida, fazemos um pequeno loop ou pegamos do início
+                // Isso garante que o vídeo tenha áudio até o final do tempo original
+                aData[ch * len + s] = src[(start + s) % src.length] || 0;
+              }
             }
             const audioData = new AudioData({ format: 'f32-planar', sampleRate: 44100, numberOfFrames: len, numberOfChannels: 2, timestamp, data: aData });
             try {
@@ -554,7 +558,7 @@ export class VideoProcessor {
   public async renderAutoralSlideshow(videoUrl: string, options: ProcessingOptions): Promise<Blob> {
     const frames = await this.extractFrames(videoUrl, 12); // Aumentado para mais dinamismo
     // Extrair áudio original para manter a voz no slideshow
-    const audioBuffer = await this.loadAndResampleAudio(videoUrl, 44100, 128, 'house', options.isAutoral ? 1.15 : 1.0);
+    const audioBuffer = await this.loadAndResampleAudio(videoUrl, 44100, 128, 'house', options.isAutoral ? 1.3 : 1.0);
     return this.renderSlideshowFromBitmaps(frames, options, audioBuffer);
   }
 
@@ -815,7 +819,7 @@ export class VideoProcessor {
         const audioEncoder = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: e => console.error("AudioEncoder error:", e) });
         audioEncoder.configure({ codec: 'mp4a.40.2', numberOfChannels: 2, sampleRate: 44100, bitrate: 128_000 });
 
-        const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre, options.isAutoral ? 1.15 : 1.0);
+        const audioBuffer = await this.loadAndResampleAudio(options.musicUrl || '', 44100, options.musicBpm, options.musicGenre, options.isAutoral ? 1.3 : 1.0);
 
         // Pré-carregar logo se existir
         if (options.storeLogo && (!this.logoCache || this.logoUrl !== options.storeLogo)) {
@@ -1245,10 +1249,10 @@ export class VideoProcessor {
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     
-    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 1.2);
+    const gradient = this.ctx.createRadialGradient(W / 2, H / 2, W * 0.4, W / 2, H / 2, W * 1.1);
     gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(0.75, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
+    gradient.addColorStop(0.85, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
     
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, W, H);
@@ -1265,8 +1269,8 @@ export class VideoProcessor {
     const y = Math.cos(time * 0.3) * H * 0.5 + H * 0.5;
     
     const gradient = this.ctx.createRadialGradient(x, y, 0, x, y, W * 0.8);
-    gradient.addColorStop(0, 'rgba(255, 120, 0, 0.08)');
-    gradient.addColorStop(0.5, 'rgba(255, 50, 0, 0.03)');
+    gradient.addColorStop(0, 'rgba(255, 120, 0, 0.04)');
+    gradient.addColorStop(0.5, 'rgba(255, 50, 0, 0.015)');
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
     
     this.ctx.fillStyle = gradient;
@@ -1326,7 +1330,7 @@ export class VideoProcessor {
     // Isso ajuda a enganar algoritmos de detecção de duplicidade e dá um ar "cinematográfico"
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.ctx.globalAlpha = 0.05; // Extremamente sutil
+    this.ctx.globalAlpha = 0.02; // Quase imperceptível, apenas para anti-algoritmo
     this.ctx.globalCompositeOperation = 'overlay';
     
     for (let i = 0; i < 4000; i++) {
@@ -1347,10 +1351,10 @@ export class VideoProcessor {
     this.ctx.globalCompositeOperation = 'screen';
     
     const colors = [
-      'rgba(255, 100, 0, 0.08)', // Laranja
-      'rgba(0, 200, 255, 0.05)', // Azul
-      'rgba(255, 0, 255, 0.04)', // Magenta
-      'rgba(255, 255, 0, 0.06)'  // Amarelo
+      'rgba(255, 100, 0, 0.04)', // Laranja ultra suave
+      'rgba(0, 200, 255, 0.02)', // Azul ultra suave
+      'rgba(255, 0, 255, 0.02)', // Magenta ultra suave
+      'rgba(255, 255, 0, 0.03)'  // Amarelo ultra suave
     ];
     
     const colorIdx = Math.floor((time / 4) % colors.length);
