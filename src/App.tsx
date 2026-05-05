@@ -374,6 +374,7 @@ const App: React.FC = () => {
   const [activeTransition, setActiveTransition] = useState("none");
   const [isMuted, setIsMuted] = useState(false);
   const [videoLegend, setVideoLegend] = useState("");
+  const [videoStyle, setVideoStyle] = useState<'venda_direta' | 'aesthetic'>('venda_direta');
   const [useNarration, setUseNarration] = useState(true);
   const [narrationVoice, setNarrationVoice] = useState<'M' | 'F'>('F');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -2256,10 +2257,11 @@ const App: React.FC = () => {
 
       videoProcessor = new VideoProcessor();      
       const options: ProcessingOptions = {
-        filter: newFilter,
+        filter: videoStyle === 'aesthetic' ? 'elite' : newFilter,
         transition: newTransitions[0] || 'zoom',
         transitionList: newTransitions,
-        legend: "",
+        legend: videoStyle === 'aesthetic' ? undefined : "",
+        script: videoStyle === 'aesthetic' ? undefined : customScript,
         isMuted: false,
         musicUrl: music.url,
         musicBpm: music.bpm || 128,
@@ -2336,7 +2338,7 @@ const App: React.FC = () => {
     let processor: VideoProcessor | null = null;
     try {
       processor = new VideoProcessor();
-      const script = legendMode === 'custom' 
+      const script = (legendMode === 'custom' && videoStyle !== 'aesthetic') 
         ? generateViralScripts(targetProduct.item_name || targetProduct.title)[0]
         : undefined;
 
@@ -2348,11 +2350,11 @@ const App: React.FC = () => {
       const autoTransitions: number[] = [3, 6, 9, 12, 15, 18, 21, 24, 27];
       
       const options: ProcessingOptions = {
-        filter: isMobileRuntime ? 'cinematic' : (activeFilter || 'elite'),
+        filter: videoStyle === 'aesthetic' ? 'elite' : (isMobileRuntime ? 'cinematic' : (activeFilter || 'elite')),
         transition: 'zoom',
         transitionList: ['zoom', 'glitch', 'shake', 'blur', 'slide', 'beat', 'flash', 'fire'] as any,
         transitionTimestamps: [4, 8, 12, 16, 20, 24],
-        legend: legendMode === 'custom' ? (videoLegend || '') : '',
+        legend: (legendMode === 'custom' && videoStyle !== 'aesthetic') ? (videoLegend || '') : '',
         isMuted: audioMixOption === 'mute',
         script: script,
         musicUrl: selectedMusic || undefined,
@@ -4831,6 +4833,32 @@ const App: React.FC = () => {
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* NOVO: SEÇÃO ESTILO DE VÍDEO */}
+                <div className="space-y-4 pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-accent font-black uppercase tracking-[0.3em] flex items-center gap-2">
+                      <Sparkles size={12} className="text-accent" />
+                      Estilo de Vídeo
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setVideoStyle('venda_direta')}
+                      className={`h-12 rounded-xl border flex flex-col items-center justify-center transition-all ${videoStyle === 'venda_direta' ? 'bg-accent/10 border-accent/50 text-accent' : 'bg-slate-900 border-white/5 text-white/30'}`}
+                    >
+                      <span className="text-[10px] font-black uppercase tracking-tight">Venda Direta</span>
+                      <span className="text-[7px] opacity-70">Textos, Gatilhos e Preços</span>
+                    </button>
+                    <button
+                      onClick={() => setVideoStyle('aesthetic')}
+                      className={`h-12 rounded-xl border flex flex-col items-center justify-center transition-all ${videoStyle === 'aesthetic' ? 'bg-purple-500/10 border-purple-500/50 text-purple-400' : 'bg-slate-900 border-white/5 text-white/30'}`}
+                    >
+                      <span className="text-[10px] font-black uppercase tracking-tight">Aesthetic Premium</span>
+                      <span className="text-[7px] opacity-70">100% Limpo e Focado</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* NOVO: SEÇÃO DE NARRAÇÃO IA PROFISSIONAL */}
